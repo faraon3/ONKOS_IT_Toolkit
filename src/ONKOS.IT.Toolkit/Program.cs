@@ -17,47 +17,106 @@ internal static class Program
 internal sealed class MainForm : Form
 {
     private readonly string _appRoot = AppContext.BaseDirectory;
-    private readonly Panel _mainContent = new() { Dock = DockStyle.Fill };
+    private readonly Panel _mainContent = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(18, 16, 25) };
     private readonly Panel _header;
-    private readonly Label _footer;
     private Control? _homeBody;
+
+    private static readonly Color Bg = Color.FromArgb(18, 16, 25);
+    private static readonly Color Card = Color.FromArgb(31, 27, 41);
+    private static readonly Color Purple = Color.FromArgb(85, 53, 138);
+    private static readonly Color Accent = Color.FromArgb(153, 117, 214);
+    private static readonly Color MainText = Color.FromArgb(244, 241, 250);
+    private static readonly Color Muted = Color.FromArgb(183, 174, 199);
+
     public MainForm()
     {
-        Text = "ONKOS IT Toolkit"; StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(800, 680); Size = new Size(960, 850);
-        BackColor = Color.FromArgb(18, 16, 25); Font = new Font("Segoe UI", 9F);
-        _header = new Panel { Dock = DockStyle.Top, Height = 92, BackColor = Color.FromArgb(85, 53, 138) };
-        _header.Controls.Add(new Label { Text = "ONKOS IT TOOLKIT", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(18, 12) });
-        _header.Controls.Add(new Label { Text = "Herramientas locales de soporte técnico", ForeColor = Color.WhiteSmoke, AutoSize = true, Location = new Point(21, 52) });
-        var body = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(22), AutoScroll = true, WrapContents = true, BackColor = Color.FromArgb(18, 16, 25) };
-        _homeBody = body;
-        AddModule(body, "Backup y migración", "Copiar información antes de formatear.", () => OpenBackup());
-        AddModule(body, "Programas", "Administrar instaladores almacenados en la USB.");
-        AddModule(body, "Impresoras", "Organizar controladores y datos de impresoras.");
-        AddModule(body, "Inventario", "Consultar y registrar información del equipo.");
-        var footer = new Label { Dock = DockStyle.Bottom, Height = 32, Padding = new Padding(18, 7, 10, 4), ForeColor = Color.FromArgb(183, 174, 199), BackColor = Color.FromArgb(18, 16, 25), AutoEllipsis = true, Text = "Aplicación portable | " + _appRoot };
-        _footer = footer;
-        _mainContent.Controls.Add(body); Controls.Add(_mainContent); Controls.Add(_footer); Controls.Add(_header);
+        Text = "ONKOS IT Toolkit";
+        StartPosition = FormStartPosition.CenterScreen;
+        MinimumSize = new Size(850, 650);
+        Size = new Size(1100, 760);
+        BackColor = Bg;
+        Font = new Font("Segoe UI", 9F);
+
+        _header = new Panel { Dock = DockStyle.Top, Height = 112, BackColor = Purple };
+        var brand = new Label { Text = "ONKOS IT TOOLKIT", ForeColor = Color.White, Font = new Font("Segoe UI", 23F, FontStyle.Bold), AutoSize = true, Location = new Point(28, 17) };
+        var subtitle = new Label { Text = "Centro de herramientas de soporte técnico", ForeColor = Color.FromArgb(235, 225, 250), AutoSize = true, Location = new Point(32, 64), Font = new Font("Segoe UI", 10F) };
+        var tag = new Label { Text = "SISTEMAS  •  CLÍNICA ONKOS", ForeColor = Color.White, BackColor = Color.FromArgb(70, 42, 115), Font = new Font("Segoe UI", 9F, FontStyle.Bold), TextAlign = ContentAlignment.MiddleCenter, Size = new Size(230, 30), Anchor = AnchorStyles.Top | AnchorStyles.Right, Location = new Point(Width - 270, 38) };
+        _header.Controls.Add(brand);
+        _header.Controls.Add(subtitle);
+        _header.Controls.Add(tag);
+        _header.Resize += (_, _) => tag.Left = _header.ClientSize.Width - tag.Width - 28;
+
+        var home = new Panel { Dock = DockStyle.Fill, BackColor = Bg, Padding = new Padding(30, 24, 30, 24) };
+        var intro = new Panel { Dock = DockStyle.Top, Height = 78, BackColor = Bg };
+        intro.Controls.Add(new Label { Text = "¿Qué necesitas hacer?", ForeColor = MainText, Font = new Font("Segoe UI", 17F, FontStyle.Bold), AutoSize = true, Location = new Point(2, 0) });
+        intro.Controls.Add(new Label { Text = "Selecciona una herramienta para comenzar.", ForeColor = Muted, Font = new Font("Segoe UI", 10F), AutoSize = true, Location = new Point(4, 39) });
+
+        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = Bg, Padding = new Padding(0, 4, 0, 4) };
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+
+        AddModule(grid, 0, 0, "01", "Backup y migración", "Copia documentos y configuraciones antes de formatear o cambiar de equipo.", true, () => OpenBackup());
+        AddModule(grid, 1, 0, "02", "Programas", "Organiza instaladores portables y prepara instalaciones para los equipos.", false);
+        AddModule(grid, 0, 1, "03", "Impresoras", "Centraliza controladores, modelos y herramientas de instalación.", false);
+        AddModule(grid, 1, 1, "04", "Inventario", "Consulta y registra información técnica de los computadores.", false);
+
+        home.Controls.Add(grid);
+        home.Controls.Add(intro);
+        _homeBody = home;
+
+        var footer = new Panel { Dock = DockStyle.Bottom, Height = 34, BackColor = Color.FromArgb(14, 12, 20) };
+        footer.Controls.Add(new Label { Text = "PORTABLE  •  SIN INSTALACIÓN", ForeColor = Muted, AutoSize = true, Location = new Point(24, 9), Font = new Font("Segoe UI", 8.5F, FontStyle.Bold) });
+        var pathLabel = new Label { Text = _appRoot, ForeColor = Color.FromArgb(128, 119, 145), AutoSize = false, TextAlign = ContentAlignment.MiddleRight, Width = 650, Height = 34, Anchor = AnchorStyles.Top | AnchorStyles.Right, Location = new Point(Width - 675, 0) };
+        footer.Controls.Add(pathLabel);
+        footer.Resize += (_, _) => pathLabel.Left = footer.ClientSize.Width - pathLabel.Width - 20;
+
+        _mainContent.Controls.Add(home);
+        Controls.Add(_mainContent);
+        Controls.Add(footer);
+        Controls.Add(_header);
+
         Shown += (_, _) => { foreach (var f in new[] { "Data", "Data/Config", "Data/Programs", "Data/Drivers", "Data/Templates", "Data/Reports" }) Directory.CreateDirectory(Path.Combine(_appRoot, f)); };
     }
 
     private void OpenBackup()
     {
         var backup = new BackupForm();
-        backup.BackRequested += () => { _mainContent.Controls.Clear(); if (_homeBody != null) _mainContent.Controls.Add(_homeBody); _header.Visible = true; };
+        backup.BackRequested += () =>
+        {
+            _mainContent.Controls.Clear();
+            if (_homeBody != null) _mainContent.Controls.Add(_homeBody);
+            _header.Visible = true;
+        };
         _mainContent.Controls.Clear();
         _mainContent.Controls.Add(backup);
         _header.Visible = false;
     }
 
-    private static void AddModule(Control parent, string title, string description, Action? action = null)
+    private static void AddModule(TableLayoutPanel grid, int column, int row, string number, string title, string description, bool enabled, Action? action = null)
     {
-        var card = new Panel { Width = 255, Height = 118, Margin = new Padding(0, 0, 14, 14), BackColor = Color.FromArgb(31, 27, 41), BorderStyle = BorderStyle.FixedSingle, Cursor = action == null ? Cursors.Default : Cursors.Hand };
-        var name = new Label { Text = title, Font = new Font("Segoe UI", 11F, FontStyle.Bold), ForeColor = Color.FromArgb(210, 197, 235), Location = new Point(14, 13), AutoSize = true };
-        var desc = new Label { Text = description, Location = new Point(14, 43), Size = new Size(220, 55), ForeColor = Color.FromArgb(220, 214, 232), Cursor = card.Cursor };
-        card.Controls.Add(name); card.Controls.Add(desc);
-        if (action != null) { card.Click += (_, _) => action(); name.Click += (_, _) => action(); desc.Click += (_, _) => action(); }
-        parent.Controls.Add(card);
+        var wrapper = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8), BackColor = Bg };
+        var card = new Panel { Dock = DockStyle.Fill, BackColor = Card, Cursor = enabled ? Cursors.Hand : Cursors.Default };
+        var accent = new Panel { Dock = DockStyle.Top, Height = 4, BackColor = enabled ? Accent : Color.FromArgb(70, 62, 85) };
+        var numberLabel = new Label { Text = number, ForeColor = enabled ? Accent : Muted, Font = new Font("Segoe UI", 10F, FontStyle.Bold), AutoSize = true, Location = new Point(20, 19) };
+        var titleLabel = new Label { Text = title, ForeColor = MainText, Font = new Font("Segoe UI", 14F, FontStyle.Bold), AutoSize = true, Location = new Point(20, 46), Cursor = card.Cursor };
+        var descLabel = new Label { Text = description, ForeColor = Muted, Font = new Font("Segoe UI", 10F), Location = new Point(22, 82), Size = new Size(350, 54), Cursor = card.Cursor };
+        var status = new Label { Text = enabled ? "ABRIR HERRAMIENTA   →" : "MÓDULO EN PREPARACIÓN", ForeColor = enabled ? Accent : Color.FromArgb(120, 111, 139), Font = new Font("Segoe UI", 8.5F, FontStyle.Bold), AutoSize = true, Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Location = new Point(22, 145) };
+        card.Controls.Add(accent);
+        card.Controls.Add(numberLabel);
+        card.Controls.Add(titleLabel);
+        card.Controls.Add(descLabel);
+        card.Controls.Add(status);
+        wrapper.Controls.Add(card);
+        grid.Controls.Add(wrapper, column, row);
+
+        if (action != null)
+        {
+            card.Click += (_, _) => action();
+            foreach (Control control in card.Controls)
+                if (control != accent) control.Click += (_, _) => action();
+        }
+        card.Resize += (_, _) => { descLabel.Width = Math.Max(100, card.ClientSize.Width - 44); status.Top = card.ClientSize.Height - 34; };
     }
-    private static void AddModule(Control parent, string title, string description) => AddModule(parent, title, description, null);
 }
