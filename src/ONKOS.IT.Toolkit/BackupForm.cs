@@ -11,8 +11,9 @@ using System.Windows.Forms;
 
 namespace ONKOS.IT.Toolkit;
 
-internal sealed class BackupForm : Form
+internal sealed class BackupForm : UserControl
 {
+    public event Action? BackRequested;
     private readonly ListView _sources = new();
     private readonly ImageList _folderIcons = new();
     private readonly ComboBox _drivePicker = new();
@@ -38,15 +39,13 @@ internal sealed class BackupForm : Form
 
     public BackupForm()
     {
-        Text = "Backup y migración | ONKOS IT Toolkit";
-        StartPosition = FormStartPosition.CenterParent;
-        Size = new Size(1040, 790);
-        MinimumSize = new Size(860, 680);
-        BackColor = Bg; ForeColor = TextMain; Font = new Font("Segoe UI", 9.5F);
+        Dock = DockStyle.Fill; BackColor = Bg; ForeColor = TextMain; Font = new Font("Segoe UI", 9.5F);
 
-        var header = new Panel { Dock = DockStyle.Top, Height = 94, BackColor = Purple };
-        header.Controls.Add(new Label { Text = "BACKUP  /  MIGRACIÓN", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 14) });
-        header.Controls.Add(new Label { Text = "Asistente de respaldo seguro · Clínica ONKOS", ForeColor = Color.FromArgb(235, 225, 250), AutoSize = true, Location = new Point(25, 55) });
+        var header = new Panel { Dock = DockStyle.Top, Height = 118, BackColor = Purple };
+        var back = new Button { Text = "‹  VOLVER AL INICIO", Location = new Point(22, 8), Size = new Size(170, 27) };
+        StyleButton(back, true); back.Click += (_, _) => BackRequested?.Invoke(); header.Controls.Add(back);
+        header.Controls.Add(new Label { Text = "BACKUP  /  MIGRACIÓN", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 35) });
+        header.Controls.Add(new Label { Text = "Asistente de respaldo seguro · Clínica ONKOS", ForeColor = Color.FromArgb(235, 225, 250), AutoSize = true, Location = new Point(25, 75) });
 
         var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16), AutoScroll = true, BackColor = Bg };
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
