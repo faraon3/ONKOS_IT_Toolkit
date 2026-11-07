@@ -267,7 +267,7 @@ internal sealed class BackupForm : UserControl
     { int pct = total <= 0 ? 0 : Math.Clamp((int)(100.0 * done / total), 0, 100); _bar.Value = pct; _status.Text = status; _currentFile.Text = "Ahora: " + current; }
     private void ReportError(string path, string error) => WriteLog($"ERROR: {path} | {error}");
     private void WriteLog(string message) { if (InvokeRequired) { BeginInvoke(new Action(() => WriteLog(message))); return; } _log.AppendText(message + Environment.NewLine); }
-    protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); try { SetWindowTheme(_sources.Handle, "DarkMode_Explorer", null); } catch { } }
+    protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); try { SetWindowTheme(Handle, "DarkMode_Explorer", null); SetWindowTheme(_sources.Handle, "DarkMode_Explorer", null); } catch { } }
     [DllImport("uxtheme.dll", CharSet=CharSet.Unicode)] private static extern int SetWindowTheme(IntPtr hwnd,string? appName,string? idList);
 
     private static bool IsSameOrChild(string parent, string child) { try { return Path.GetFullPath(parent).TrimEnd(Path.DirectorySeparatorChar).StartsWith(Path.GetFullPath(child).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase); } catch { return false; } }
