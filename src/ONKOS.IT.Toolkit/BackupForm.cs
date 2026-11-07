@@ -148,7 +148,8 @@ internal sealed class BackupForm : UserControl
     }
     private void DrawSourceSubItem(object? sender, DrawListViewSubItemEventArgs e)
     {
-        if (e.Item is null || e.SubItem is null) return;\n        using var bg = new SolidBrush(e.Item.Selected ? Color.FromArgb(58, 46, 78) : Surface);
+        if (e.Item is null || e.SubItem is null) return; 
+        using var bg = new SolidBrush(e.Item.Selected ? Color.FromArgb(58, 46, 78) : Surface);
         e.Graphics.FillRectangle(bg, e.Bounds);
         if (e.ColumnIndex == 0)
         {
@@ -160,7 +161,8 @@ internal sealed class BackupForm : UserControl
             e.Graphics.FillPath(cb,path); e.Graphics.DrawPath(pen,path);
             if(e.Item.Checked){using var check=new Pen(Color.White,2.2f); e.Graphics.DrawLines(check,new[]{new Point(x+3,y+8),new Point(x+6,y+11),new Point(x+13,y+4)});}
             if(e.Item.ImageIndex>=0 && _sources.SmallImageList!=null)
-                var icon = _sources.SmallImageList?.Images[e.Item.ImageIndex];\n                if (icon is not null) e.Graphics.DrawImage(icon,x+23,e.Bounds.Y+(e.Bounds.Height-22)/2,22,22);
+                var icon = _sources.SmallImageList?.Images[e.Item.ImageIndex]; 
+                if (icon is not null) e.Graphics.DrawImage(icon,x+23,e.Bounds.Y+(e.Bounds.Height-22)/2,22,22);
             TextRenderer.DrawText(e.Graphics,e.SubItem.Text ?? string.Empty,_sources.Font,new Rectangle(x+50,e.Bounds.Y,e.Bounds.Width-52,e.Bounds.Height),TextMain,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
         }
         else TextRenderer.DrawText(e.Graphics,e.SubItem.Text,_sources.Font,e.Bounds,TextMuted,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
