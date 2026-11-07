@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -18,8 +19,7 @@ internal sealed class BackupForm : Form
     private readonly TextBox _destination = new();
     private readonly CheckBox _ipv4 = new() { Text = "Respaldar configuración IPv4", Checked = true, AutoSize = true };
     private readonly CheckBox _drivers = new() { Text = "Exportar drivers instalados (requiere administrador)", Checked = true, AutoSize = true };
-    private readonly ProgressBar _bar = new();
-    private readonly Label _percent = new();
+    private readonly ModernProgressBar _bar = new();
     private readonly Label _status = new();
     private readonly Label _currentFile = new();
     private readonly TextBox _log = new();
@@ -84,10 +84,8 @@ internal sealed class BackupForm : Form
         var progressGroup = MakeGroup("04  ·  Progreso de la copia");
         progressGroup.Dock = DockStyle.Top; progressGroup.Height = 115;
         var progressPanel = new Panel { Dock = DockStyle.Top, Height = 30, Margin = new Padding(8), BackColor = Surface2 };
-        _bar.Dock = DockStyle.Fill; _bar.Minimum = 0; _bar.Maximum = 100; _bar.Value = 0; _bar.Style = ProgressBarStyle.Continuous;
-        _percent.Dock = DockStyle.Fill; _percent.Text = "0%"; _percent.TextAlign = ContentAlignment.MiddleCenter;
-        _percent.Font = new Font("Segoe UI", 10F, FontStyle.Bold); _percent.ForeColor = Color.White; _percent.BackColor = Color.Transparent;
-        progressPanel.Controls.Add(_bar); progressPanel.Controls.Add(_percent); _percent.BringToFront();
+        _bar.Dock = DockStyle.Fill; _bar.Value = 0;
+        progressPanel.Controls.Add(_bar);
         _status.Dock = DockStyle.Top; _status.Height = 25; _status.Text = "Listo para comenzar"; _status.ForeColor = TextMain;
         _currentFile.Dock = DockStyle.Top; _currentFile.Height = 26; _currentFile.Text = "Ahora: —"; _currentFile.ForeColor = TextMuted; _currentFile.AutoEllipsis = true;
         progressGroup.Controls.Add(_currentFile); progressGroup.Controls.Add(_status); progressGroup.Controls.Add(progressPanel);
@@ -213,7 +211,7 @@ internal sealed class BackupForm : Form
         finally { _busy = false; _run.Enabled = true; }
     }
     private void SetProgress(int done, int total, string status, string current)
-    { int pct = total <= 0 ? 0 : Math.Clamp((int)(100.0 * done / total), 0, 100); _bar.Value = pct; _percent.Text = pct + "%"; _status.Text = status; _currentFile.Text = "Ahora: " + current; }
+    { int pct = total <= 0 ? 0 : Math.Clamp((int)(100.0 * done / total), 0, 100); _bar.Value = pct; _status.Text = status; _currentFile.Text = "Ahora: " + current; }
     private void ReportError(string path, string error) => WriteLog($"ERROR: {path} | {error}");
     private void WriteLog(string message) { if (InvokeRequired) { BeginInvoke(new Action(() => WriteLog(message))); return; } _log.AppendText(message + Environment.NewLine); }
     private static bool IsSameOrChild(string parent, string child) { try { return Path.GetFullPath(parent).TrimEnd(Path.DirectorySeparatorChar).StartsWith(Path.GetFullPath(child).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase); } catch { return false; } }
@@ -230,5 +228,61 @@ internal sealed class BackupForm : Form
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr SHGetFileInfo(string path, uint attrs, out SHFILEINFO info, uint size, uint flags);
         [DllImport("user32.dll")] private static extern bool DestroyIcon(IntPtr hIcon);
         public static Icon Get(string path) { const uint SHGFI_ICON = 0x100, SHGFI_SMALLICON = 0x1; SHGetFileInfo(path, 0, out var info, (uint)Marshal.SizeOf<SHFILEINFO>(), SHGFI_ICON | SHGFI_SMALLICON); if (info.hIcon == IntPtr.Zero) return SystemIcons.WinLogo; try { return (Icon)Icon.FromHandle(info.hIcon).Clone(); } finally { DestroyIcon(info.hIcon); } }
+    }
+}
+
+internal sealed class ModernProgressBar : Control
+{
+    private int _value;
+    public int Value
+    {
+        get => _value;
+        set { _value = Math.Clamp(value, 0, 100); Invalidate(); }
+    }
+
+    public ModernProgressBar()
+    {
+        Height = 30;
+        BackColor = Color.FromArgb(39, 34, 51);
+        ForeColor = Color.White;
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        var g = e.Graphics;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        var track = new Rectangle(0, 0, Math.Max(1, Width - 1), Math.Max(1, Height - 1));
+        using var trackBrush = new SolidBrush(Color.FromArgb(47, 41, 61));
+        using var trackPath = Rounded(track, 7);
+        g.FillPath(trackBrush, trackPath);
+
+        int fillWidth = (int)((Width - 1) * (_value / 100.0));
+        if (fillWidth > 0)
+        {
+            var fill = new Rectangle(0, 0, Math.Max(1, fillWidth), Height - 1);
+            using var fillBrush = new LinearGradientBrush(fill, Color.FromArgb(85, 53, 138), Color.FromArgb(142, 104, 205), 0f);
+            using var fillPath = Rounded(fill, 7);
+            g.FillPath(fillBrush, fillPath);
+        }
+
+        string text = _value + "%";
+        using var font = new Font("Segoe UI", 10F, FontStyle.Bold);
+        var size = g.MeasureString(text, font);
+        using var textBrush = new SolidBrush(Color.White);
+        g.DrawString(text, font, textBrush, (Width - size.Width) / 2, (Height - size.Height) / 2);
+    }
+
+    private static System.Drawing.Drawing2D.GraphicsPath Rounded(Rectangle rect, int radius)
+    {
+        var path = new System.Drawing.Drawing2D.GraphicsPath();
+        int d = radius * 2;
+        path.AddArc(rect.X, rect.Y, d, d, 180, 90);
+        path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
+        path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
+        path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
     }
 }
