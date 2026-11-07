@@ -8,4 +8,7 @@
     <AssemblyName>ONKOS_IT_Toolkit</AssemblyName>
     <RootNamespace>ONKOS.IT.Toolkit</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <Content Include="Assets\**\*.png" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
