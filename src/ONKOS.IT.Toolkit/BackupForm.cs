@@ -147,7 +147,19 @@ internal sealed class BackupForm : UserControl
         try { var icon = ShellIcon.Get(path); _folderIcons.Images.Add(icon); icon.Dispose(); return _folderIcons.Images.Count - 1; }
         catch { _folderIcons.Images.Add(SystemIcons.WinLogo); return _folderIcons.Images.Count - 1; }
     }
-    private void DrawSourceTile(object? sender, DrawListViewItemEventArgs e)\n    {\n        var item = e.Item; if (item is null) return;\n        var bounds = e.Bounds; using var bg = new SolidBrush(item.Selected ? Color.FromArgb(58, 46, 78) : Surface); e.Graphics.FillRectangle(bg, bounds);\n        int x=bounds.X+8, y=bounds.Y+(bounds.Height-16)/2; var box=new Rectangle(x,y,16,16);\n        using var cb=new SolidBrush(item.Checked ? Purple : Color.FromArgb(46,40,59)); using var pen=new Pen(item.Checked ? PurpleHover : Border,1.2f); using var path=RoundedRect(box,4); e.Graphics.FillPath(cb,path); e.Graphics.DrawPath(pen,path);\n        if(item.Checked){using var check=new Pen(Color.White,2.2f); e.Graphics.DrawLines(check,new[]{new Point(x+3,y+8),new Point(x+6,y+11),new Point(x+13,y+4)});}\n        if(item.ImageIndex>=0 && _folderIcons.Images.Count>item.ImageIndex){var img=_folderIcons.Images[item.ImageIndex]; if(img!=null)e.Graphics.DrawImage(img,x+23,bounds.Y+(bounds.Height-24)/2,24,24);}\n        TextRenderer.DrawText(e.Graphics,item.Text,_sources.Font,new Rectangle(x+52,bounds.Y+2, bounds.Width-58,18),TextMain,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);\n        string pathText=item.SubItems.Count>1?item.SubItems[1].Text:string.Empty; TextRenderer.DrawText(e.Graphics,pathText,new Font("Segoe UI",7.5F),new Rectangle(x+52,bounds.Y+19,bounds.Width-58,17),TextMuted,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);\n    }\n\n    private void DrawSourceSubItem(object? sender, DrawListViewSubItemEventArgs e)
+    private void DrawSourceTile(object? sender, DrawListViewItemEventArgs e)
+    {
+        var item = e.Item; if (item is null) return;
+        var bounds = e.Bounds; using var bg = new SolidBrush(item.Selected ? Color.FromArgb(58, 46, 78) : Surface); e.Graphics.FillRectangle(bg, bounds);
+        int x=bounds.X+8, y=bounds.Y+(bounds.Height-16)/2; var box=new Rectangle(x,y,16,16);
+        using var cb=new SolidBrush(item.Checked ? Purple : Color.FromArgb(46,40,59)); using var pen=new Pen(item.Checked ? PurpleHover : Border,1.2f); using var path=RoundedRect(box,4); e.Graphics.FillPath(cb,path); e.Graphics.DrawPath(pen,path);
+        if(item.Checked){using var check=new Pen(Color.White,2.2f); e.Graphics.DrawLines(check,new[]{new Point(x+3,y+8),new Point(x+6,y+11),new Point(x+13,y+4)});}
+        if(item.ImageIndex>=0 && _folderIcons.Images.Count>item.ImageIndex){var img=_folderIcons.Images[item.ImageIndex]; if(img!=null)e.Graphics.DrawImage(img,x+23,bounds.Y+(bounds.Height-24)/2,24,24);}
+        TextRenderer.DrawText(e.Graphics,item.Text,_sources.Font,new Rectangle(x+52,bounds.Y+2, bounds.Width-58,18),TextMain,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
+        string pathText=item.SubItems.Count>1?item.SubItems[1].Text:string.Empty; TextRenderer.DrawText(e.Graphics,pathText,new Font("Segoe UI",7.5F),new Rectangle(x+52,bounds.Y+19,bounds.Width-58,17),TextMuted,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
+    }
+
+    private void DrawSourceSubItem(object? sender, DrawListViewSubItemEventArgs e)
     {
         if (e.Item is null || e.SubItem is null) return; 
         using var bg = new SolidBrush(e.Item.Selected ? Color.FromArgb(58, 46, 78) : Surface);
@@ -260,10 +272,23 @@ internal sealed class BackupForm : UserControl
                 try { string driverDir = Path.Combine(root, "Drivers"); Directory.CreateDirectory(driverDir); var result = await RunProcessAsync("pnputil", $"/export-driver * \"{driverDir}\"", false); File.WriteAllText(Path.Combine(driverDir, "EXPORT_LOG.txt"), result); done++; progress.Report((done, total, "Exportación de drivers ejecutada.", "Controladores instalados")); }
                 catch (Exception ex) { errors++; WriteLog("ERROR exportando drivers: " + ex.Message); }
             }
-            File.WriteAllText(Path.Combine(root, "BACKUP_INFO.txt"), $"ONKOS IT Toolkit backup\r\nEquipo: {Environment.MachineName}\r\nUsuario: {Environment.UserName}\r\nSistema: {Environment.OSVersion}\r\nFecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\r\nArchivos copiados: {copied}\r\nErrores: {errors}\r\n");
+            File.WriteAllText(Path.Combine(root, "BACKUP_INFO.txt"), $"ONKOS IT Toolkit backup\r
+Equipo: {Environment.MachineName}\r
+Usuario: {Environment.UserName}\r
+Sistema: {Environment.OSVersion}\r
+Fecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\r
+Archivos copiados: {copied}\r
+Errores: {errors}\r
+");
             SetProgress(total, total, errors == 0 ? "Backup finalizado correctamente." : "Backup terminado con advertencias.", "Copia finalizada");
-            WriteLog($"\r\nFinalizado. Copiados: {copied}. Errores: {errors}.\r\nRuta: {root}");
-            MessageBox.Show(this, $"Backup finalizado.\r\nCopiados: {copied}\r\nErrores: {errors}\r\n\r\n{root}", "ONKOS Backup", MessageBoxButtons.OK, errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            WriteLog($"\r
+Finalizado. Copiados: {copied}. Errores: {errors}.\r
+Ruta: {root}");
+            MessageBox.Show(this, $"Backup finalizado.\r
+Copiados: {copied}\r
+Errores: {errors}\r
+\r
+{root}", "ONKOS Backup", MessageBoxButtons.OK, errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         catch (Exception ex) { _status.Text = "El backup falló."; WriteLog("ERROR GENERAL: " + ex.Message); MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally { _busy = false; _run.Enabled = true; }
