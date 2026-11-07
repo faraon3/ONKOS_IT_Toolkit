@@ -248,8 +248,19 @@ internal sealed class BackupForm : UserControl
         {
             Directory.CreateDirectory(root);
             var fileList = new List<(string Source, string Relative, string FolderName)>();
+            WriteLog($"Carpetas seleccionadas: {selected.Count}");
             foreach (var entry in selected)
-            { try { foreach (string file in Directory.EnumerateFiles(entry.Path, "*", SearchOption.AllDirectories)) fileList.Add((file, Path.GetRelativePath(entry.Path, file), SafeName(entry.Label))); } catch (Exception ex) { WriteLog($"Aviso explorando {entry.Path}: {ex.Message}"); } }
+            {
+                WriteLog($"Revisando: {entry.Label} | {entry.Path}");
+                if (!Directory.Exists(entry.Path))
+                {
+                    WriteLog($"ERROR: La carpeta no existe o no está disponible: {entry.Path}");
+                    continue;
+                }
+                CollectFilesSafe(entry.Path, entry.Path, SafeName(entry.Label), fileList);
+            }
+            WriteLog($"Archivos encontrados para copiar: {fileList.Count}");
+            Directory.CreateDirectory(Path.Combine(root, "Archivos"));
             int total = Math.Max(fileList.Count + (_ipv4.Checked ? 1 : 0) + (_drivers.Checked ? 1 : 0), 1);
             int done = 0, copied = 0, errors = 0;
             IProgress<(int done, int total, string message, string current)> progress = new Progress<(int done, int total, string message, string current)>(p => { SetProgress(p.done, p.total, $"Copiando… {p.done} de {p.total}", p.current); WriteLog(p.message); });
@@ -290,6 +301,38 @@ internal sealed class BackupForm : UserControl
         catch (Exception ex) { _status.Text = "El backup falló."; WriteLog("ERROR GENERAL: " + ex.Message); MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally { _busy = false; _run.Enabled = true; }
     }
+    private void CollectFilesSafe(string rootPath, string currentPath, string folderName, List<(string Source, string Relative, string FolderName)> files)
+    {
+        try
+        {
+            foreach (string file in Directory.EnumerateFiles(currentPath))
+            {
+                try { files.Add((file, Path.GetRelativePath(rootPath, file), folderName)); }
+                catch (Exception ex) { WriteLog($"Aviso leyendo archivo {file}: {ex.Message}"); }
+            }
+        }
+        catch (Exception ex) { WriteLog($"Aviso: No se pudieron listar archivos en {currentPath}: {ex.Message}"); }
+
+        try
+        {
+            foreach (string directory in Directory.EnumerateDirectories(currentPath))
+            {
+                try
+                {
+                    var attributes = File.GetAttributes(directory);
+                    if ((attributes & FileAttributes.ReparsePoint) != 0)
+                    {
+                        WriteLog($"Omitida carpeta de enlace (evita ciclos): {directory}");
+                        continue;
+                    }
+                    CollectFilesSafe(rootPath, directory, folderName, files);
+                }
+                catch (Exception ex) { WriteLog($"Aviso explorando subcarpeta {directory}: {ex.Message}"); }
+            }
+        }
+        catch (Exception ex) { WriteLog($"Aviso: No se pudieron listar subcarpetas en {currentPath}: {ex.Message}"); }
+    }
+
     private void SetProgress(int done, int total, string status, string current)
     { int pct = total <= 0 ? 0 : Math.Clamp((int)(100.0 * done / total), 0, 100); _bar.Value = pct; _status.Text = status; _currentFile.Text = "Ahora: " + current; }
     private void ReportError(string path, string error) => WriteLog($"ERROR: {path} | {error}");
