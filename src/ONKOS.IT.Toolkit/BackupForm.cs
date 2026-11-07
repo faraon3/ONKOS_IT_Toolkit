@@ -49,9 +49,9 @@ internal sealed class BackupForm : UserControl
 
         var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8), AutoScroll = false, BackColor = Bg };
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
-        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 330;
+        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 360;
         _folderIcons.ColorDepth = ColorDepth.Depth32Bit; _folderIcons.ImageSize = new Size(24, 24);
-        _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(390, 44); _sources.CheckBoxes = true;
+        _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(390, 42); _sources.CheckBoxes = false;
         _sources.FullRowSelect = true; _sources.HideSelection = false; _sources.BorderStyle = BorderStyle.None; _sources.CheckBoxes = false; _sources.OwnerDraw = true;
         _sources.DrawColumnHeader += (_, e) => { if (e.Header is null) return; using var brush = new SolidBrush(Purple); using var font = new Font("Segoe UI", 9.5F, FontStyle.Bold); e.Graphics.FillRectangle(brush, e.Bounds); TextRenderer.DrawText(e.Graphics, e.Header.Text ?? string.Empty, font, e.Bounds, Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter); };
         _sources.DrawItem += (_, e) => { };
@@ -147,7 +147,7 @@ internal sealed class BackupForm : UserControl
         try { var icon = ShellIcon.Get(path); _folderIcons.Images.Add(icon); icon.Dispose(); return _folderIcons.Images.Count - 1; }
         catch { _folderIcons.Images.Add(SystemIcons.WinLogo); return _folderIcons.Images.Count - 1; }
     }
-    private void DrawSourceSubItem(object? sender, DrawListViewSubItemEventArgs e)
+    private void DrawSourceTile(object? sender, DrawListViewItemEventArgs e)\n    {\n        var item = e.Item; if (item is null) return;\n        var bounds = e.Bounds; using var bg = new SolidBrush(item.Selected ? Color.FromArgb(58, 46, 78) : Surface); e.Graphics.FillRectangle(bg, bounds);\n        int x=bounds.X+8, y=bounds.Y+(bounds.Height-16)/2; var box=new Rectangle(x,y,16,16);\n        using var cb=new SolidBrush(item.Checked ? Purple : Color.FromArgb(46,40,59)); using var pen=new Pen(item.Checked ? PurpleHover : Border,1.2f); using var path=RoundedRect(box,4); e.Graphics.FillPath(cb,path); e.Graphics.DrawPath(pen,path);\n        if(item.Checked){using var check=new Pen(Color.White,2.2f); e.Graphics.DrawLines(check,new[]{new Point(x+3,y+8),new Point(x+6,y+11),new Point(x+13,y+4)});}\n        if(item.ImageIndex>=0 && _folderIcons.Images.Count>item.ImageIndex){var img=_folderIcons.Images[item.ImageIndex]; if(img!=null)e.Graphics.DrawImage(img,x+23,bounds.Y+(bounds.Height-24)/2,24,24);}\n        TextRenderer.DrawText(e.Graphics,item.Text,_sources.Font,new Rectangle(x+52,bounds.Y+2, bounds.Width-58,18),TextMain,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);\n        string pathText=item.SubItems.Count>1?item.SubItems[1].Text:string.Empty; TextRenderer.DrawText(e.Graphics,pathText,new Font("Segoe UI",7.5F),new Rectangle(x+52,bounds.Y+19,bounds.Width-58,17),TextMuted,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);\n    }\n\n    private void DrawSourceSubItem(object? sender, DrawListViewSubItemEventArgs e)
     {
         if (e.Item is null || e.SubItem is null) return; 
         using var bg = new SolidBrush(e.Item.Selected ? Color.FromArgb(58, 46, 78) : Surface);
@@ -173,7 +173,7 @@ internal sealed class BackupForm : UserControl
     private void SourceMouseDown(object? sender, MouseEventArgs e)
     {
         var hit=_sources.HitTest(e.Location);
-        if(hit.Item!=null && e.X < _sources.Columns[0].Width && e.X < hit.Item.Bounds.X+32)
+        if(hit.Item!=null && e.X < hit.Item.Bounds.X+42)
         { hit.Item.Checked=!hit.Item.Checked; _sources.Invalidate(hit.Item.Bounds); }
     }
     private void DrawDriveItem(object? sender, DrawItemEventArgs e)
