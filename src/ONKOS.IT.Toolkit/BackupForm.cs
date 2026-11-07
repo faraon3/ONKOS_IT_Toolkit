@@ -49,9 +49,9 @@ internal sealed class BackupForm : UserControl
 
         var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8), AutoScroll = false, BackColor = Bg };
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
-        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 190;
+        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 330;
         _folderIcons.ColorDepth = ColorDepth.Depth32Bit; _folderIcons.ImageSize = new Size(24, 24);
-        _sources.Dock = DockStyle.Fill; _sources.View = View.Details; _sources.CheckBoxes = true;
+        _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(390, 44); _sources.CheckBoxes = true;
         _sources.FullRowSelect = true; _sources.HideSelection = false; _sources.BorderStyle = BorderStyle.None; _sources.CheckBoxes = false; _sources.OwnerDraw = true;
         _sources.DrawColumnHeader += (_, e) => { if (e.Header is null) return; using var brush = new SolidBrush(Purple); using var font = new Font("Segoe UI", 9.5F, FontStyle.Bold); e.Graphics.FillRectangle(brush, e.Bounds); TextRenderer.DrawText(e.Graphics, e.Header.Text ?? string.Empty, font, e.Bounds, Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter); };
         _sources.DrawItem += (_, e) => { };
@@ -68,21 +68,21 @@ internal sealed class BackupForm : UserControl
         _addFolder.SetBounds(8, 6, 270, 30); _addFolder.Click += (_, _) => AddCustomFolder();
         sourceButtons.Controls.Add(_addFolder); sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons);
 
-        var destinationGroup = MakeGroup("02  ·  Elige dónde guardar el respaldo");
-        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 104;
+        var destinationGroup = MakeGroup("03  ·  Elige dónde guardar el respaldo");
+        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 118;
         var destinationRow = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
         _drivePicker.DropDownStyle = ComboBoxStyle.DropDownList; StyleCombo(_drivePicker); _drivePicker.DrawMode = DrawMode.OwnerDrawFixed; _drivePicker.ItemHeight = 25; _drivePicker.DrawItem += DrawDriveItem;
-        _drivePicker.SetBounds(10, 10, 330, 30);
+        _drivePicker.SetBounds(10, 8, 330, 34);
         _drivePicker.SelectedIndexChanged += (_, _) => { if (_drivePicker.SelectedItem is DriveChoice d) _destination.Text = d.Root; };
-        var choose = new Button { Text = "Examinar carpeta / red…", Width = 220, Height = 30, Location = new Point(352, 10) };
+        var choose = new Button { Text = "Examinar carpeta / red…", Width = 220, Height = 34, Location = new Point(352, 8) };
         StyleButton(choose, true); choose.Click += (_, _) => ChooseDestination();
         _destination.ReadOnly = true; StyleTextBox(_destination);
-        _destination.SetBounds(10, 49, 850, 28); _destination.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        _destination.SetBounds(10, 52, 850, 36); _destination.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         destinationRow.Controls.Add(_drivePicker); destinationRow.Controls.Add(choose); destinationRow.Controls.Add(_destination);
         destinationGroup.Controls.Add(destinationRow); RefreshDrives();
 
-        var optionsGroup = MakeGroup("03  ·  Opciones adicionales");
-        optionsGroup.Dock = DockStyle.Top; optionsGroup.Height = 76;
+        var optionsGroup = MakeGroup("02  ·  Opciones adicionales");
+        optionsGroup.Dock = DockStyle.Top; optionsGroup.Height = 82;
         var options = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(10, 8, 8, 8), BackColor = Surface, WrapContents = true };
         StyleCheck(_ipv4); StyleCheck(_drivers); options.Controls.Add(_ipv4); options.Controls.Add(_drivers); optionsGroup.Controls.Add(options);
 
@@ -102,7 +102,7 @@ internal sealed class BackupForm : UserControl
 
         _run.Text = "INICIAR COPIA DE SEGURIDAD"; _run.Dock = DockStyle.Bottom; _run.Height = 50; StyleButton(_run, false);
         _run.Font = new Font("Segoe UI", 11F, FontStyle.Bold); _run.Click += async (_, _) => await StartBackupAsync();
-        content.Controls.Add(logGroup); content.Controls.Add(progressGroup); content.Controls.Add(optionsGroup); content.Controls.Add(destinationGroup); content.Controls.Add(sourcesGroup);
+        content.Controls.Add(logGroup); content.Controls.Add(progressGroup); content.Controls.Add(destinationGroup); content.Controls.Add(optionsGroup); content.Controls.Add(sourcesGroup);
         Controls.Add(content); Controls.Add(_run); Controls.Add(header);
     }
 
