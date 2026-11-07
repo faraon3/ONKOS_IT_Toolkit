@@ -108,7 +108,7 @@ internal sealed class BackupForm : UserControl
 
         _run.Text = "INICIAR COPIA DE SEGURIDAD"; _run.Dock = DockStyle.Bottom; _run.Height = 50; StyleButton(_run, false);
         _run.Font = new Font("Segoe UI", 11F, FontStyle.Bold); _run.Click += async (_, _) => await StartBackupAsync();
-        content.Controls.Add(logGroup); content.Controls.Add(progressGroup); content.Controls.Add(destinationGroup); content.Controls.Add(optionsGroup); content.Controls.Add(sourcesGroup);\n        // Allow vertical scrolling on smaller screens; keep the fixed action button outside the scroll area.\n        content.Scroll += (_, _) => content.Invalidate();
+        content.Controls.Add(logGroup); content.Controls.Add(progressGroup); content.Controls.Add(destinationGroup); content.Controls.Add(optionsGroup); content.Controls.Add(sourcesGroup);
         Controls.Add(content); Controls.Add(_run); Controls.Add(header);
     }
 
