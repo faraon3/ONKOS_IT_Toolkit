@@ -48,7 +48,7 @@ internal sealed class BackupForm : UserControl
         header.Controls.Add(new Label { Text = "BACKUP  /  MIGRACIÓN", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 30) });
         header.Controls.Add(new Label { Text = "Asistente de respaldo seguro · Clínica ONKOS", ForeColor = Color.FromArgb(235, 225, 250), AutoSize = true, Location = new Point(25, 66) });
 
-        var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8), AutoScroll = false, BackColor = Bg };
+        var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), AutoScroll = true, BackColor = Bg };
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
         sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 285;
         _folderIcons.ColorDepth = ColorDepth.Depth32Bit; _folderIcons.ImageSize = new Size(24, 24);
@@ -101,14 +101,14 @@ internal sealed class BackupForm : UserControl
         _currentFile.Dock = DockStyle.Top; _currentFile.Height = 25; _currentFile.Text = "Ahora: —"; _currentFile.ForeColor = TextMuted; _currentFile.AutoEllipsis = true;
         progressGroup.Controls.Add(_currentFile); progressGroup.Controls.Add(_status); progressGroup.Controls.Add(progressPanel);
 
-        var logGroup = MakeGroup("05  ·  Registro detallado"); logGroup.Dock = DockStyle.Fill; logGroup.MinimumSize = new Size(0, 75);
+        var logGroup = MakeGroup("05  ·  Registro detallado"); logGroup.Dock = DockStyle.Top; logGroup.Height = 115; logGroup.MinimumSize = new Size(0, 75);
         _log.Dock = DockStyle.Fill; _log.Multiline = true; _log.ReadOnly = true; _log.ScrollBars = ScrollBars.Vertical;
         _log.Font = new Font("Consolas", 9F); _log.BackColor = Color.FromArgb(13, 12, 18); _log.ForeColor = Color.FromArgb(203, 195, 218); _log.BorderStyle = BorderStyle.None;
         logGroup.Controls.Add(_log);
 
         _run.Text = "INICIAR COPIA DE SEGURIDAD"; _run.Dock = DockStyle.Bottom; _run.Height = 50; StyleButton(_run, false);
         _run.Font = new Font("Segoe UI", 11F, FontStyle.Bold); _run.Click += async (_, _) => await StartBackupAsync();
-        content.Controls.Add(logGroup); content.Controls.Add(progressGroup); content.Controls.Add(destinationGroup); content.Controls.Add(optionsGroup); content.Controls.Add(sourcesGroup);
+        content.Controls.Add(logGroup); content.Controls.Add(progressGroup); content.Controls.Add(destinationGroup); content.Controls.Add(optionsGroup); content.Controls.Add(sourcesGroup);\n        // Allow vertical scrolling on smaller screens; keep the fixed action button outside the scroll area.\n        content.Scroll += (_, _) => content.Invalidate();
         Controls.Add(content); Controls.Add(_run); Controls.Add(header);
     }
 
