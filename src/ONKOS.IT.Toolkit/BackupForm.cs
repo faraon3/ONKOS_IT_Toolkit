@@ -18,6 +18,7 @@ internal sealed class BackupForm : UserControl
     private readonly ImageList _folderIcons = new();
     private readonly ComboBox _drivePicker = new();
     private readonly TextBox _destination = new();
+    private readonly TextBox _backupLabel = new();
     private readonly CheckBox _ipv4 = new() { Text = "Respaldar configuración IPv4", Checked = true, AutoSize = true };
     private readonly CheckBox _drivers = new() { Text = "Exportar drivers instalados (requiere administrador)", Checked = true, AutoSize = true };
     private readonly ModernProgressBar _bar = new();
@@ -69,7 +70,7 @@ internal sealed class BackupForm : UserControl
         sourceButtons.Controls.Add(_addFolder); sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons);
 
         var destinationGroup = MakeGroup("03  ·  Elige dónde guardar el respaldo");
-        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 110;
+        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 148;
         var destinationRow = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
         _drivePicker.DropDownStyle = ComboBoxStyle.DropDownList; StyleCombo(_drivePicker); _drivePicker.DrawMode = DrawMode.OwnerDrawFixed; _drivePicker.ItemHeight = 25; _drivePicker.DrawItem += DrawDriveItem;
         _drivePicker.SetBounds(10, 8, 330, 34);
@@ -77,7 +78,12 @@ internal sealed class BackupForm : UserControl
         var choose = new Button { Text = "Examinar carpeta / red…", Width = 220, Height = 34, Location = new Point(352, 8) };
         StyleButton(choose, true); choose.Click += (_, _) => ChooseDestination();
         _destination.ReadOnly = true; StyleTextBox(_destination);
-        _destination.SetBounds(10, 52, 850, 36); _destination.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        _destination.SetBounds(10, 52, 850, 32); _destination.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        var nameLabel = new Label { Text = "Nombre adicional del respaldo (opcional: área, usuario, sede…)", ForeColor = TextMuted, AutoSize = true, Location = new Point(10, 90) };
+        _backupLabel.SetBounds(10, 108, 850, 30); _backupLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        _backupLabel.PlaceholderText = "Ejemplo: Recepcion_Principal";
+        StyleTextBox(_backupLabel);
+        destinationRow.Controls.Add(nameLabel); destinationRow.Controls.Add(_backupLabel);
         destinationRow.Controls.Add(_drivePicker); destinationRow.Controls.Add(choose); destinationRow.Controls.Add(_destination);
         destinationGroup.Controls.Add(destinationRow); RefreshDrives();
 
@@ -242,7 +248,9 @@ internal sealed class BackupForm : UserControl
         foreach (var f in selected)
             if (IsSameOrChild(dest, f.Path)) { MessageBox.Show(this, $"El destino está dentro de la carpeta origen ({f.Label}). Elige otra ubicación.", "Destino no válido", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
 
-        string root = Path.Combine(dest, $"ONKOS_BACKUP_{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}");
+        string customPrefix = SafeName(_backupLabel.Text.Trim());
+        string folderPrefix = string.IsNullOrWhiteSpace(customPrefix) ? "" : customPrefix + "_";
+        string root = Path.Combine(dest, $"{folderPrefix}{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}");
         _busy = true; _run.Enabled = false; _log.Clear(); SetProgress(0, 0, "Preparando copia…", "Analizando carpetas seleccionadas");
         try
         {
