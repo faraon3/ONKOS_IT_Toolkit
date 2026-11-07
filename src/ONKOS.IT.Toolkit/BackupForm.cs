@@ -241,7 +241,7 @@ internal sealed class BackupForm : UserControl
     private async Task StartBackupAsync()
     {
         if (_busy) return;
-        var selected = _sources.CheckedItems.Cast<ListViewItem>().Select(x => (FolderEntry)x.Tag!).ToList();
+        var selected = _sources.Items.Cast<ListViewItem>().Where(x => x.Checked).Select(x => (FolderEntry)x.Tag!).ToList();
         if (selected.Count == 0 && !_ipv4.Checked && !_drivers.Checked) { MessageBox.Show(this, "Selecciona carpetas o una opción adicional.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         string dest = _destination.Text.Trim();
         if (string.IsNullOrWhiteSpace(dest) || !Directory.Exists(dest)) { MessageBox.Show(this, "Selecciona primero el destino del respaldo.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
