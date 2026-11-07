@@ -28,7 +28,7 @@ internal sealed class MainForm : Form
         BackColor = Color.FromArgb(18, 16, 25); Font = new Font("Segoe UI", 9F);
         _header = new Panel { Dock = DockStyle.Top, Height = 92, BackColor = Color.FromArgb(85, 53, 138) };
         _header.Controls.Add(new Label { Text = "ONKOS IT TOOLKIT", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(18, 12) });
-        header.Controls.Add(new Label { Text = "Herramientas locales de soporte técnico", ForeColor = Color.WhiteSmoke, AutoSize = true, Location = new Point(21, 52) });
+        _header.Controls.Add(new Label { Text = "Herramientas locales de soporte técnico", ForeColor = Color.WhiteSmoke, AutoSize = true, Location = new Point(21, 52) });
         var body = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(22), AutoScroll = true, WrapContents = true, BackColor = Color.FromArgb(18, 16, 25) };
         _homeBody = body;
         AddModule(body, "Backup y migración", "Copiar información antes de formatear.", () => OpenBackup());
