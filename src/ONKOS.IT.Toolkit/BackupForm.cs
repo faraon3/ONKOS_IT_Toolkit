@@ -60,7 +60,8 @@ internal sealed class BackupForm : UserControl
         _sources.KeyDown += (_, e) => { if (e.KeyCode == Keys.Space && _sources.SelectedItems.Count > 0) { var item = _sources.SelectedItems[0]; item.Checked = !item.Checked; _sources.Invalidate(item.Bounds); e.Handled = true; } };
         _sources.BackColor = Surface; _sources.ForeColor = TextMain; _sources.Font = new Font("Segoe UI", 9.5F);
         _sources.SmallImageList = _folderIcons;
-        _sources.Columns.Add("Carpeta / ubicación", 220); _sources.Columns.Add("Ruta", 500);\n        _sources.Resize += (_, _) => { if (_sources.Columns.Count > 1) { _sources.Columns[0].Width = Math.Min(230, Math.Max(170, _sources.ClientSize.Width / 3)); _sources.Columns[1].Width = Math.Max(120, _sources.ClientSize.Width - _sources.Columns[0].Width - 4); } };
+        _sources.Columns.Add("Carpeta / ubicación", 220); _sources.Columns.Add("Ruta", 500); 
+        _sources.Resize += (_, _) => { if (_sources.Columns.Count > 1) { _sources.Columns[0].Width = Math.Min(230, Math.Max(170, _sources.ClientSize.Width / 3)); _sources.Columns[1].Width = Math.Max(120, _sources.ClientSize.Width - _sources.Columns[0].Width - 4); } };
         LoadKnownFolders();
         var sourceButtons = new Panel { Dock = DockStyle.Bottom, Height = 42, BackColor = Surface };
         _addFolder.Text = "+  Agregar carpeta desde cualquier disco"; StyleButton(_addFolder, true);
