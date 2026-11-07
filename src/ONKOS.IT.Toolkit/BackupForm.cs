@@ -272,23 +272,20 @@ internal sealed class BackupForm : UserControl
                 try { string driverDir = Path.Combine(root, "Drivers"); Directory.CreateDirectory(driverDir); var result = await RunProcessAsync("pnputil", $"/export-driver * \"{driverDir}\"", false); File.WriteAllText(Path.Combine(driverDir, "EXPORT_LOG.txt"), result); done++; progress.Report((done, total, "Exportación de drivers ejecutada.", "Controladores instalados")); }
                 catch (Exception ex) { errors++; WriteLog("ERROR exportando drivers: " + ex.Message); }
             }
-            File.WriteAllText(Path.Combine(root, "BACKUP_INFO.txt"), $"ONKOS IT Toolkit backup\r
-Equipo: {Environment.MachineName}\r
-Usuario: {Environment.UserName}\r
-Sistema: {Environment.OSVersion}\r
-Fecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss}\r
-Archivos copiados: {copied}\r
-Errores: {errors}\r
-");
+            File.WriteAllText(Path.Combine(root, "BACKUP_INFO.txt"),
+                $"ONKOS IT Toolkit backup{Environment.NewLine}" +
+                $"Equipo: {Environment.MachineName}{Environment.NewLine}" +
+                $"Usuario: {Environment.UserName}{Environment.NewLine}" +
+                $"Sistema: {Environment.OSVersion}{Environment.NewLine}" +
+                $"Fecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss}{Environment.NewLine}" +
+                $"Archivos copiados: {copied}{Environment.NewLine}" +
+                $"Errores: {errors}{Environment.NewLine}");
+
             SetProgress(total, total, errors == 0 ? "Backup finalizado correctamente." : "Backup terminado con advertencias.", "Copia finalizada");
-            WriteLog($"\r
-Finalizado. Copiados: {copied}. Errores: {errors}.\r
-Ruta: {root}");
-            MessageBox.Show(this, $"Backup finalizado.\r
-Copiados: {copied}\r
-Errores: {errors}\r
-\r
-{root}", "ONKOS Backup", MessageBoxButtons.OK, errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            WriteLog($"Finalizado. Copiados: {copied}. Errores: {errors}.{Environment.NewLine}Ruta: {root}");
+            MessageBox.Show(this,
+                $"Backup finalizado.{Environment.NewLine}Copiados: {copied}{Environment.NewLine}Errores: {errors}{Environment.NewLine}{Environment.NewLine}{root}",
+                "ONKOS Backup", MessageBoxButtons.OK, errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         catch (Exception ex) { _status.Text = "El backup falló."; WriteLog("ERROR GENERAL: " + ex.Message); MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally { _busy = false; _run.Enabled = true; }
