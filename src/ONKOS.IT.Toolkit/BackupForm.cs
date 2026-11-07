@@ -113,9 +113,9 @@ internal sealed class BackupForm : Form
         AddKnown("Música", Environment.SpecialFolder.MyMusic, true);
         AddKnown("Videos", Environment.SpecialFolder.MyVideos, true);
         AddKnown("Favoritos", Environment.SpecialFolder.Favorites, true);
-        AddKnown("Contactos", Environment.SpecialFolder.Contacts, true);
-        AddKnown("Búsquedas", Environment.SpecialFolder.Search, true);
-        AddKnown("Juegos guardados", Environment.SpecialFolder.SavedGames, true);
+        AddKnown("Contactos", null, true, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Contacts"));
+        AddKnown("Búsquedas", null, true, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Searches"));
+        AddKnown("Juegos guardados", null, true, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Saved Games"));
         AddKnown("OneDrive", null, false, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "OneDrive"));
     }
 
@@ -212,7 +212,7 @@ internal sealed class BackupForm : Form
             _bar.Maximum = Math.Max(1, total + (_ipv4.Checked ? 1 : 0) + (_drivers.Checked ? 1 : 0));
             int done = 0, copied = 0, errors = 0;
             int maxWork = _bar.Maximum;
-            var progress = new Progress<(int done, int total, string message)>(p =>
+            IProgress<(int done, int total, string message)> progress = new Progress<(int done, int total, string message)>(p =>
             {
                 _bar.Value = Math.Min(p.done, _bar.Maximum);
                 int percent = (int)(100.0 * p.done / Math.Max(1, p.total));
