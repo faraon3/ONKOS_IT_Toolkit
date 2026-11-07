@@ -120,6 +120,8 @@ internal sealed class BackupForm : Form
         AddKnown("Búsquedas", null, true, "Busquedas", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Searches"));
         AddKnown("Juegos guardados", null, true, "Juegos Guardados", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Saved Games"));
         AddKnown("OneDrive", null, false, "One Drive", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "OneDrive"));
+        AddKnown("Vínculos", null, false, "Vinculos", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Links"));
+        AddKnown("Objetos 3D", null, false, "Objeto-3d", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "3D Objects"));
     }
 
     private void AddKnown(string label, Environment.SpecialFolder? special, bool selected, string iconKey, string? customPath = null)
@@ -147,7 +149,7 @@ internal sealed class BackupForm : Form
         string path = dialog.SelectedPath;
         if (_sources.Items.Cast<ListViewItem>().Any(x => string.Equals(((FolderEntry)x.Tag!).Path, path, StringComparison.OrdinalIgnoreCase)))
         { MessageBox.Show(this, "Esta carpeta ya está en la lista.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-        AddListItem(Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)), path, true, "");
+        AddListItem(Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)), path, true, "Unidad");
     }
     private void RefreshDrives()
     {
