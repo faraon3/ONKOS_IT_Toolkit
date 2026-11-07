@@ -70,7 +70,7 @@ internal sealed class BackupForm : UserControl
         sourceButtons.Controls.Add(_addFolder); sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons);
 
         var destinationGroup = MakeGroup("03  ·  Elige dónde guardar el respaldo");
-        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 160;
+        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 118;
         var destinationRow = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
         _drivePicker.DropDownStyle = ComboBoxStyle.DropDownList; StyleCombo(_drivePicker); _drivePicker.DrawMode = DrawMode.OwnerDrawFixed; _drivePicker.ItemHeight = 25; _drivePicker.DrawItem += DrawDriveItem;
         _drivePicker.SetBounds(10, 8, 330, 34);
@@ -79,18 +79,21 @@ internal sealed class BackupForm : UserControl
         StyleButton(choose, true); choose.Click += (_, _) => ChooseDestination();
         _destination.ReadOnly = true; StyleTextBox(_destination);
         _destination.SetBounds(10, 52, 850, 32); _destination.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-        var nameLabel = new Label { Text = "NOMBRE PERSONALIZADO DE LA COPIA (opcional)", ForeColor = TextMain, Font = new Font("Segoe UI", 9F, FontStyle.Bold), AutoSize = true, Location = new Point(10, 90) };
-        _backupLabel.SetBounds(10, 112, 850, 34); _backupLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-        _backupLabel.PlaceholderText = "Haz clic aquí y escribe: Recepcion_Principal";
-        StyleTextBox(_backupLabel);
-        destinationRow.Controls.Add(nameLabel); destinationRow.Controls.Add(_backupLabel);
         destinationRow.Controls.Add(_drivePicker); destinationRow.Controls.Add(choose); destinationRow.Controls.Add(_destination);
         destinationGroup.Controls.Add(destinationRow); RefreshDrives();
 
         var optionsGroup = MakeGroup("02  ·  Opciones adicionales");
-        optionsGroup.Dock = DockStyle.Top; optionsGroup.Height = 72;
-        var options = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(10, 8, 8, 8), BackColor = Surface, WrapContents = true };
-        StyleCheck(_ipv4); StyleCheck(_drivers); options.Controls.Add(_ipv4); options.Controls.Add(_drivers); optionsGroup.Controls.Add(options);
+        optionsGroup.Dock = DockStyle.Top; optionsGroup.Height = 142;
+        var options = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10, 6, 8, 6), BackColor = Surface };
+        StyleCheck(_ipv4); StyleCheck(_drivers);
+        _ipv4.SetBounds(8, 4, 245, 32);
+        _drivers.SetBounds(260, 4, 520, 32);
+        var nameLabel = new Label { Text = "NOMBRE PERSONALIZADO DE LA COPIA (opcional)", ForeColor = TextMain, Font = new Font("Segoe UI", 9F, FontStyle.Bold), AutoSize = true, Location = new Point(8, 43) };
+        _backupLabel.SetBounds(8, 65, 850, 36); _backupLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        _backupLabel.PlaceholderText = "Haz clic aquí y escribe, por ejemplo: Recepcion_Principal";
+        StyleTextBox(_backupLabel);
+        options.Controls.Add(_ipv4); options.Controls.Add(_drivers); options.Controls.Add(nameLabel); options.Controls.Add(_backupLabel);
+        optionsGroup.Controls.Add(options);
 
         var progressGroup = MakeGroup("04  ·  Progreso de la copia");
         progressGroup.Dock = DockStyle.Top; progressGroup.Height = 112;
