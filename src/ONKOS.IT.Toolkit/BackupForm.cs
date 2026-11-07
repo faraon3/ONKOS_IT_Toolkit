@@ -19,8 +19,8 @@ internal sealed class BackupForm : UserControl
     private readonly ComboBox _drivePicker = new();
     private readonly TextBox _destination = new();
     private readonly TextBox _backupLabel = new();
-    private readonly PurpleCheckBox _ipv4 = new() { Text = "Respaldar configuración IPv4", Checked = true, AutoSize = true };
-    private readonly PurpleCheckBox _drivers = new() { Text = "Exportar drivers instalados (requiere administrador)", Checked = true, AutoSize = true };
+    private readonly PurpleCheckBox _ipv4 = new() { Text = "Guardar configuración de red", Checked = true, AutoSize = false };
+    private readonly PurpleCheckBox _drivers = new() { Text = "Guardar controladores (drivers)", Checked = true, AutoSize = false };
     private readonly ModernProgressBar _bar = new();
     private readonly Label _status = new();
     private readonly Label _currentFile = new();
@@ -86,11 +86,11 @@ internal sealed class BackupForm : UserControl
         optionsGroup.Dock = DockStyle.Top; optionsGroup.Height = 142;
         var options = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10, 6, 8, 6), BackColor = Surface };
         StyleCheck(_ipv4); StyleCheck(_drivers);
-        _ipv4.SetBounds(8, 4, 245, 32);
-        _drivers.SetBounds(260, 4, 520, 32);
-        var nameLabel = new Label { Text = "NOMBRE PERSONALIZADO DE LA COPIA (opcional)", ForeColor = TextMain, Font = new Font("Segoe UI", 9F, FontStyle.Bold), AutoSize = true, Location = new Point(8, 43) };
+        _ipv4.SetBounds(8, 4, 270, 32);
+        _drivers.SetBounds(290, 4, 340, 32);
+        var nameLabel = new Label { Text = "Nombre de la copia (opcional)", ForeColor = TextMain, Font = new Font("Segoe UI", 9F, FontStyle.Bold), AutoSize = true, Location = new Point(8, 43) };
         _backupLabel.SetBounds(8, 65, 850, 36); _backupLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-        _backupLabel.PlaceholderText = "Haz clic aquí y escribe, por ejemplo: Recepcion_Principal";
+        _backupLabel.PlaceholderText = "Ejemplo: Recepcion_Principal";
         StyleTextBox(_backupLabel);
         options.Controls.Add(_ipv4); options.Controls.Add(_drivers); options.Controls.Add(nameLabel); options.Controls.Add(_backupLabel);
         optionsGroup.Controls.Add(options);
@@ -104,7 +104,7 @@ internal sealed class BackupForm : UserControl
         _currentFile.Dock = DockStyle.Top; _currentFile.Height = 25; _currentFile.Text = "Ahora: —"; _currentFile.ForeColor = TextMuted; _currentFile.AutoEllipsis = true;
         progressGroup.Controls.Add(_currentFile); progressGroup.Controls.Add(_status); progressGroup.Controls.Add(progressPanel);
 
-        var logGroup = MakeGroup("05  ·  Registro detallado"); logGroup.Dock = DockStyle.Top; logGroup.Height = 115; logGroup.MinimumSize = new Size(0, 75);
+        var logGroup = MakeGroup("Detalles (opcional)"); logGroup.Dock = DockStyle.Top; logGroup.Height = 115; logGroup.MinimumSize = new Size(0, 75);
         _log.Dock = DockStyle.Fill; _log.Multiline = true; _log.ReadOnly = true; _log.ScrollBars = ScrollBars.Vertical;
         _log.Font = new Font("Consolas", 9F); _log.BackColor = Color.FromArgb(13, 12, 18); _log.ForeColor = Color.FromArgb(203, 195, 218); _log.BorderStyle = BorderStyle.None;
         logGroup.Controls.Add(_log);
@@ -254,7 +254,7 @@ internal sealed class BackupForm : UserControl
         string customPrefix = SafeName(_backupLabel.Text.Trim());
         string folderPrefix = string.IsNullOrWhiteSpace(customPrefix) ? "" : customPrefix + "_";
         string root = Path.Combine(dest, $"{folderPrefix}{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}");
-        _busy = true; _run.Enabled = false; _log.Clear(); SetProgress(0, 0, "Preparando copia…", "Analizando carpetas seleccionadas");
+        _busy = true; _run.Enabled = false; _log.Clear(); SetProgress(0, 0, "Preparando respaldo…", "Revisando lo seleccionado");
         try
         {
             Directory.CreateDirectory(root);
@@ -274,14 +274,14 @@ internal sealed class BackupForm : UserControl
             Directory.CreateDirectory(Path.Combine(root, "Archivos"));
             int total = Math.Max(fileList.Count + (_ipv4.Checked ? 1 : 0) + (_drivers.Checked ? 1 : 0), 1);
             int done = 0, copied = 0, errors = 0;
-            IProgress<(int done, int total, string message, string current)> progress = new Progress<(int done, int total, string message, string current)>(p => { SetProgress(p.done, p.total, $"Copiando… {p.done} de {p.total}", p.current); WriteLog(p.message); });
+            IProgress<(int done, int total, string message, string current)> progress = new Progress<(int done, int total, string message, string current)>(p => { SetProgress(p.done, p.total, $"Copiando… {p.done} de {p.total}", p.current); if (!string.IsNullOrWhiteSpace(p.message)) WriteLog(p.message); });
             await Task.Run(() =>
             {
                 foreach (var item in fileList)
                 {
                     try { string targetDir = Path.Combine(root, "Archivos", item.FolderName, Path.GetDirectoryName(item.Relative) ?? ""); Directory.CreateDirectory(targetDir); File.Copy(item.Source, Path.Combine(targetDir, Path.GetFileName(item.Source)), true); copied++; }
                     catch (Exception ex) { errors++; ReportError(item.Source, ex.Message); }
-                    done++; progress.Report((done, total, $"{(errors > 0 && copied + errors == done ? "ERROR" : "OK")} · {item.Source}", item.Source));
+                    done++; progress.Report((done, total, "", Path.GetFileName(item.Source)));
                 }
             });
             if (_ipv4.Checked)
@@ -303,7 +303,7 @@ internal sealed class BackupForm : UserControl
                 $"Archivos copiados: {copied}{Environment.NewLine}" +
                 $"Errores: {errors}{Environment.NewLine}");
 
-            SetProgress(total, total, errors == 0 ? "Backup finalizado correctamente." : "Backup terminado con advertencias.", "Copia finalizada");
+            SetProgress(total, total, errors == 0 ? "¡Respaldo completado!" : "Respaldo completado con algunos problemas.", "Terminado");
             WriteLog($"Finalizado. Copiados: {copied}. Errores: {errors}.{Environment.NewLine}Ruta: {root}");
             MessageBox.Show(this,
                 $"Backup finalizado.{Environment.NewLine}Copiados: {copied}{Environment.NewLine}Errores: {errors}{Environment.NewLine}{Environment.NewLine}{root}",
