@@ -210,7 +210,8 @@ internal sealed class BackupForm : Form
 
             int total = fileList.Count;
             _bar.Maximum = Math.Max(1, total + (_ipv4.Checked ? 1 : 0) + (_drivers.Checked ? 1 : 0));
-            int done = 0, copied = 0, errors = 0;\n            int maxWork = _bar.Maximum;
+            int done = 0, copied = 0, errors = 0;
+            int maxWork = _bar.Maximum;
             var progress = new Progress<(int done, int total, string message)>(p =>
             {
                 _bar.Value = Math.Min(p.done, _bar.Maximum);
@@ -234,7 +235,7 @@ internal sealed class BackupForm : Form
                     }
                     catch (Exception ex) { errors++; ReportError(item.Source, ex.Message); }
                     done++;
-                    progress.Report((done, maxWork, $"[{done}/{_bar.Maximum}] {(errors > 0 && copied + errors == done ? "ERROR" : "OK")} {item.Source}"));
+                    progress.Report((done, maxWork, $"[{done}/{maxWork}] {(errors > 0 && copied + errors == done ? "ERROR" : "OK")} {item.Source}"));
                 }
             });
 
