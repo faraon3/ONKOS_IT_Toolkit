@@ -9,6 +9,7 @@
     <RootNamespace>ONKOS.IT.Toolkit</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="Assets\**\*.png" CopyToOutputDirectory="PreserveNewest" />\n    <Content Include="Assets\**\*.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\**\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\**\*.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
