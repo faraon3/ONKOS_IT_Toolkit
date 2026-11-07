@@ -24,7 +24,7 @@ internal sealed class MainForm : Form
     public MainForm()
     {
         Text = "ONKOS IT Toolkit"; StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(720, 540); Size = new Size(940, 700);
+        MinimumSize = new Size(800, 680); Size = new Size(960, 850);
         BackColor = Color.FromArgb(18, 16, 25); Font = new Font("Segoe UI", 9F);
         _header = new Panel { Dock = DockStyle.Top, Height = 92, BackColor = Color.FromArgb(85, 53, 138) };
         _header.Controls.Add(new Label { Text = "ONKOS IT TOOLKIT", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(18, 12) });
