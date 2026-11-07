@@ -41,15 +41,15 @@ internal sealed class BackupForm : UserControl
     {
         Dock = DockStyle.Fill; BackColor = Bg; ForeColor = TextMain; Font = new Font("Segoe UI", 9.5F);
 
-        var header = new Panel { Dock = DockStyle.Top, Height = 118, BackColor = Purple };
-        var back = new Button { Text = "‹  VOLVER AL INICIO", Location = new Point(22, 8), Size = new Size(170, 27) };
+        var header = new Panel { Dock = DockStyle.Top, Height = 88, BackColor = Purple };
+        var back = new Button { Text = "‹  VOLVER AL INICIO", Location = new Point(22, 5), Size = new Size(170, 25) };
         StyleButton(back, true); back.Click += (_, _) => BackRequested?.Invoke(); header.Controls.Add(back);
-        header.Controls.Add(new Label { Text = "BACKUP  /  MIGRACIÓN", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 35) });
-        header.Controls.Add(new Label { Text = "Asistente de respaldo seguro · Clínica ONKOS", ForeColor = Color.FromArgb(235, 225, 250), AutoSize = true, Location = new Point(25, 75) });
+        header.Controls.Add(new Label { Text = "BACKUP  /  MIGRACIÓN", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 30) });
+        header.Controls.Add(new Label { Text = "Asistente de respaldo seguro · Clínica ONKOS", ForeColor = Color.FromArgb(235, 225, 250), AutoSize = true, Location = new Point(25, 66) });
 
         var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(16), AutoScroll = true, BackColor = Bg };
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
-        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 285;
+        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 205;
         _folderIcons.ColorDepth = ColorDepth.Depth32Bit; _folderIcons.ImageSize = new Size(24, 24);
         _sources.Dock = DockStyle.Fill; _sources.View = View.Details; _sources.CheckBoxes = true;
         _sources.FullRowSelect = true; _sources.HideSelection = false; _sources.BorderStyle = BorderStyle.None; _sources.CheckBoxes = false; _sources.OwnerDraw = true;
@@ -60,7 +60,7 @@ internal sealed class BackupForm : UserControl
         _sources.KeyDown += (_, e) => { if (e.KeyCode == Keys.Space && _sources.SelectedItems.Count > 0) { var item = _sources.SelectedItems[0]; item.Checked = !item.Checked; _sources.Invalidate(item.Bounds); e.Handled = true; } };
         _sources.BackColor = Surface; _sources.ForeColor = TextMain; _sources.Font = new Font("Segoe UI", 9.5F);
         _sources.SmallImageList = _folderIcons;
-        _sources.Columns.Add("Carpeta / ubicación", 260); _sources.Columns.Add("Ruta", 620);
+        _sources.Columns.Add("Carpeta / ubicación", 220); _sources.Columns.Add("Ruta", 500);\n        _sources.Resize += (_, _) => { if (_sources.Columns.Count > 1) { _sources.Columns[0].Width = Math.Min(230, Math.Max(170, _sources.ClientSize.Width / 3)); _sources.Columns[1].Width = Math.Max(120, _sources.ClientSize.Width - _sources.Columns[0].Width - 4); } };
         LoadKnownFolders();
         var sourceButtons = new Panel { Dock = DockStyle.Bottom, Height = 42, BackColor = Surface };
         _addFolder.Text = "+  Agregar carpeta desde cualquier disco"; StyleButton(_addFolder, true);
@@ -68,7 +68,7 @@ internal sealed class BackupForm : UserControl
         sourceButtons.Controls.Add(_addFolder); sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons);
 
         var destinationGroup = MakeGroup("02  ·  Elige dónde guardar el respaldo");
-        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 112;
+        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 92;
         var destinationRow = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
         _drivePicker.DropDownStyle = ComboBoxStyle.DropDownList; StyleCombo(_drivePicker); _drivePicker.DrawMode = DrawMode.OwnerDrawFixed; _drivePicker.ItemHeight = 25; _drivePicker.DrawItem += DrawDriveItem;
         _drivePicker.SetBounds(10, 10, 330, 30);
@@ -81,12 +81,12 @@ internal sealed class BackupForm : UserControl
         destinationGroup.Controls.Add(destinationRow); RefreshDrives();
 
         var optionsGroup = MakeGroup("03  ·  Opciones adicionales");
-        optionsGroup.Dock = DockStyle.Top; optionsGroup.Height = 76;
+        optionsGroup.Dock = DockStyle.Top; optionsGroup.Height = 62;
         var options = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(10, 8, 8, 8), BackColor = Surface, WrapContents = true };
         StyleCheck(_ipv4); StyleCheck(_drivers); options.Controls.Add(_ipv4); options.Controls.Add(_drivers); optionsGroup.Controls.Add(options);
 
         var progressGroup = MakeGroup("04  ·  Progreso de la copia");
-        progressGroup.Dock = DockStyle.Top; progressGroup.Height = 115;
+        progressGroup.Dock = DockStyle.Top; progressGroup.Height = 96;
         var progressPanel = new Panel { Dock = DockStyle.Top, Height = 30, Margin = new Padding(8), BackColor = Surface2 };
         _bar.Dock = DockStyle.Fill; _bar.Value = 0;
         progressPanel.Controls.Add(_bar);
