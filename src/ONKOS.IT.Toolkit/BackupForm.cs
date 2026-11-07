@@ -275,6 +275,8 @@ internal sealed class BackupForm : UserControl
             string filesRoot = Path.Combine(root, "Archivos");
             Directory.CreateDirectory(filesRoot);
 
+            int errors = 0;
+
             // Crear primero toda la estructura de carpetas, incluso las vacías.
             foreach (var dir in directoryList)
             {
@@ -291,7 +293,7 @@ internal sealed class BackupForm : UserControl
             }
 
             int total = Math.Max(fileList.Count + (_ipv4.Checked ? 1 : 0) + (_drivers.Checked ? 1 : 0), 1);
-            int done = 0, copied = 0, errors = 0;
+            int done = 0, copied = 0;
             IProgress<(int done, int total, string message, string current)> progress = new Progress<(int done, int total, string message, string current)>(p => { SetProgress(p.done, p.total, $"Copiando… {p.done} de {p.total}", p.current); if (!string.IsNullOrWhiteSpace(p.message)) WriteLog(p.message); });
             await Task.Run(() =>
             {
