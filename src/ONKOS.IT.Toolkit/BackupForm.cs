@@ -272,7 +272,24 @@ internal sealed class BackupForm : UserControl
                 CollectFilesSafe(entry.Path, entry.Path, SafeName(entry.Label), fileList, directoryList);
             }
             WriteLog($"Archivos encontrados para copiar: {fileList.Count}");
-            Directory.CreateDirectory(Path.Combine(root, "Archivos"));
+            string filesRoot = Path.Combine(root, "Archivos");
+            Directory.CreateDirectory(filesRoot);
+
+            // Crear primero toda la estructura de carpetas, incluso las vacías.
+            foreach (var dir in directoryList)
+            {
+                try
+                {
+                    string targetDir = Path.Combine(filesRoot, dir.FolderName, dir.Relative);
+                    Directory.CreateDirectory(targetDir);
+                }
+                catch (Exception ex)
+                {
+                    errors++;
+                    ReportError(dir.Source, "No se pudo crear la carpeta en el respaldo: " + ex.Message);
+                }
+            }
+
             int total = Math.Max(fileList.Count + (_ipv4.Checked ? 1 : 0) + (_drivers.Checked ? 1 : 0), 1);
             int done = 0, copied = 0, errors = 0;
             IProgress<(int done, int total, string message, string current)> progress = new Progress<(int done, int total, string message, string current)>(p => { SetProgress(p.done, p.total, $"Copiando… {p.done} de {p.total}", p.current); if (!string.IsNullOrWhiteSpace(p.message)) WriteLog(p.message); });
@@ -315,6 +332,18 @@ internal sealed class BackupForm : UserControl
     }
     private void CollectFilesSafe(string rootPath, string currentPath, string folderName, List<(string Source, string Relative, string FolderName)> files, List<(string Source, string Relative, string FolderName)> directories)
     {
+        // Registrar esta carpeta antes de recorrer su contenido. Esto permite conservar
+        // tanto las carpetas vacías como las carpetas que contienen otras carpetas vacías.
+        try
+        {
+            string relativeDirectory = Path.GetRelativePath(rootPath, currentPath);
+            directories.Add((currentPath, relativeDirectory == "." ? "" : relativeDirectory, folderName));
+        }
+        catch (Exception ex)
+        {
+            WriteLog($"Aviso registrando carpeta {currentPath}: {ex.Message}");
+        }
+
         try
         {
             foreach (string file in Directory.EnumerateFiles(currentPath))
