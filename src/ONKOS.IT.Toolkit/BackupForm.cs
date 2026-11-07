@@ -52,7 +52,12 @@ internal sealed class BackupForm : UserControl
         sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 285;
         _folderIcons.ColorDepth = ColorDepth.Depth32Bit; _folderIcons.ImageSize = new Size(24, 24);
         _sources.Dock = DockStyle.Fill; _sources.View = View.Details; _sources.CheckBoxes = true;
-        _sources.FullRowSelect = true; _sources.HideSelection = false; _sources.BorderStyle = BorderStyle.None;
+        _sources.FullRowSelect = true; _sources.HideSelection = false; _sources.BorderStyle = BorderStyle.None; _sources.CheckBoxes = false; _sources.OwnerDraw = true;
+        _sources.DrawColumnHeader += (_, e) => { using var brush = new SolidBrush(Purple); e.Graphics.FillRectangle(brush, e.Bounds); TextRenderer.DrawText(e.Graphics, e.Header.Text, new Font("Segoe UI", 9.5F, FontStyle.Bold), e.Bounds, Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter); };
+        _sources.DrawItem += (_, e) => { };
+        _sources.DrawSubItem += DrawSourceSubItem;
+        _sources.MouseDown += SourceMouseDown;
+        _sources.KeyDown += (_, e) => { if (e.KeyCode == Keys.Space && _sources.SelectedItems.Count > 0) { var item = _sources.SelectedItems[0]; item.Checked = !item.Checked; _sources.Invalidate(item.Bounds); e.Handled = true; } };
         _sources.BackColor = Surface; _sources.ForeColor = TextMain; _sources.Font = new Font("Segoe UI", 9.5F);
         _sources.SmallImageList = _folderIcons;
         _sources.Columns.Add("Carpeta / ubicación", 260); _sources.Columns.Add("Ruta", 620);
@@ -65,7 +70,7 @@ internal sealed class BackupForm : UserControl
         var destinationGroup = MakeGroup("02  ·  Elige dónde guardar el respaldo");
         destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 112;
         var destinationRow = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
-        _drivePicker.DropDownStyle = ComboBoxStyle.DropDownList; StyleCombo(_drivePicker);
+        _drivePicker.DropDownStyle = ComboBoxStyle.DropDownList; StyleCombo(_drivePicker); _drivePicker.DrawMode = DrawMode.OwnerDrawFixed; _drivePicker.ItemHeight = 25; _drivePicker.DrawItem += DrawDriveItem;
         _drivePicker.SetBounds(10, 10, 330, 30);
         _drivePicker.SelectedIndexChanged += (_, _) => { if (_drivePicker.SelectedItem is DriveChoice d) _destination.Text = d.Root; };
         var choose = new Button { Text = "Examinar carpeta / red…", Width = 220, Height = 30, Location = new Point(352, 10) };
@@ -141,6 +146,53 @@ internal sealed class BackupForm : UserControl
         try { var icon = ShellIcon.Get(path); _folderIcons.Images.Add(icon); icon.Dispose(); return _folderIcons.Images.Count - 1; }
         catch { _folderIcons.Images.Add(SystemIcons.WinLogo); return _folderIcons.Images.Count - 1; }
     }
+    private void DrawSourceSubItem(object? sender, DrawListViewSubItemEventArgs e)
+    {
+        using var bg = new SolidBrush(e.Item.Selected ? Color.FromArgb(58, 46, 78) : Surface);
+        e.Graphics.FillRectangle(bg, e.Bounds);
+        if (e.ColumnIndex == 0)
+        {
+            int x=e.Bounds.X+8, y=e.Bounds.Y+(e.Bounds.Height-16)/2;
+            var box=new Rectangle(x,y,16,16);
+            using var cb=new SolidBrush(e.Item.Checked ? Purple : Color.FromArgb(46,40,59));
+            using var pen=new Pen(e.Item.Checked ? PurpleHover : Border,1.2f);
+            using var path=RoundedRect(box,4);
+            e.Graphics.FillPath(cb,path); e.Graphics.DrawPath(pen,path);
+            if(e.Item.Checked){using var check=new Pen(Color.White,2.2f); e.Graphics.DrawLines(check,new[]{new Point(x+3,y+8),new Point(x+6,y+11),new Point(x+13,y+4)});}
+            if(e.Item.ImageIndex>=0 && _sources.SmallImageList!=null)
+                e.Graphics.DrawImage(_sources.SmallImageList.Images[e.Item.ImageIndex],x+23,e.Bounds.Y+(e.Bounds.Height-22)/2,22,22);
+            TextRenderer.DrawText(e.Graphics,e.SubItem.Text,_sources.Font,new Rectangle(x+50,e.Bounds.Y,e.Bounds.Width-52,e.Bounds.Height),TextMain,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
+        }
+        else TextRenderer.DrawText(e.Graphics,e.SubItem.Text,_sources.Font,e.Bounds,TextMuted,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
+    }
+    private void SourceMouseDown(object? sender, MouseEventArgs e)
+    {
+        var hit=_sources.HitTest(e.Location);
+        if(hit.Item!=null && e.X < _sources.Columns[0].Width && e.X < hit.Item.Bounds.X+32)
+        { hit.Item.Checked=!hit.Item.Checked; _sources.Invalidate(hit.Item.Bounds); }
+    }
+    private void DrawDriveItem(object? sender, DrawItemEventArgs e)
+    {
+        if(e.Index<0)return;
+        var drive=(DriveChoice)_drivePicker.Items[e.Index]!;
+        e.DrawBackground();
+        string symbol=drive.Type==DriveType.Removable ? "USB / EXTERNO" : drive.Type==DriveType.Network ? "RED" : "DISCO";
+        var iconPath=Path.Combine(AppContext.BaseDirectory,"Assets","Unidad_USB.png");
+        if(File.Exists(iconPath))
+        {
+            try { using var img=Image.FromFile(iconPath); e.Graphics.DrawImage(img,e.Bounds.X+4,e.Bounds.Y+2,20,20); }
+            catch { }
+        }
+        Color fore=(e.State&DrawItemState.Selected)!=0?Color.White:TextMain;
+        TextRenderer.DrawText(e.Graphics,symbol+"  "+drive.Label,_drivePicker.Font,new Rectangle(e.Bounds.X+28,e.Bounds.Y,e.Bounds.Width-30,e.Bounds.Height),fore,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
+        e.DrawFocusRectangle();
+    }
+    private static GraphicsPath RoundedRect(Rectangle r,int radius)
+    {
+        var p=new GraphicsPath(); int d=radius*2;
+        p.AddArc(r.X,r.Y,d,d,180,90); p.AddArc(r.Right-d,r.Y,d,d,270,90);
+        p.AddArc(r.Right-d,r.Bottom-d,d,d,0,90); p.AddArc(r.X,r.Bottom-d,d,d,90,90); p.CloseFigure(); return p;
+    }
     private void AddCustomFolder()
     {
         using var dialog = new FolderBrowserDialog { Description = "Selecciona una carpeta específica, incluso en D:, E: u otra unidad." };
@@ -154,7 +206,7 @@ internal sealed class BackupForm : UserControl
     {
         _drivePicker.Items.Clear();
         foreach (var drive in DriveInfo.GetDrives().Where(d => d.IsReady))
-        { try { _drivePicker.Items.Add(new DriveChoice($"{drive.Name} · {drive.VolumeLabel} · {drive.DriveType} · {drive.AvailableFreeSpace / 1024 / 1024 / 1024} GB libres", drive.RootDirectory.FullName)); } catch { } }
+        { try { _drivePicker.Items.Add(new DriveChoice($"{drive.Name} · {drive.VolumeLabel} · {drive.DriveType} · {drive.AvailableFreeSpace / 1024 / 1024 / 1024} GB libres", drive.RootDirectory.FullName, drive.DriveType)); } catch { } }
         if (_drivePicker.Items.Count > 0) _drivePicker.SelectedIndex = 0;
     }
     private void ChooseDestination()
@@ -215,12 +267,15 @@ internal sealed class BackupForm : UserControl
     { int pct = total <= 0 ? 0 : Math.Clamp((int)(100.0 * done / total), 0, 100); _bar.Value = pct; _status.Text = status; _currentFile.Text = "Ahora: " + current; }
     private void ReportError(string path, string error) => WriteLog($"ERROR: {path} | {error}");
     private void WriteLog(string message) { if (InvokeRequired) { BeginInvoke(new Action(() => WriteLog(message))); return; } _log.AppendText(message + Environment.NewLine); }
+    protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); try { SetWindowTheme(_sources.Handle, "DarkMode_Explorer", null); } catch { } }
+    [DllImport("uxtheme.dll", CharSet=CharSet.Unicode)] private static extern int SetWindowTheme(IntPtr hwnd,string? appName,string? idList);
+
     private static bool IsSameOrChild(string parent, string child) { try { return Path.GetFullPath(parent).TrimEnd(Path.DirectorySeparatorChar).StartsWith(Path.GetFullPath(child).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase); } catch { return false; } }
     private static string SafeName(string s) => string.Join("_", s.Split(Path.GetInvalidFileNameChars()));
     private static async Task<string> RunProcessAsync(string exe, string args, bool shellRedirect)
     { var psi = new ProcessStartInfo(exe, args) { UseShellExecute = shellRedirect, CreateNoWindow = true, RedirectStandardOutput = !shellRedirect, RedirectStandardError = !shellRedirect }; using var p = Process.Start(psi) ?? throw new InvalidOperationException($"No se pudo iniciar {exe}"); if (shellRedirect) { await p.WaitForExitAsync(); return $"Proceso terminado con código {p.ExitCode}"; } string stdout = await p.StandardOutput.ReadToEndAsync(); string stderr = await p.StandardError.ReadToEndAsync(); await p.WaitForExitAsync(); return stdout + Environment.NewLine + stderr + Environment.NewLine + "ExitCode=" + p.ExitCode; }
     private sealed record FolderEntry(string Label, string Path, bool Custom);
-    private sealed record DriveChoice(string Label, string Root) { public override string ToString() => Label; }
+    private sealed record DriveChoice(string Label, string Root, DriveType Type) { public override string ToString() => Label; }
 
     private static class ShellIcon
     {
