@@ -19,8 +19,8 @@ internal sealed class BackupForm : UserControl
     private readonly ComboBox _drivePicker = new();
     private readonly TextBox _destination = new();
     private readonly TextBox _backupLabel = new();
-    private readonly CheckBox _ipv4 = new() { Text = "Respaldar configuración IPv4", Checked = true, AutoSize = true };
-    private readonly CheckBox _drivers = new() { Text = "Exportar drivers instalados (requiere administrador)", Checked = true, AutoSize = true };
+    private readonly PurpleCheckBox _ipv4 = new() { Text = "Respaldar configuración IPv4", Checked = true, AutoSize = true };
+    private readonly PurpleCheckBox _drivers = new() { Text = "Exportar drivers instalados (requiere administrador)", Checked = true, AutoSize = true };
     private readonly ModernProgressBar _bar = new();
     private readonly Label _status = new();
     private readonly Label _currentFile = new();
@@ -362,6 +362,62 @@ internal sealed class BackupForm : UserControl
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr SHGetFileInfo(string path, uint attrs, out SHFILEINFO info, uint size, uint flags);
         [DllImport("user32.dll")] private static extern bool DestroyIcon(IntPtr hIcon);
         public static Icon Get(string path) { const uint SHGFI_ICON = 0x100, SHGFI_SMALLICON = 0x1; SHGetFileInfo(path, 0, out var info, (uint)Marshal.SizeOf<SHFILEINFO>(), SHGFI_ICON | SHGFI_SMALLICON); if (info.hIcon == IntPtr.Zero) return SystemIcons.WinLogo; try { return (Icon)Icon.FromHandle(info.hIcon).Clone(); } finally { DestroyIcon(info.hIcon); } }
+    }
+}
+
+internal sealed class PurpleCheckBox : CheckBox
+{
+    public PurpleCheckBox()
+    {
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        BackColor = Color.FromArgb(31, 27, 41);
+        ForeColor = Color.FromArgb(244, 241, 250);
+        Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
+        AutoSize = false;
+        Height = 32;
+        Width = 260;
+        Cursor = Cursors.Hand;
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.Clear(BackColor);
+
+        int boxSize = 16;
+        int x = 5;
+        int y = (Height - boxSize) / 2;
+        var rect = new Rectangle(x, y, boxSize, boxSize);
+        Color purple = Color.FromArgb(105, 73, 164);
+        Color border = Color.FromArgb(65, 57, 82);
+
+        using var fill = new SolidBrush(Checked ? purple : Color.FromArgb(46, 40, 59));
+        using var outline = new Pen(Checked ? Color.FromArgb(126, 91, 190) : border, 1.2F);
+        using var shape = RoundedCheckRect(rect, 4);
+        g.FillPath(fill, shape);
+        g.DrawPath(outline, shape);
+
+        if (Checked)
+        {
+            using var tick = new Pen(Color.White, 2.1F) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+            g.DrawLines(tick, new[] { new Point(x + 3, y + 8), new Point(x + 6, y + 11), new Point(x + 13, y + 4) });
+        }
+
+        TextRenderer.DrawText(g, Text, Font, new Rectangle(29, 0, Math.Max(0, Width - 34), Height), ForeColor,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+    }
+
+    private static GraphicsPath RoundedCheckRect(Rectangle r, int radius)
+    {
+        var path = new GraphicsPath();
+        int d = radius * 2;
+        path.AddArc(r.X, r.Y, d, d, 180, 90);
+        path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+        path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+        path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
     }
 }
 
