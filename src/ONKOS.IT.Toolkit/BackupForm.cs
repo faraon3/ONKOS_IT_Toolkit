@@ -50,9 +50,9 @@ internal sealed class BackupForm : UserControl
 
         var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8), AutoScroll = false, BackColor = Bg };
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
-        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 250;
+        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 285;
         _folderIcons.ColorDepth = ColorDepth.Depth32Bit; _folderIcons.ImageSize = new Size(24, 24);
-        _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(390, 42); _sources.CheckBoxes = false;
+        _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(300, 42); _sources.CheckBoxes = false;
         _sources.FullRowSelect = true; _sources.HideSelection = false; _sources.BorderStyle = BorderStyle.None; _sources.CheckBoxes = false; _sources.OwnerDraw = true;
         _sources.DrawColumnHeader += (_, e) => { if (e.Header is null) return; using var brush = new SolidBrush(Purple); using var font = new Font("Segoe UI", 9.5F, FontStyle.Bold); e.Graphics.FillRectangle(brush, e.Bounds); TextRenderer.DrawText(e.Graphics, e.Header.Text ?? string.Empty, font, e.Bounds, Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter); };
         _sources.DrawItem += DrawSourceTile;
