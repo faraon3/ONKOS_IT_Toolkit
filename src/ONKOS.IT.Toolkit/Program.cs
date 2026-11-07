@@ -17,6 +17,8 @@ internal static class Program
 internal sealed class MainForm : Form
 {
     private readonly string _appRoot = AppContext.BaseDirectory;
+    private readonly Panel _mainContent = new() { Dock = DockStyle.Fill };
+    private Control? _homeBody;
     public MainForm()
     {
         Text = "ONKOS IT Toolkit"; StartPosition = FormStartPosition.CenterScreen;
@@ -26,15 +28,24 @@ internal sealed class MainForm : Form
         header.Controls.Add(new Label { Text = "ONKOS IT TOOLKIT", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(18, 12) });
         header.Controls.Add(new Label { Text = "Herramientas locales de soporte técnico", ForeColor = Color.WhiteSmoke, AutoSize = true, Location = new Point(21, 52) });
         var body = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(22), AutoScroll = true, WrapContents = true };
-        AddModule(body, "Backup y migración", "Copiar información antes de formatear.", () => { using var f = new BackupForm(); f.ShowDialog(this); });
+        _homeBody = body;
+        AddModule(body, "Backup y migración", "Copiar información antes de formatear.", () => OpenBackup());
         AddModule(body, "Red e IPv4", "Consultar y respaldar la configuración de red.");
         AddModule(body, "Drivers", "Organizar controladores por fabricante y modelo.");
         AddModule(body, "Programas", "Administrar instaladores almacenados en la USB.");
         AddModule(body, "Impresoras", "Organizar controladores y datos de impresoras.");
         AddModule(body, "Inventario", "Consultar y registrar información del equipo.");
         var footer = new Label { Dock = DockStyle.Bottom, Height = 48, Padding = new Padding(18, 10, 10, 6), ForeColor = Color.FromArgb(80, 80, 80), AutoEllipsis = true, Text = "Aplicación portable | " + _appRoot };
-        Controls.Add(body); Controls.Add(footer); Controls.Add(header);
+        _mainContent.Controls.Add(body); Controls.Add(_mainContent); Controls.Add(footer); Controls.Add(header);
         Shown += (_, _) => { foreach (var f in new[] { "Data", "Data/Config", "Data/Programs", "Data/Drivers", "Data/Templates", "Data/Reports" }) Directory.CreateDirectory(Path.Combine(_appRoot, f)); };
+    }
+
+    private void OpenBackup()
+    {
+        var backup = new BackupForm();
+        backup.BackRequested += () => { _mainContent.Controls.Clear(); if (_homeBody != null) _mainContent.Controls.Add(_homeBody); };
+        _mainContent.Controls.Clear();
+        _mainContent.Controls.Add(backup);
     }
 
     private static void AddModule(Control parent, string title, string description, Action? action = null)
