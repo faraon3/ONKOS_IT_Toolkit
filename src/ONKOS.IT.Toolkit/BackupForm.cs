@@ -70,7 +70,7 @@ internal sealed class BackupForm : UserControl
         sourceButtons.Controls.Add(_addFolder); sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons);
 
         var destinationGroup = MakeGroup("03  ·  Elige dónde guardar el respaldo");
-        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 148;
+        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 160;
         var destinationRow = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
         _drivePicker.DropDownStyle = ComboBoxStyle.DropDownList; StyleCombo(_drivePicker); _drivePicker.DrawMode = DrawMode.OwnerDrawFixed; _drivePicker.ItemHeight = 25; _drivePicker.DrawItem += DrawDriveItem;
         _drivePicker.SetBounds(10, 8, 330, 34);
@@ -79,9 +79,9 @@ internal sealed class BackupForm : UserControl
         StyleButton(choose, true); choose.Click += (_, _) => ChooseDestination();
         _destination.ReadOnly = true; StyleTextBox(_destination);
         _destination.SetBounds(10, 52, 850, 32); _destination.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-        var nameLabel = new Label { Text = "Nombre adicional del respaldo (opcional: área, usuario, sede…)", ForeColor = TextMuted, AutoSize = true, Location = new Point(10, 90) };
-        _backupLabel.SetBounds(10, 108, 850, 30); _backupLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-        _backupLabel.PlaceholderText = "Ejemplo: Recepcion_Principal";
+        var nameLabel = new Label { Text = "NOMBRE PERSONALIZADO DE LA COPIA (opcional)", ForeColor = TextMain, Font = new Font("Segoe UI", 9F, FontStyle.Bold), AutoSize = true, Location = new Point(10, 90) };
+        _backupLabel.SetBounds(10, 112, 850, 34); _backupLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        _backupLabel.PlaceholderText = "Haz clic aquí y escribe: Recepcion_Principal";
         StyleTextBox(_backupLabel);
         destinationRow.Controls.Add(nameLabel); destinationRow.Controls.Add(_backupLabel);
         destinationRow.Controls.Add(_drivePicker); destinationRow.Controls.Add(choose); destinationRow.Controls.Add(_destination);
@@ -115,7 +115,7 @@ internal sealed class BackupForm : UserControl
     private GroupBox MakeGroup(string title) => new() { Text = title, ForeColor = Color.FromArgb(210, 197, 235), BackColor = Surface, Padding = new Padding(10), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), Margin = new Padding(0, 0, 0, 10), FlatStyle = FlatStyle.Flat };
     private static void StyleButton(Button b, bool secondary) { b.FlatStyle = FlatStyle.Flat; b.FlatAppearance.BorderColor = Border; b.FlatAppearance.BorderSize = secondary ? 1 : 0; b.BackColor = secondary ? Surface2 : Purple; b.ForeColor = TextMain; b.Cursor = Cursors.Hand; b.FlatAppearance.MouseOverBackColor = secondary ? Color.FromArgb(52, 45, 67) : PurpleHover; }
     private static void StyleCombo(ComboBox c) { c.BackColor = Surface2; c.ForeColor = TextMain; c.FlatStyle = FlatStyle.Flat; }
-    private static void StyleTextBox(TextBox t) { t.BackColor = Surface2; t.ForeColor = TextMain; t.BorderStyle = BorderStyle.FixedSingle; }
+    private static void StyleTextBox(TextBox t) { t.BackColor = Surface2; t.ForeColor = TextMain; t.BorderStyle = BorderStyle.FixedSingle; t.Font = new Font("Segoe UI", 10F); }
     private static void StyleCheck(CheckBox c) { c.ForeColor = TextMain; c.BackColor = Surface; c.Padding = new Padding(4); c.Cursor = Cursors.Hand; }
 
     private void LoadKnownFolders()
