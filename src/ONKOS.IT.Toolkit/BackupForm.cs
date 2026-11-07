@@ -53,7 +53,7 @@ internal sealed class BackupForm : UserControl
         _folderIcons.ColorDepth = ColorDepth.Depth32Bit; _folderIcons.ImageSize = new Size(24, 24);
         _sources.Dock = DockStyle.Fill; _sources.View = View.Details; _sources.CheckBoxes = true;
         _sources.FullRowSelect = true; _sources.HideSelection = false; _sources.BorderStyle = BorderStyle.None; _sources.CheckBoxes = false; _sources.OwnerDraw = true;
-        _sources.DrawColumnHeader += (_, e) => { using var brush = new SolidBrush(Purple); e.Graphics.FillRectangle(brush, e.Bounds); TextRenderer.DrawText(e.Graphics, e.Header.Text, new Font("Segoe UI", 9.5F, FontStyle.Bold), e.Bounds, Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter); };
+        _sources.DrawColumnHeader += (_, e) => { if (e.Header is null) return; using var brush = new SolidBrush(Purple); using var font = new Font("Segoe UI", 9.5F, FontStyle.Bold); e.Graphics.FillRectangle(brush, e.Bounds); TextRenderer.DrawText(e.Graphics, e.Header.Text ?? string.Empty, font, e.Bounds, Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter); };
         _sources.DrawItem += (_, e) => { };
         _sources.DrawSubItem += DrawSourceSubItem;
         _sources.MouseDown += SourceMouseDown;
@@ -148,7 +148,7 @@ internal sealed class BackupForm : UserControl
     }
     private void DrawSourceSubItem(object? sender, DrawListViewSubItemEventArgs e)
     {
-        using var bg = new SolidBrush(e.Item.Selected ? Color.FromArgb(58, 46, 78) : Surface);
+        if (e.Item is null || e.SubItem is null) return;\n        using var bg = new SolidBrush(e.Item.Selected ? Color.FromArgb(58, 46, 78) : Surface);
         e.Graphics.FillRectangle(bg, e.Bounds);
         if (e.ColumnIndex == 0)
         {
@@ -160,8 +160,8 @@ internal sealed class BackupForm : UserControl
             e.Graphics.FillPath(cb,path); e.Graphics.DrawPath(pen,path);
             if(e.Item.Checked){using var check=new Pen(Color.White,2.2f); e.Graphics.DrawLines(check,new[]{new Point(x+3,y+8),new Point(x+6,y+11),new Point(x+13,y+4)});}
             if(e.Item.ImageIndex>=0 && _sources.SmallImageList!=null)
-                e.Graphics.DrawImage(_sources.SmallImageList.Images[e.Item.ImageIndex],x+23,e.Bounds.Y+(e.Bounds.Height-22)/2,22,22);
-            TextRenderer.DrawText(e.Graphics,e.SubItem.Text,_sources.Font,new Rectangle(x+50,e.Bounds.Y,e.Bounds.Width-52,e.Bounds.Height),TextMain,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
+                var icon = _sources.SmallImageList?.Images[e.Item.ImageIndex];\n                if (icon is not null) e.Graphics.DrawImage(icon,x+23,e.Bounds.Y+(e.Bounds.Height-22)/2,22,22);
+            TextRenderer.DrawText(e.Graphics,e.SubItem.Text ?? string.Empty,_sources.Font,new Rectangle(x+50,e.Bounds.Y,e.Bounds.Width-52,e.Bounds.Height),TextMain,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
         }
         else TextRenderer.DrawText(e.Graphics,e.SubItem.Text,_sources.Font,e.Bounds,TextMuted,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
     }
