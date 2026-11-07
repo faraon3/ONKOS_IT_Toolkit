@@ -49,12 +49,12 @@ internal sealed class BackupForm : UserControl
 
         var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 8), AutoScroll = false, BackColor = Bg };
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
-        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 360;
+        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 250;
         _folderIcons.ColorDepth = ColorDepth.Depth32Bit; _folderIcons.ImageSize = new Size(24, 24);
         _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(390, 42); _sources.CheckBoxes = false;
         _sources.FullRowSelect = true; _sources.HideSelection = false; _sources.BorderStyle = BorderStyle.None; _sources.CheckBoxes = false; _sources.OwnerDraw = true;
         _sources.DrawColumnHeader += (_, e) => { if (e.Header is null) return; using var brush = new SolidBrush(Purple); using var font = new Font("Segoe UI", 9.5F, FontStyle.Bold); e.Graphics.FillRectangle(brush, e.Bounds); TextRenderer.DrawText(e.Graphics, e.Header.Text ?? string.Empty, font, e.Bounds, Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter); };
-        _sources.DrawItem += (_, e) => { };
+        _sources.DrawItem += DrawSourceTile;
         _sources.DrawSubItem += DrawSourceSubItem;
         _sources.MouseDown += SourceMouseDown;
         _sources.KeyDown += (_, e) => { if (e.KeyCode == Keys.Space && _sources.SelectedItems.Count > 0) { var item = _sources.SelectedItems[0]; item.Checked = !item.Checked; _sources.Invalidate(item.Bounds); e.Handled = true; } };
@@ -69,7 +69,7 @@ internal sealed class BackupForm : UserControl
         sourceButtons.Controls.Add(_addFolder); sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons);
 
         var destinationGroup = MakeGroup("03  ·  Elige dónde guardar el respaldo");
-        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 118;
+        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 110;
         var destinationRow = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
         _drivePicker.DropDownStyle = ComboBoxStyle.DropDownList; StyleCombo(_drivePicker); _drivePicker.DrawMode = DrawMode.OwnerDrawFixed; _drivePicker.ItemHeight = 25; _drivePicker.DrawItem += DrawDriveItem;
         _drivePicker.SetBounds(10, 8, 330, 34);
@@ -82,12 +82,12 @@ internal sealed class BackupForm : UserControl
         destinationGroup.Controls.Add(destinationRow); RefreshDrives();
 
         var optionsGroup = MakeGroup("02  ·  Opciones adicionales");
-        optionsGroup.Dock = DockStyle.Top; optionsGroup.Height = 82;
+        optionsGroup.Dock = DockStyle.Top; optionsGroup.Height = 72;
         var options = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(10, 8, 8, 8), BackColor = Surface, WrapContents = true };
         StyleCheck(_ipv4); StyleCheck(_drivers); options.Controls.Add(_ipv4); options.Controls.Add(_drivers); optionsGroup.Controls.Add(options);
 
         var progressGroup = MakeGroup("04  ·  Progreso de la copia");
-        progressGroup.Dock = DockStyle.Top; progressGroup.Height = 116;
+        progressGroup.Dock = DockStyle.Top; progressGroup.Height = 112;
         var progressPanel = new Panel { Dock = DockStyle.Top, Height = 32, Padding = new Padding(3), BackColor = Surface2 };
         _bar.Dock = DockStyle.Fill; _bar.Value = 0;
         progressPanel.Controls.Add(_bar);
@@ -95,7 +95,7 @@ internal sealed class BackupForm : UserControl
         _currentFile.Dock = DockStyle.Top; _currentFile.Height = 25; _currentFile.Text = "Ahora: —"; _currentFile.ForeColor = TextMuted; _currentFile.AutoEllipsis = true;
         progressGroup.Controls.Add(_currentFile); progressGroup.Controls.Add(_status); progressGroup.Controls.Add(progressPanel);
 
-        var logGroup = MakeGroup("05  ·  Registro detallado"); logGroup.Dock = DockStyle.Fill; logGroup.MinimumSize = new Size(0, 90);
+        var logGroup = MakeGroup("05  ·  Registro detallado"); logGroup.Dock = DockStyle.Fill; logGroup.MinimumSize = new Size(0, 75);
         _log.Dock = DockStyle.Fill; _log.Multiline = true; _log.ReadOnly = true; _log.ScrollBars = ScrollBars.Vertical;
         _log.Font = new Font("Consolas", 9F); _log.BackColor = Color.FromArgb(13, 12, 18); _log.ForeColor = Color.FromArgb(203, 195, 218); _log.BorderStyle = BorderStyle.None;
         logGroup.Controls.Add(_log);
