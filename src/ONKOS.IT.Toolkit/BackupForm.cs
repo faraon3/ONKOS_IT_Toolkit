@@ -259,6 +259,7 @@ internal sealed class BackupForm : UserControl
         {
             Directory.CreateDirectory(root);
             var fileList = new List<(string Source, string Relative, string FolderName)>();
+            var directoryList = new List<(string Source, string Relative, string FolderName)>();
             WriteLog($"Carpetas seleccionadas: {selected.Count}");
             foreach (var entry in selected)
             {
@@ -268,7 +269,7 @@ internal sealed class BackupForm : UserControl
                     WriteLog($"ERROR: La carpeta no existe o no está disponible: {entry.Path}");
                     continue;
                 }
-                CollectFilesSafe(entry.Path, entry.Path, SafeName(entry.Label), fileList);
+                CollectFilesSafe(entry.Path, entry.Path, SafeName(entry.Label), fileList, directoryList);
             }
             WriteLog($"Archivos encontrados para copiar: {fileList.Count}");
             Directory.CreateDirectory(Path.Combine(root, "Archivos"));
@@ -312,7 +313,7 @@ internal sealed class BackupForm : UserControl
         catch (Exception ex) { _status.Text = "El backup falló."; WriteLog("ERROR GENERAL: " + ex.Message); MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally { _busy = false; _run.Enabled = true; }
     }
-    private void CollectFilesSafe(string rootPath, string currentPath, string folderName, List<(string Source, string Relative, string FolderName)> files)
+    private void CollectFilesSafe(string rootPath, string currentPath, string folderName, List<(string Source, string Relative, string FolderName)> files, List<(string Source, string Relative, string FolderName)> directories)
     {
         try
         {
@@ -336,7 +337,7 @@ internal sealed class BackupForm : UserControl
                         WriteLog($"Omitida carpeta de enlace (evita ciclos): {directory}");
                         continue;
                     }
-                    CollectFilesSafe(rootPath, directory, folderName, files);
+                    CollectFilesSafe(rootPath, directory, folderName, files, directories);
                 }
                 catch (Exception ex) { WriteLog($"Aviso explorando subcarpeta {directory}: {ex.Message}"); }
             }
