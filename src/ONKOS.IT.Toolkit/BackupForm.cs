@@ -46,6 +46,8 @@ internal sealed class BackupForm : UserControl
         var header = new Panel { Dock = DockStyle.Top, Height = 88, BackColor = Purple };
         var back = new Button { Text = "‹  VOLVER AL INICIO", Location = new Point(22, 5), Size = new Size(170, 25) };
         StyleButton(back, true); back.Click += (_, _) => BackRequested?.Invoke(); header.Controls.Add(back);
+        var restore = new Button { Text = "RESTAURAR RESPALDO", Location = new Point(205, 5), Size = new Size(190, 25) };
+        StyleButton(restore, true); restore.Click += async (_, _) => await RestoreBackupAsync(); header.Controls.Add(restore);
         header.Controls.Add(new Label { Text = "BACKUP  /  MIGRACIÓN", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 30) });
         header.Controls.Add(new Label { Text = "Asistente de respaldo seguro · Clínica ONKOS", ForeColor = Color.FromArgb(235, 225, 250), AutoSize = true, Location = new Point(25, 66) });
 
@@ -452,6 +454,127 @@ internal sealed class BackupForm : UserControl
         catch (Exception ex) { _status.Text = "El backup falló."; WriteLog("ERROR GENERAL: " + ex.Message); MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally { _busy = false; _run.Enabled = true; }
     }
+    private async Task RestoreBackupAsync()
+    {
+        if (_busy) return;
+        using var picker = new FolderBrowserDialog { Description = "Selecciona la carpeta del respaldo (debe contener MANIFIESTO_BACKUP.csv)." };
+        if (picker.ShowDialog(this) != DialogResult.OK) return;
+
+        string backupRoot = picker.SelectedPath;
+        string manifestPath = Path.Combine(backupRoot, "MANIFIESTO_BACKUP.csv");
+        if (!File.Exists(manifestPath))
+        {
+            MessageBox.Show(this, "No se encontró MANIFIESTO_BACKUP.csv. Selecciona la carpeta principal del backup generado por ONKOS IT Toolkit.", "Respaldo no válido", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        List<string[]> rows;
+        try { rows = ParseCsv(File.ReadAllText(manifestPath, Encoding.UTF8)); }
+        catch (Exception ex) { MessageBox.Show(this, "No se pudo leer el manifiesto: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+
+        var files = rows.Skip(1)
+            .Where(r => r.Length >= 4 && string.Equals(r[0], "COPIADO", StringComparison.OrdinalIgnoreCase))
+            .Select(r => (BackupFile: r[3], OriginalFile: r[2]))
+            .Where(x => !string.IsNullOrWhiteSpace(x.BackupFile) && !string.IsNullOrWhiteSpace(x.OriginalFile))
+            .ToList();
+
+        if (files.Count == 0)
+        {
+            MessageBox.Show(this, "El manifiesto no contiene archivos respaldados correctamente.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var overwriteChoice = MessageBox.Show(this,
+            $"Se encontraron {files.Count:N0} archivos respaldados.\n\n¿Deseas reemplazar archivos que ya existan en las rutas originales?\n\nSí = reemplazar\nNo = conservar los existentes y omitirlos",
+            "Confirmar restauración", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+        if (overwriteChoice == DialogResult.Cancel) return;
+        bool overwrite = overwriteChoice == DialogResult.Yes;
+
+        _busy = true; _run.Enabled = false; _log.Clear();
+        SetProgress(0, files.Count, "Preparando restauración…", "Leyendo manifiesto");
+        int restored = 0, skipped = 0, errors = 0;
+        var report = new List<string> { "INFORME DE RESTAURACIÓN ONKOS", $"Fecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss}", $"Backup: {backupRoot}", "" };
+        try
+        {
+            await Task.Run(() =>
+            {
+                for (int i = 0; i < files.Count; i++)
+                {
+                    var item = files[i];
+                    string source = item.BackupFile, target = item.OriginalFile;
+                    try
+                    {
+                        if (!File.Exists(source)) throw new FileNotFoundException("No se encuentra el archivo dentro del respaldo.", source);
+                        if (File.Exists(target) && !overwrite)
+                        {
+                            skipped++;
+                            report.Add($"OMITIDO (ya existe): {target}");
+                        }
+                        else
+                        {
+                            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                            File.Copy(source, target, overwrite);
+                            restored++;
+                            report.Add($"RESTAURADO: {target}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        errors++;
+                        report.Add($"ERROR: {target} | {ex.Message}");
+                    }
+                    int current = i + 1;
+                    if (current % 10 == 0 || current == files.Count)
+                    {
+                        int percentage = (int)(current * 100.0 / files.Count);
+                        if (IsHandleCreated) BeginInvoke(new Action(() => SetProgress(current, files.Count, $"Restaurando… {current:N0} de {files.Count:N0} ({percentage}%)", Path.GetFileName(target))));
+                    }
+                }
+            });
+
+            string reportPath = Path.Combine(backupRoot, "INFORME_RESTAURACION.txt");
+            File.WriteAllText(reportPath, string.Join(Environment.NewLine, report), Encoding.UTF8);
+            SetProgress(files.Count, files.Count, errors == 0 ? "¡Restauración finalizada!" : "Restauración finalizada con errores.", "Terminado");
+            WriteLog($"Restauración finalizada. Restaurados: {restored}; omitidos: {skipped}; errores: {errors}.");
+            MessageBox.Show(this, $"Restauración finalizada.\n\nRestaurados: {restored:N0}\nOmitidos (existentes): {skipped:N0}\nErrores: {errors:N0}\n\nInforme: {reportPath}",
+                "ONKOS Restauración", MessageBoxButtons.OK, errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        }
+        catch (Exception ex)
+        {
+            WriteLog("ERROR RESTAURACIÓN: " + ex.Message);
+            MessageBox.Show(this, ex.Message, "Error restaurando", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally { _busy = false; _run.Enabled = true; }
+    }
+
+    private static List<string[]> ParseCsv(string csv)
+    {
+        var result = new List<string[]>();
+        var row = new List<string>();
+        var field = new StringBuilder();
+        bool quoted = false;
+        for (int i = 0; i < csv.Length; i++)
+        {
+            char c = csv[i];
+            if (quoted)
+            {
+                if (c == '"' && i + 1 < csv.Length && csv[i + 1] == '"') { field.Append('"'); i++; }
+                else if (c == '"') quoted = false;
+                else field.Append(c);
+            }
+            else
+            {
+                if (c == '"') quoted = true;
+                else if (c == ',') { row.Add(field.ToString()); field.Clear(); }
+                else if (c == '\\r') { }
+                else if (c == '\\n') { row.Add(field.ToString()); field.Clear(); if (row.Any(v => v.Length > 0)) result.Add(row.ToArray()); row.Clear(); }
+                else field.Append(c);
+            }
+        }
+        if (field.Length > 0 || row.Count > 0) { row.Add(field.ToString()); result.Add(row.ToArray()); }
+        return result;
+    }
+
     private void CollectFilesSafe(string rootPath, string currentPath, string folderName, List<(string Source, string Relative, string FolderName)> files, List<(string Source, string Relative, string FolderName)> directories, List<string> errorDetails)
     {
         // Registrar esta carpeta antes de recorrer su contenido. Esto permite conservar
