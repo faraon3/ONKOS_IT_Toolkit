@@ -260,22 +260,25 @@ internal sealed class BackupForm : UserControl
             Directory.CreateDirectory(root);
             var fileList = new List<(string Source, string Relative, string FolderName)>();
             var directoryList = new List<(string Source, string Relative, string FolderName)>();
+            var errorDetails = new List<string>();
             WriteLog($"Carpetas seleccionadas: {selected.Count}");
             foreach (var entry in selected)
             {
                 WriteLog($"Revisando: {entry.Label} | {entry.Path}");
                 if (!Directory.Exists(entry.Path))
                 {
-                    WriteLog($"ERROR: La carpeta no existe o no está disponible: {entry.Path}");
+                    string detail = $"ORIGEN: {entry.Path} | DESTINO: No aplica | MOTIVO: La carpeta no existe o no está disponible.";
+                    errorDetails.Add(detail);
+                    WriteLog("ERROR: " + detail);
                     continue;
                 }
-                CollectFilesSafe(entry.Path, entry.Path, SafeName(entry.Label), fileList, directoryList);
+                CollectFilesSafe(entry.Path, entry.Path, SafeName(entry.Label), fileList, directoryList, errorDetails);
             }
             WriteLog($"Archivos encontrados para copiar: {fileList.Count}");
             string filesRoot = Path.Combine(root, "Archivos");
             Directory.CreateDirectory(filesRoot);
 
-            int errors = 0;
+            int errors = errorDetails.Count;
 
             // Crear primero toda la estructura de carpetas, incluso las vacías.
             foreach (var dir in directoryList)
@@ -288,7 +291,7 @@ internal sealed class BackupForm : UserControl
                 catch (Exception ex)
                 {
                     errors++;
-                    ReportError(dir.Source, "No se pudo crear la carpeta en el respaldo: " + ex.Message);
+                    ReportError(errorDetails, dir.Source, targetDir, "No se pudo crear la carpeta en el respaldo: " + ex.Message);
                 }
             }
 
@@ -299,8 +302,10 @@ internal sealed class BackupForm : UserControl
             {
                 foreach (var item in fileList)
                 {
-                    try { string targetDir = Path.Combine(root, "Archivos", item.FolderName, Path.GetDirectoryName(item.Relative) ?? ""); Directory.CreateDirectory(targetDir); File.Copy(item.Source, Path.Combine(targetDir, Path.GetFileName(item.Source)), true); copied++; }
-                    catch (Exception ex) { errors++; ReportError(item.Source, ex.Message); }
+                    string targetDir = Path.Combine(root, "Archivos", item.FolderName, Path.GetDirectoryName(item.Relative) ?? "");
+                    string targetFile = Path.Combine(targetDir, Path.GetFileName(item.Source));
+                    try { Directory.CreateDirectory(targetDir); File.Copy(item.Source, targetFile, true); copied++; }
+                    catch (Exception ex) { errors++; ReportError(errorDetails, item.Source, targetFile, ex.Message); }
                     done++; progress.Report((done, total, "", Path.GetFileName(item.Source)));
                 }
             });
@@ -314,6 +319,19 @@ internal sealed class BackupForm : UserControl
                 try { string driverDir = Path.Combine(root, "Drivers"); Directory.CreateDirectory(driverDir); var result = await RunProcessAsync("pnputil", $"/export-driver * \"{driverDir}\"", false); File.WriteAllText(Path.Combine(driverDir, "EXPORT_LOG.txt"), result); done++; progress.Report((done, total, "Exportación de drivers ejecutada.", "Controladores instalados")); }
                 catch (Exception ex) { errors++; WriteLog("ERROR exportando drivers: " + ex.Message); }
             }
+            string errorReportPath = Path.Combine(root, "INFORME_ERRORES_BACKUP.txt");
+            File.WriteAllText(errorReportPath,
+                "INFORME DE ERRORES - ONKOS IT TOOLKIT BACKUP" + Environment.NewLine +
+                $"Fecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss}{Environment.NewLine}" +
+                $"Equipo: {Environment.MachineName}{Environment.NewLine}" +
+                $"Usuario: {Environment.UserName}{Environment.NewLine}" +
+                $"Errores detectados: {errorDetails.Count}{Environment.NewLine}{Environment.NewLine}" +
+                (errorDetails.Count == 0 ? "Backup sin errores detectados." : 
+                    "Revisar o copiar manualmente los siguientes elementos:" + Environment.NewLine +
+                    "ORIGEN | DESTINO | MOTIVO" + Environment.NewLine +
+                    new string('-', 90) + Environment.NewLine +
+                    string.Join(Environment.NewLine + Environment.NewLine, errorDetails)));
+
             File.WriteAllText(Path.Combine(root, "BACKUP_INFO.txt"),
                 $"ONKOS IT Toolkit backup{Environment.NewLine}" +
                 $"Equipo: {Environment.MachineName}{Environment.NewLine}" +
@@ -321,18 +339,19 @@ internal sealed class BackupForm : UserControl
                 $"Sistema: {Environment.OSVersion}{Environment.NewLine}" +
                 $"Fecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss}{Environment.NewLine}" +
                 $"Archivos copiados: {copied}{Environment.NewLine}" +
-                $"Errores: {errors}{Environment.NewLine}");
+                $"Errores: {errors}{Environment.NewLine}" +
+                $"Informe detallado: INFORME_ERRORES_BACKUP.txt{Environment.NewLine}");
 
             SetProgress(total, total, errors == 0 ? "¡Respaldo completado!" : "Respaldo completado con algunos problemas.", "Terminado");
             WriteLog($"Finalizado. Copiados: {copied}. Errores: {errors}.{Environment.NewLine}Ruta: {root}");
             MessageBox.Show(this,
-                $"Backup finalizado.{Environment.NewLine}Copiados: {copied}{Environment.NewLine}Errores: {errors}{Environment.NewLine}{Environment.NewLine}{root}",
+                $"Backup finalizado.{Environment.NewLine}Copiados: {copied}{Environment.NewLine}Errores: {errors}{Environment.NewLine}{Environment.NewLine}{root}{Environment.NewLine}{Environment.NewLine}Informe: INFORME_ERRORES_BACKUP.txt",
                 "ONKOS Backup", MessageBoxButtons.OK, errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         catch (Exception ex) { _status.Text = "El backup falló."; WriteLog("ERROR GENERAL: " + ex.Message); MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally { _busy = false; _run.Enabled = true; }
     }
-    private void CollectFilesSafe(string rootPath, string currentPath, string folderName, List<(string Source, string Relative, string FolderName)> files, List<(string Source, string Relative, string FolderName)> directories)
+    private void CollectFilesSafe(string rootPath, string currentPath, string folderName, List<(string Source, string Relative, string FolderName)> files, List<(string Source, string Relative, string FolderName)> directories, List<string> errorDetails)
     {
         // Registrar esta carpeta antes de recorrer su contenido. Esto permite conservar
         // tanto las carpetas vacías como las carpetas que contienen otras carpetas vacías.
@@ -343,7 +362,9 @@ internal sealed class BackupForm : UserControl
         }
         catch (Exception ex)
         {
-            WriteLog($"Aviso registrando carpeta {currentPath}: {ex.Message}");
+            string detail = $"ORIGEN: {currentPath} | DESTINO: No se pudo determinar | MOTIVO: Error registrando carpeta: {ex.Message}";
+            errorDetails.Add(detail);
+            WriteLog("ERROR: " + detail);
         }
 
         try
@@ -351,10 +372,20 @@ internal sealed class BackupForm : UserControl
             foreach (string file in Directory.EnumerateFiles(currentPath))
             {
                 try { files.Add((file, Path.GetRelativePath(rootPath, file), folderName)); }
-                catch (Exception ex) { WriteLog($"Aviso leyendo archivo {file}: {ex.Message}"); }
+                catch (Exception ex)
+                {
+                    string detail = $"ORIGEN: {file} | DESTINO: No se pudo determinar | MOTIVO: Error registrando archivo: {ex.Message}";
+                    errorDetails.Add(detail);
+                    WriteLog("ERROR: " + detail);
+                }
             }
         }
-        catch (Exception ex) { WriteLog($"Aviso: No se pudieron listar archivos en {currentPath}: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            string detail = $"ORIGEN: {currentPath} | DESTINO: Archivos/{folderName}/ | MOTIVO: No se pudieron listar archivos: {ex.Message}";
+            errorDetails.Add(detail);
+            WriteLog("ERROR: " + detail);
+        }
 
         try
         {
@@ -368,17 +399,32 @@ internal sealed class BackupForm : UserControl
                         WriteLog($"Omitida carpeta de enlace (evita ciclos): {directory}");
                         continue;
                     }
-                    CollectFilesSafe(rootPath, directory, folderName, files, directories);
+                    CollectFilesSafe(rootPath, directory, folderName, files, directories, errorDetails);
                 }
-                catch (Exception ex) { WriteLog($"Aviso explorando subcarpeta {directory}: {ex.Message}"); }
+                catch (Exception ex)
+                {
+                    string detail = $"ORIGEN: {directory} | DESTINO: Archivos/{folderName}/ | MOTIVO: No se pudo explorar subcarpeta: {ex.Message}";
+                    errorDetails.Add(detail);
+                    WriteLog("ERROR: " + detail);
+                }
             }
         }
-        catch (Exception ex) { WriteLog($"Aviso: No se pudieron listar subcarpetas en {currentPath}: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            string detail = $"ORIGEN: {currentPath} | DESTINO: Archivos/{folderName}/ | MOTIVO: No se pudieron listar subcarpetas: {ex.Message}";
+            errorDetails.Add(detail);
+            WriteLog("ERROR: " + detail);
+        }
     }
 
     private void SetProgress(int done, int total, string status, string current)
     { int pct = total <= 0 ? 0 : Math.Clamp((int)(100.0 * done / total), 0, 100); _bar.Value = pct; _status.Text = status; _currentFile.Text = "Ahora: " + current; }
-    private void ReportError(string path, string error) => WriteLog($"ERROR: {path} | {error}");
+    private void ReportError(List<string> errorDetails, string source, string destination, string error)
+    {
+        string detail = $"ORIGEN: {source} | DESTINO: {destination} | MOTIVO: {error}";
+        errorDetails.Add(detail);
+        WriteLog("ERROR: " + detail);
+    }
     private void WriteLog(string message) { if (InvokeRequired) { BeginInvoke(new Action(() => WriteLog(message))); return; } _log.AppendText(message + Environment.NewLine); }
     protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); try { SetWindowTheme(Handle, "DarkMode_Explorer", null); SetWindowTheme(_sources.Handle, "DarkMode_Explorer", null); } catch { } }
     [DllImport("uxtheme.dll", CharSet=CharSet.Unicode)] private static extern int SetWindowTheme(IntPtr hwnd,string? appName,string? idList);
