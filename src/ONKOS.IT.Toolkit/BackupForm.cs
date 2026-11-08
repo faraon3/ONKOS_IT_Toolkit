@@ -341,10 +341,8 @@ internal sealed class BackupForm : UserControl
                         var sourceInfo = new FileInfo(item.Source);
                         sourceBytes = sourceInfo.Length;
 
-                        var sourceAttributes = File.GetAttributes(item.Source);
-                        if ((sourceAttributes & FileAttributes.Offline) != 0)
-                            throw new IOException("Archivo de OneDrive disponible solo en línea. Inicia OneDrive y selecciona «Mantener siempre en este dispositivo»; espera a que termine la descarga y vuelve a respaldar.");
-
+                        // Si el archivo es un placeholder de OneDrive (Offline), no bloquearlo aquí.
+                        // File.Copy permite que el proveedor de nube intente hidratarlo durante la copia.
                         Directory.CreateDirectory(targetDir);
                         File.Copy(item.Source, targetFile, true);
                         copied++;
