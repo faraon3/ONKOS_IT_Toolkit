@@ -365,8 +365,51 @@ internal sealed class BackupForm : UserControl
             });
             if (_ipv4.Checked)
             {
-                try { string networkFile = Path.Combine(root, "Red", "IPv4_netsh_dump.txt"); Directory.CreateDirectory(Path.GetDirectoryName(networkFile)!); await RunProcessAsync("cmd.exe", $"/c netsh interface dump > \"{networkFile}\"", true); File.WriteAllText(Path.Combine(root, "Red", "LEEME.txt"), "Backup netsh. Antes de restaurar, verificar adaptador, IP y permisos administrativos."); done++; progress.Report((done, total, "IPv4 exportado (netsh).", "Configuración IPv4")); }
-                catch (Exception ex) { errors++; ReportError(errorDetails, "Configuración IPv4", Path.Combine(root, "Red", "IPv4_netsh_dump.txt"), ex.Message); }
+                string networkFile = Path.Combine(root, "Red", "IPv4_netsh_dump.txt");
+                try
+                {
+                    progress.Report((done, total, "Exportando configuración de red…", "Configuración IPv4"));
+                    Directory.CreateDirectory(Path.GetDirectoryName(networkFile)!);
+
+                    // Ejecutar netsh directamente (sin cmd.exe ni redirección de shell).
+                    // La redirección del shell podía dejar el proceso detenido al final del backup.
+                    using var netsh = new Process();
+                    netsh.StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "netsh.exe",
+                        Arguments = "interface dump",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    };
+                    netsh.Start();
+                    Task<string> stdoutTask = netsh.StandardOutput.ReadToEndAsync();
+                    Task<string> stderrTask = netsh.StandardError.ReadToEndAsync();
+                    if (!netsh.WaitForExit(30000))
+                    {
+                        try { netsh.Kill(true); } catch { }
+                        throw new TimeoutException("netsh tardó más de 30 segundos. Se omitió la exportación de red para continuar.");
+                    }
+                    string stdout = await stdoutTask;
+                    string stderr = await stderrTask;
+                    File.WriteAllText(networkFile, stdout, Encoding.UTF8);
+                    File.WriteAllText(Path.Combine(root, "Red", "LEEME.txt"),
+                        "Configuración exportada con netsh. No restaurar directamente sin revisar adaptador, IP y permisos administrativos." +
+                        Environment.NewLine + (string.IsNullOrWhiteSpace(stderr) ? "" : "Salida de error: " + stderr));
+                    if (netsh.ExitCode != 0) throw new IOException($"netsh finalizó con código {netsh.ExitCode}. {stderr}");
+                    WriteLog("Configuración IPv4 exportada.");
+                }
+                catch (Exception ex)
+                {
+                    errors++;
+                    ReportError(errorDetails, "Configuración IPv4", networkFile, ex.Message);
+                }
+                finally
+                {
+                    done++;
+                    progress.Report((done, total, "Configuración de red procesada.", "Configuración IPv4"));
+                }
             }
             if (_drivers.Checked)
             {
