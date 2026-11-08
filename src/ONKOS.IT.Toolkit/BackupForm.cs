@@ -27,6 +27,7 @@ internal sealed class BackupForm : UserControl
     private readonly Label _currentFile = new();
     private readonly TextBox _log = new();
     private readonly Button _run = new();
+    private readonly Button _restore = new();
     private readonly Button _addFolder = new();
     private bool _busy;
 
@@ -46,8 +47,6 @@ internal sealed class BackupForm : UserControl
         var header = new Panel { Dock = DockStyle.Top, Height = 88, BackColor = Purple };
         var back = new Button { Text = "‹  VOLVER AL INICIO", Location = new Point(22, 5), Size = new Size(170, 25) };
         StyleButton(back, true); back.Click += (_, _) => BackRequested?.Invoke(); header.Controls.Add(back);
-        var restore = new Button { Text = "RESTAURAR RESPALDO", Location = new Point(205, 5), Size = new Size(190, 25) };
-        StyleButton(restore, true); restore.Click += async (_, _) => await RestoreBackupAsync(); header.Controls.Add(restore);
         header.Controls.Add(new Label { Text = "BACKUP  /  MIGRACIÓN", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 30) });
         header.Controls.Add(new Label { Text = "Asistente de respaldo seguro · Clínica ONKOS", ForeColor = Color.FromArgb(235, 225, 250), AutoSize = true, Location = new Point(25, 66) });
 
@@ -132,10 +131,25 @@ internal sealed class BackupForm : UserControl
         };
         logGroup.Controls.Add(_log); logGroup.Controls.Add(logToggle);
 
-        _run.Text = "INICIAR COPIA DE SEGURIDAD"; _run.Dock = DockStyle.Bottom; _run.Height = 50; StyleButton(_run, false);
-        _run.Font = new Font("Segoe UI", 11F, FontStyle.Bold); _run.Click += async (_, _) => await StartBackupAsync();
+        // Barra inferior con dos acciones del mismo tamaño y alineadas.
+        var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = Bg, Padding = new Padding(3, 2, 3, 2) };
+        _run.Text = "INICIAR COPIA DE SEGURIDAD"; StyleButton(_run, false);
+        _run.Font = new Font("Segoe UI", 10.5F, FontStyle.Bold);
+        _restore.Text = "RESTAURAR BACKUP"; StyleButton(_restore, true);
+        _restore.Font = new Font("Segoe UI", 10.5F, FontStyle.Bold);
+        void LayoutActions()
+        {
+            int half = Math.Max(1, (actionBar.ClientSize.Width - 6) / 2);
+            _run.SetBounds(0, 0, half, actionBar.ClientSize.Height);
+            _restore.SetBounds(half + 3, 0, Math.Max(1, actionBar.ClientSize.Width - half - 3), actionBar.ClientSize.Height);
+        }
+        actionBar.Resize += (_, _) => LayoutActions();
+        LayoutActions();
+        _run.Click += async (_, _) => await StartBackupAsync();
+        _restore.Click += async (_, _) => await RestoreBackupAsync();
+        actionBar.Controls.Add(_run); actionBar.Controls.Add(_restore);
         content.Controls.Add(logGroup); content.Controls.Add(progressGroup); content.Controls.Add(destinationGroup); content.Controls.Add(optionsGroup); content.Controls.Add(sourcesGroup);
-        Controls.Add(content); Controls.Add(_run); Controls.Add(header);
+        Controls.Add(content); Controls.Add(actionBar); Controls.Add(header);
     }
 
     private GroupBox MakeGroup(string title) => new() { Text = title, ForeColor = Color.FromArgb(210, 197, 235), BackColor = Surface, Padding = new Padding(10), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), Margin = new Padding(0, 0, 0, 10), FlatStyle = FlatStyle.Flat };
