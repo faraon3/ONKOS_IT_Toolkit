@@ -82,18 +82,27 @@ internal sealed class BackupForm : UserControl
         destinationRow.Controls.Add(_drivePicker); destinationRow.Controls.Add(choose); destinationRow.Controls.Add(_destination);
         destinationGroup.Controls.Add(destinationRow); RefreshDrives();
 
-        var optionsGroup = MakeGroup("02  ·  Opciones adicionales");
-        optionsGroup.Dock = DockStyle.Top; optionsGroup.Height = 142;
-        var options = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10, 6, 8, 6), BackColor = Surface };
+        // Opciones avanzadas plegables para mantener una pantalla simple.
+        var optionsGroup = new Panel { Dock = DockStyle.Top, Height = 42, BackColor = Surface, Margin = new Padding(0, 0, 0, 8) };
+        var optionsToggle = new Button { Text = "⚙  Opciones adicionales  ▸", Location = new Point(8, 5), Size = new Size(280, 32), TextAlign = ContentAlignment.MiddleLeft };
+        StyleButton(optionsToggle, true);
+        var options = new Panel { Location = new Point(8, 42), Height = 94, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, BackColor = Surface };
         StyleCheck(_ipv4); StyleCheck(_drivers);
         _ipv4.SetBounds(8, 4, 270, 32);
         _drivers.SetBounds(290, 4, 340, 32);
         var nameLabel = new Label { Text = "Nombre de la copia (opcional)", ForeColor = TextMain, Font = new Font("Segoe UI", 9F, FontStyle.Bold), AutoSize = true, Location = new Point(8, 43) };
-        _backupLabel.SetBounds(8, 65, 850, 36); _backupLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        _backupLabel.SetBounds(8, 65, 850, 30); _backupLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         _backupLabel.PlaceholderText = "Ejemplo: Recepcion_Principal";
         StyleTextBox(_backupLabel);
         options.Controls.Add(_ipv4); options.Controls.Add(_drivers); options.Controls.Add(nameLabel); options.Controls.Add(_backupLabel);
-        optionsGroup.Controls.Add(options);
+        options.Visible = false;
+        optionsToggle.Click += (_, _) =>
+        {
+            options.Visible = !options.Visible;
+            optionsGroup.Height = options.Visible ? 145 : 42;
+            optionsToggle.Text = options.Visible ? "⚙  Opciones adicionales  ▾" : "⚙  Opciones adicionales  ▸";
+        };
+        optionsGroup.Controls.Add(options); optionsGroup.Controls.Add(optionsToggle);
 
         var progressGroup = MakeGroup("04  ·  Progreso de la copia");
         progressGroup.Dock = DockStyle.Top; progressGroup.Height = 112;
@@ -104,10 +113,21 @@ internal sealed class BackupForm : UserControl
         _currentFile.Dock = DockStyle.Top; _currentFile.Height = 25; _currentFile.Text = "Ahora: —"; _currentFile.ForeColor = TextMuted; _currentFile.AutoEllipsis = true;
         progressGroup.Controls.Add(_currentFile); progressGroup.Controls.Add(_status); progressGroup.Controls.Add(progressPanel);
 
-        var logGroup = MakeGroup("Detalles (opcional)"); logGroup.Dock = DockStyle.Top; logGroup.Height = 115; logGroup.MinimumSize = new Size(0, 75);
-        _log.Dock = DockStyle.Fill; _log.Multiline = true; _log.ReadOnly = true; _log.ScrollBars = ScrollBars.Vertical;
+        // Detalles técnicos plegables, ocultos por defecto.
+        var logGroup = new Panel { Dock = DockStyle.Top, Height = 42, BackColor = Surface, Margin = new Padding(0, 0, 0, 8) };
+        var logToggle = new Button { Text = "☰  Ver detalles técnicos  ▸", Location = new Point(8, 5), Size = new Size(280, 32), TextAlign = ContentAlignment.MiddleLeft };
+        StyleButton(logToggle, true);
+        _log.SetBounds(8, 42, 850, 75); _log.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        _log.Multiline = true; _log.ReadOnly = true; _log.ScrollBars = ScrollBars.Vertical;
         _log.Font = new Font("Consolas", 9F); _log.BackColor = Color.FromArgb(13, 12, 18); _log.ForeColor = Color.FromArgb(203, 195, 218); _log.BorderStyle = BorderStyle.None;
-        logGroup.Controls.Add(_log);
+        _log.Visible = false;
+        logToggle.Click += (_, _) =>
+        {
+            _log.Visible = !_log.Visible;
+            logGroup.Height = _log.Visible ? 125 : 42;
+            logToggle.Text = _log.Visible ? "☰  Ocultar detalles técnicos  ▾" : "☰  Ver detalles técnicos  ▸";
+        };
+        logGroup.Controls.Add(_log); logGroup.Controls.Add(logToggle);
 
         _run.Text = "INICIAR COPIA DE SEGURIDAD"; _run.Dock = DockStyle.Bottom; _run.Height = 50; StyleButton(_run, false);
         _run.Font = new Font("Segoe UI", 11F, FontStyle.Bold); _run.Click += async (_, _) => await StartBackupAsync();
@@ -127,12 +147,12 @@ internal sealed class BackupForm : UserControl
         AddKnown("Documentos", Environment.SpecialFolder.MyDocuments, true, "Documentos");
         AddKnown("Descargas", null, true, "Descargas", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"));
         AddKnown("Imágenes", Environment.SpecialFolder.MyPictures, true, "imagenes");
-        AddKnown("Música", Environment.SpecialFolder.MyMusic, true, "musica");
-        AddKnown("Videos", Environment.SpecialFolder.MyVideos, true, "videos");
-        AddKnown("Favoritos", Environment.SpecialFolder.Favorites, true, "Favoritos");
-        AddKnown("Contactos", null, true, "Contactos", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Contacts"));
-        AddKnown("Búsquedas", null, true, "Busquedas", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Searches"));
-        AddKnown("Juegos guardados", null, true, "Juegos Guardados", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Saved Games"));
+        AddKnown("Música", Environment.SpecialFolder.MyMusic, false, "musica");
+        AddKnown("Videos", Environment.SpecialFolder.MyVideos, false, "videos");
+        AddKnown("Favoritos", Environment.SpecialFolder.Favorites, false, "Favoritos");
+        AddKnown("Contactos", null, false, "Contactos", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Contacts"));
+        AddKnown("Búsquedas", null, false, "Busquedas", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Searches"));
+        AddKnown("Juegos guardados", null, false, "Juegos Guardados", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Saved Games"));
         AddKnown("OneDrive", null, false, "One Drive", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "OneDrive"));
         AddKnown("Vínculos", null, false, "Vinculos", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Links"));
         AddKnown("Objetos 3D", null, false, "Objeto-3d", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "3D Objects"));
