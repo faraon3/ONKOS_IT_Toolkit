@@ -6,6 +6,7 @@ using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -316,7 +317,8 @@ internal sealed class BackupForm : UserControl
             }
 
             int total = Math.Max(fileList.Count + (_ipv4.Checked ? 1 : 0) + (_drivers.Checked ? 1 : 0), 1);
-            int done = 0, copied = 0;
+            int done = 0, copied = 0, verified = 0;
+            var manifestRows = new List<string> { CsvRow("Estado", "Verificación", "Origen", "Destino", "Bytes", "Fecha", "Detalle") };
             IProgress<(int done, int total, string message, string current)> progress = new Progress<(int done, int total, string message, string current)>(p => { SetProgress(p.done, p.total, $"Copiando… {p.done} de {p.total}", p.current); if (!string.IsNullOrWhiteSpace(p.message)) WriteLog(p.message); });
             await Task.Run(() =>
             {
@@ -324,21 +326,44 @@ internal sealed class BackupForm : UserControl
                 {
                     string targetDir = Path.Combine(root, "Archivos", item.FolderName, Path.GetDirectoryName(item.Relative) ?? "");
                     string targetFile = Path.Combine(targetDir, Path.GetFileName(item.Source));
-                    try { Directory.CreateDirectory(targetDir); File.Copy(item.Source, targetFile, true); copied++; }
-                    catch (Exception ex) { errors++; ReportError(errorDetails, item.Source, targetFile, ex.Message); }
+                    long sourceBytes = 0;
+                    string copyStatus = "ERROR", verifyStatus = "No verificado", detail = "";
+                    try
+                    {
+                        var sourceInfo = new FileInfo(item.Source);
+                        sourceBytes = sourceInfo.Length;
+                        Directory.CreateDirectory(targetDir);
+                        File.Copy(item.Source, targetFile, true);
+                        copied++;
+                        var targetInfo = new FileInfo(targetFile);
+                        if (!targetInfo.Exists) throw new IOException("La copia no aparece en el destino.");
+                        if (targetInfo.Length != sourceInfo.Length)
+                            throw new IOException($"Tamaño diferente: origen {sourceInfo.Length} bytes, copia {targetInfo.Length} bytes.");
+                        copyStatus = "COPIADO";
+                        verifyStatus = "Verificado (existencia y tamaño)";
+                        verified++;
+                    }
+                    catch (Exception ex)
+                    {
+                        errors++; detail = ex.Message; copyStatus = "ERROR"; verifyStatus = "Falló";
+                        ReportError(errorDetails, item.Source, targetFile, ex.Message);
+                    }
+                    manifestRows.Add(CsvRow(copyStatus, verifyStatus, item.Source, targetFile, sourceBytes.ToString(), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), detail));
                     done++; progress.Report((done, total, "", Path.GetFileName(item.Source)));
                 }
             });
             if (_ipv4.Checked)
             {
                 try { string networkFile = Path.Combine(root, "Red", "IPv4_netsh_dump.txt"); Directory.CreateDirectory(Path.GetDirectoryName(networkFile)!); await RunProcessAsync("cmd.exe", $"/c netsh interface dump > \"{networkFile}\"", true); File.WriteAllText(Path.Combine(root, "Red", "LEEME.txt"), "Backup netsh. Antes de restaurar, verificar adaptador, IP y permisos administrativos."); done++; progress.Report((done, total, "IPv4 exportado (netsh).", "Configuración IPv4")); }
-                catch (Exception ex) { errors++; WriteLog("ERROR respaldando IPv4: " + ex.Message); }
+                catch (Exception ex) { errors++; ReportError(errorDetails, "Configuración IPv4", Path.Combine(root, "Red", "IPv4_netsh_dump.txt"), ex.Message); }
             }
             if (_drivers.Checked)
             {
                 try { string driverDir = Path.Combine(root, "Drivers"); Directory.CreateDirectory(driverDir); var result = await RunProcessAsync("pnputil", $"/export-driver * \"{driverDir}\"", false); File.WriteAllText(Path.Combine(driverDir, "EXPORT_LOG.txt"), result); done++; progress.Report((done, total, "Exportación de drivers ejecutada.", "Controladores instalados")); }
-                catch (Exception ex) { errors++; WriteLog("ERROR exportando drivers: " + ex.Message); }
+                catch (Exception ex) { errors++; ReportError(errorDetails, "Exportación de drivers", Path.Combine(root, "Drivers"), ex.Message); }
             }
+            File.WriteAllText(Path.Combine(root, "MANIFIESTO_BACKUP.csv"), string.Join(Environment.NewLine, manifestRows), Encoding.UTF8);
+
             string errorReportPath = Path.Combine(root, "INFORME_ERRORES_BACKUP.txt");
             File.WriteAllText(errorReportPath,
                 "INFORME DE ERRORES - ONKOS IT TOOLKIT BACKUP" + Environment.NewLine +
@@ -359,13 +384,15 @@ internal sealed class BackupForm : UserControl
                 $"Sistema: {Environment.OSVersion}{Environment.NewLine}" +
                 $"Fecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss}{Environment.NewLine}" +
                 $"Archivos copiados: {copied}{Environment.NewLine}" +
+                $"Archivos verificados: {verified}{Environment.NewLine}" +
                 $"Errores: {errors}{Environment.NewLine}" +
+                $"Manifiesto: MANIFIESTO_BACKUP.csv{Environment.NewLine}" +
                 $"Informe detallado: INFORME_ERRORES_BACKUP.txt{Environment.NewLine}");
 
             SetProgress(total, total, errors == 0 ? "¡Respaldo completado!" : "Respaldo completado con algunos problemas.", "Terminado");
             WriteLog($"Finalizado. Copiados: {copied}. Errores: {errors}.{Environment.NewLine}Ruta: {root}");
             MessageBox.Show(this,
-                $"Backup finalizado.{Environment.NewLine}Copiados: {copied}{Environment.NewLine}Errores: {errors}{Environment.NewLine}{Environment.NewLine}{root}{Environment.NewLine}{Environment.NewLine}Informe: INFORME_ERRORES_BACKUP.txt",
+                $"Respaldo terminado{Environment.NewLine}{Environment.NewLine}Copiados: {copied}{Environment.NewLine}Verificados: {verified}{Environment.NewLine}Pendientes: {errors}{Environment.NewLine}{Environment.NewLine}{(errors == 0 ? "Resultado: Correcto" : "Resultado: Revisar elementos")}{Environment.NewLine}{root}{Environment.NewLine}{Environment.NewLine}Informe: INFORME_ERRORES_BACKUP.txt",
                 "ONKOS Backup", MessageBoxButtons.OK, errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         catch (Exception ex) { _status.Text = "El backup falló."; WriteLog("ERROR GENERAL: " + ex.Message); MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
@@ -436,6 +463,8 @@ internal sealed class BackupForm : UserControl
             WriteLog("ERROR: " + detail);
         }
     }
+
+    private static string CsvRow(params string[] fields) => string.Join(",", fields.Select(value => "\"" + (value ?? string.Empty).Replace("\"", "\"\"") + "\""));
 
     private void SetProgress(int done, int total, string status, string current)
     { int pct = total <= 0 ? 0 : Math.Clamp((int)(100.0 * done / total), 0, 100); _bar.Value = pct; _status.Text = status; _currentFile.Text = "Ahora: " + current; }
