@@ -566,8 +566,8 @@ internal sealed class BackupForm : UserControl
             {
                 if (c == '"') quoted = true;
                 else if (c == ',') { row.Add(field.ToString()); field.Clear(); }
-                else if (c == '\\r') { }
-                else if (c == '\\n') { row.Add(field.ToString()); field.Clear(); if (row.Any(v => v.Length > 0)) result.Add(row.ToArray()); row.Clear(); }
+                else if (c == '\r') { }
+                else if (c == '\n') { row.Add(field.ToString()); field.Clear(); if (row.Any(v => v.Length > 0)) result.Add(row.ToArray()); row.Clear(); }
                 else field.Append(c);
             }
         }
