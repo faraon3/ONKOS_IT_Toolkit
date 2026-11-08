@@ -486,9 +486,21 @@ internal sealed class BackupForm : UserControl
         try { rows = ParseCsv(File.ReadAllText(manifestPath, Encoding.UTF8)); }
         catch (Exception ex) { MessageBox.Show(this, "No se pudo leer el manifiesto: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
 
+        // Las rutas "Destino" del manifiesto son absolutas y pueden apuntar a otra
+        // unidad (por ejemplo D:\\BK), aunque el usuario haya movido el backup a E:\\BK.
+        // Reconstruir siempre el origen del archivo respaldado desde la carpeta elegida.
         var files = rows.Skip(1)
             .Where(r => r.Length >= 4 && string.Equals(r[0], "COPIADO", StringComparison.OrdinalIgnoreCase))
-            .Select(r => (BackupFile: r[3], OriginalFile: r[2]))
+            .Select(r =>
+            {
+                string manifestDestination = r[3];
+                string marker = Path.DirectorySeparatorChar + "Archivos" + Path.DirectorySeparatorChar;
+                int idx = manifestDestination.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+                string backupFile = idx >= 0
+                    ? Path.Combine(backupRoot, "Archivos", manifestDestination.Substring(idx + marker.Length))
+                    : manifestDestination;
+                return (BackupFile: backupFile, OriginalFile: r[2]);
+            })
             .Where(x => !string.IsNullOrWhiteSpace(x.BackupFile) && !string.IsNullOrWhiteSpace(x.OriginalFile))
             .ToList();
 
