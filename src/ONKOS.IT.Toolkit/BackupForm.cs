@@ -266,6 +266,14 @@ internal sealed class BackupForm : UserControl
     {
         if (_busy) return;
         var selected = _sources.Items.Cast<ListViewItem>().Where(x => x.Checked).Select(x => (FolderEntry)x.Tag!).ToList();
+
+        // Si una carpeta seleccionada está dentro de otra carpeta seleccionada,
+        // respaldamos solo la carpeta superior para evitar copiar archivos duplicados.
+        selected = selected
+            .Where(entry => !selected.Any(other =>
+                !string.Equals(entry.Path, other.Path, StringComparison.OrdinalIgnoreCase) &&
+                IsPathInside(entry.Path, other.Path)))
+            .ToList();
         if (selected.Count == 0 && !_ipv4.Checked && !_drivers.Checked) { MessageBox.Show(this, "Selecciona carpetas o una opción adicional.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         string dest = _destination.Text.Trim();
         if (string.IsNullOrWhiteSpace(dest) || !Directory.Exists(dest)) { MessageBox.Show(this, "Selecciona primero el destino del respaldo.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
@@ -332,6 +340,11 @@ internal sealed class BackupForm : UserControl
                     {
                         var sourceInfo = new FileInfo(item.Source);
                         sourceBytes = sourceInfo.Length;
+
+                        var sourceAttributes = File.GetAttributes(item.Source);
+                        if ((sourceAttributes & FileAttributes.Offline) != 0)
+                            throw new IOException("Archivo de OneDrive disponible solo en línea. Inicia OneDrive y selecciona «Mantener siempre en este dispositivo»; espera a que termine la descarga y vuelve a respaldar.");
+
                         Directory.CreateDirectory(targetDir);
                         File.Copy(item.Source, targetFile, true);
                         copied++;
@@ -478,7 +491,19 @@ internal sealed class BackupForm : UserControl
     protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); try { SetWindowTheme(Handle, "DarkMode_Explorer", null); SetWindowTheme(_sources.Handle, "DarkMode_Explorer", null); } catch { } }
     [DllImport("uxtheme.dll", CharSet=CharSet.Unicode)] private static extern int SetWindowTheme(IntPtr hwnd,string? appName,string? idList);
 
-    private static bool IsSameOrChild(string parent, string child) { try { return Path.GetFullPath(parent).TrimEnd(Path.DirectorySeparatorChar).StartsWith(Path.GetFullPath(child).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase); } catch { return false; } }
+    private static bool IsSameOrChild(string parent, string child) => IsPathInside(parent, child);
+
+    private static bool IsPathInside(string candidate, string parent)
+    {
+        try
+        {
+            string normalizedParent = Path.GetFullPath(parent).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string normalizedCandidate = Path.GetFullPath(candidate).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return normalizedCandidate.Equals(normalizedParent, StringComparison.OrdinalIgnoreCase)
+                || normalizedCandidate.StartsWith(normalizedParent + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
     private static string SafeName(string s) => string.Join("_", s.Split(Path.GetInvalidFileNameChars()));
     private static async Task<string> RunProcessAsync(string exe, string args, bool shellRedirect)
     { var psi = new ProcessStartInfo(exe, args) { UseShellExecute = shellRedirect, CreateNoWindow = true, RedirectStandardOutput = !shellRedirect, RedirectStandardError = !shellRedirect }; using var p = Process.Start(psi) ?? throw new InvalidOperationException($"No se pudo iniciar {exe}"); if (shellRedirect) { await p.WaitForExitAsync(); return $"Proceso terminado con código {p.ExitCode}"; } string stdout = await p.StandardOutput.ReadToEndAsync(); string stderr = await p.StandardError.ReadToEndAsync(); await p.WaitForExitAsync(); return stdout + Environment.NewLine + stderr + Environment.NewLine + "ExitCode=" + p.ExitCode; }
