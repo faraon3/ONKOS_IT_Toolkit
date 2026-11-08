@@ -283,9 +283,9 @@ internal sealed class BackupForm : UserControl
             // Crear primero toda la estructura de carpetas, incluso las vacías.
             foreach (var dir in directoryList)
             {
+                string targetDir = Path.Combine(filesRoot, dir.FolderName, dir.Relative);
                 try
                 {
-                    string targetDir = Path.Combine(filesRoot, dir.FolderName, dir.Relative);
                     Directory.CreateDirectory(targetDir);
                 }
                 catch (Exception ex)
