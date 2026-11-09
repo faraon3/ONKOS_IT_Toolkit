@@ -6,6 +6,7 @@ using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -424,29 +425,47 @@ internal sealed class ProgramManagerForm : UserControl
         finally { _add.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = true; }
         _progressBar.Value = 100;
         _progressCaption.Text = $"Instalación finalizada · {ok} correcto(s), {failed} error(es)";
-        _status.Text = "Ahora: —";
-    }
-
-    private void RefreshList()
+        private void RefreshList()
     {
         _list.BeginUpdate(); _list.Items.Clear(); _images.Images.Clear();
         string query = _search.Text.Trim();
-        var installers = Directory.GetFiles(_library).Where(f => (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) && !Path.GetFileName(f).StartsWith("."));
-        var groups = installers.GroupBy(f => Meta(f).GroupId ?? Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
+        var installers = Directory.GetFiles(_library)
+            .Where(f => (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
+                         Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) &&
+                        !Path.GetFileName(f).StartsWith(".")).ToList();
+
+        // Archivos añadidos masivamente reciben GroupId independiente: agrupar por nombre normalizado.
+        var groups = installers.GroupBy(f => NormalizeProgramName(DisplayName(f)), StringComparer.OrdinalIgnoreCase);
         foreach (var grp in groups)
         {
-            string? compatible = grp.FirstOrDefault(f => string.Equals(Meta(f).Architecture, _isWindows64 ? "x64" : "x86", StringComparison.OrdinalIgnoreCase) || (_isWindows64 && string.Equals(Meta(f).Architecture, "x86", StringComparison.OrdinalIgnoreCase)));
-            // Legacy single installer: architecture must be explicitly registered or presumed compatible for old entries.
-            if (compatible == null && grp.Count() == 1 && string.IsNullOrWhiteSpace(Meta(grp.First()).Architecture)) compatible = grp.First();
-            if (compatible == null) continue;
-            string name = DisplayName(compatible);
+            var entries = grp.ToList();
+            string? chosen = _isWindows64
+                ? entries.FirstOrDefault(f => string.Equals(Meta(f).Architecture, "x64", StringComparison.OrdinalIgnoreCase))
+                  ?? entries.FirstOrDefault(f => string.Equals(Meta(f).Architecture, "x86", StringComparison.OrdinalIgnoreCase))
+                : entries.FirstOrDefault(f => string.Equals(Meta(f).Architecture, "x86", StringComparison.OrdinalIgnoreCase));
+
+            if (chosen == null && entries.Count == 1 && string.IsNullOrWhiteSpace(Meta(entries[0]).Architecture))
+                chosen = entries[0];
+            if (chosen == null) continue;
+
+            string name = DisplayName(chosen);
             if (!name.Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
-            _images.Images.Add(LoadProgramImage(compatible));
-            var item = new ListViewItem(name, _images.Images.Count - 1) { Tag = compatible };
-            _list.Items.Add(item);
+            _images.Images.Add(LoadProgramImage(chosen));
+            _list.Items.Add(new ListViewItem(name, _images.Images.Count - 1) { Tag = chosen });
         }
         _list.EndUpdate(); _list.Invalidate();
-        _status.Text = $"{_list.Items.Count} programa(s) compatibles con {_architectureLabel}. Los incompatibles se ocultan automáticamente.";
+        _status.Text = $"{_list.Items.Count} programa(s) compatibles con {_architectureLabel}. En Windows x64 se prioriza x64 si existe la versión correspondiente.";
+    }
+
+    private static string NormalizeProgramName(string name)
+    {
+        string normalized = Regex.Replace(name,
+            @"(?i)(?:[-_. ]?(?:x86_64|x64|amd64|win64|64-bit|64bit|x86|win32|32-bit|32bit))", " ");
+        normalized = Regex.Replace(normalized, @"[^a-zA-Z0-9]+", " ").Trim();
+        return Regex.Replace(normalized, @"\s+", " ");
+    }
+
+ se ocultan automáticamente.";
     }
 
     private GroupBox MakeGroup(string title) => new() { Text = title, ForeColor = Color.FromArgb(210, 197, 235), BackColor = Surface, Padding = new Padding(10), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), Margin = new Padding(0, 0, 0, 10), FlatStyle = FlatStyle.Flat };
