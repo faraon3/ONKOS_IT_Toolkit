@@ -69,7 +69,9 @@ internal sealed class BackupForm : UserControl
         var sourceButtons = new Panel { Dock = DockStyle.Bottom, Height = 42, BackColor = Surface };
         _addFolder.Text = "+  Agregar carpeta desde cualquier disco"; StyleButton(_addFolder, true);
         _addFolder.SetBounds(8, 6, 270, 30); _addFolder.Click += (_, _) => AddCustomFolder();
-        sourceButtons.Controls.Add(_addFolder); sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons);
+        var addUser = new Button { Text = "👤  Agregar carpetas de otro usuario", Location = new Point(286, 6), Size = new Size(300, 30) };
+        StyleButton(addUser, true); addUser.Click += (_, _) => AddOtherUserFolders();
+        sourceButtons.Controls.Add(_addFolder); sourceButtons.Controls.Add(addUser); sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons);
 
         var destinationGroup = MakeGroup("03  ·  Elige dónde guardar el respaldo");
         destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 118;
@@ -265,6 +267,95 @@ internal sealed class BackupForm : UserControl
         { MessageBox.Show(this, "Esta carpeta ya está en la lista.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         AddListItem(Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)), path, true, "Unidad");
     }
+    private void AddOtherUserFolders()
+    {
+        string usersRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "..", "Users");
+        usersRoot = Path.GetFullPath(usersRoot);
+        if (!Directory.Exists(usersRoot))
+        {
+            MessageBox.Show(this, "No se encontró la carpeta de perfiles de Windows: " + usersRoot, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var profiles = Directory.GetDirectories(usersRoot)
+            .Where(path =>
+            {
+                string name = Path.GetFileName(path);
+                return !new[] { "Public", "Default", "Default User", "All Users", "defaultuser0" }
+                    .Contains(name, StringComparer.OrdinalIgnoreCase);
+            })
+            .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (profiles.Count == 0)
+        {
+            MessageBox.Show(this, "No se encontraron perfiles de usuario.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        using var dialog = new Form
+        {
+            Text = "Seleccionar usuarios para el backup",
+            StartPosition = FormStartPosition.CenterParent,
+            Size = new Size(560, 430),
+            MinimumSize = new Size(520, 380),
+            BackColor = Bg,
+            ForeColor = TextMain,
+            Font = Font
+        };
+        var info = new Label
+        {
+            Text = "Marca uno o varios perfiles. Se agregarán sus carpetas personales comunes; después podrás elegir cuáles respaldar.",
+            Dock = DockStyle.Top, Height = 54, Padding = new Padding(12), ForeColor = TextMain
+        };
+        var list = new CheckedListBox
+        {
+            Dock = DockStyle.Fill, CheckOnClick = true, BackColor = Surface, ForeColor = TextMain,
+            BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 10F)
+        };
+        foreach (string profile in profiles)
+            list.Items.Add(new ProfileChoice(Path.GetFileName(profile), profile), false);
+
+        var buttons = new Panel { Dock = DockStyle.Bottom, Height = 48, BackColor = Surface };
+        var selectAll = new Button { Text = "Seleccionar todos", Location = new Point(8, 8), Size = new Size(140, 30) };
+        StyleButton(selectAll, true);
+        selectAll.Click += (_, _) => { for (int i = 0; i < list.Items.Count; i++) list.SetItemChecked(i, true); };
+        var ok = new Button { Text = "Agregar seleccionados", Location = new Point(310, 8), Size = new Size(220, 30), DialogResult = DialogResult.OK };
+        StyleButton(ok, false);
+        buttons.Controls.Add(selectAll); buttons.Controls.Add(ok);
+        dialog.Controls.Add(list); dialog.Controls.Add(buttons); dialog.Controls.Add(info);
+        dialog.AcceptButton = ok;
+
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        int added = 0;
+        foreach (ProfileChoice profile in list.CheckedItems)
+        {
+            var folders = new[]
+            {
+                ("Escritorio", "Desktop"), ("Documentos", "Documents"), ("Descargas", "Downloads"),
+                ("Imágenes", "Pictures"), ("Música", "Music"), ("Videos", "Videos"),
+                ("Favoritos", "Favorites"), ("OneDrive", "OneDrive"), ("Contactos", "Contacts"),
+                ("Juegos guardados", "Saved Games"), ("Búsquedas", "Searches"), ("Vínculos", "Links")
+            };
+            foreach (var folder in folders)
+            {
+                string path = Path.Combine(profile.Path, folder.Item2);
+                if (!Directory.Exists(path)) continue;
+                if (_sources.Items.Cast<ListViewItem>().Any(x =>
+                    string.Equals(((FolderEntry)x.Tag!).Path, path, StringComparison.OrdinalIgnoreCase))) continue;
+
+                string label = $"{profile.Name} · {folder.Item1}";
+                AddListItem(label, path, true, folder.Item1);
+                added++;
+            }
+        }
+
+        if (added == 0)
+            MessageBox.Show(this, "No se agregaron carpetas. Los perfiles seleccionados pueden no tener carpetas personales disponibles o ya estaban agregados.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        else
+            WriteLog($"Se agregaron {added} carpetas de otros perfiles. Revisa las casillas antes de iniciar el backup.");
+    }
+
     private void RefreshDrives()
     {
         _drivePicker.Items.Clear();
@@ -698,6 +789,7 @@ internal sealed class BackupForm : UserControl
     private static async Task<string> RunProcessAsync(string exe, string args, bool shellRedirect)
     { var psi = new ProcessStartInfo(exe, args) { UseShellExecute = shellRedirect, CreateNoWindow = true, RedirectStandardOutput = !shellRedirect, RedirectStandardError = !shellRedirect }; using var p = Process.Start(psi) ?? throw new InvalidOperationException($"No se pudo iniciar {exe}"); if (shellRedirect) { await p.WaitForExitAsync(); return $"Proceso terminado con código {p.ExitCode}"; } string stdout = await p.StandardOutput.ReadToEndAsync(); string stderr = await p.StandardError.ReadToEndAsync(); await p.WaitForExitAsync(); return stdout + Environment.NewLine + stderr + Environment.NewLine + "ExitCode=" + p.ExitCode; }
     private sealed record FolderEntry(string Label, string Path, bool Custom);
+    private sealed record ProfileChoice(string Name, string Path) { public override string ToString() => $"{Name}    —    {Path}"; }
     private sealed record DriveChoice(string Label, string Root, DriveType Type) { public override string ToString() => Label; }
 
     private static class ShellIcon
