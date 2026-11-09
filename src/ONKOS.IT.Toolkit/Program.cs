@@ -58,7 +58,7 @@ internal sealed class MainForm : Form
         grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
 
         AddModule(grid, 0, 0, "01", "Backup y migración", "Copia documentos y configuraciones antes de formatear o cambiar de equipo.", true, () => OpenBackup());
-        AddModule(grid, 1, 0, "02", "Programas", "Organiza instaladores portables y prepara instalaciones para los equipos.", false);
+        AddModule(grid, 1, 0, "02", "Programas", "Organiza instaladores portables y prepara instalaciones para los equipos.", true, () => OpenPrograms());
         AddModule(grid, 0, 1, "03", "Impresoras", "Centraliza controladores, modelos y herramientas de instalación.", false);
         AddModule(grid, 1, 1, "04", "Inventario", "Consulta y registra información técnica de los computadores.", false);
 
@@ -78,6 +78,20 @@ internal sealed class MainForm : Form
         Controls.Add(_header);
 
         Shown += (_, _) => { foreach (var f in new[] { "Data", "Data/Config", "Data/Programs", "Data/Drivers", "Data/Templates", "Data/Reports" }) Directory.CreateDirectory(Path.Combine(_appRoot, f)); };
+    }
+
+    private void OpenPrograms()
+    {
+        var programs = new ProgramManagerForm();
+        programs.BackRequested += () =>
+        {
+            _mainContent.Controls.Clear();
+            if (_homeBody != null) _mainContent.Controls.Add(_homeBody);
+            _header.Visible = true;
+        };
+        _mainContent.Controls.Clear();
+        _mainContent.Controls.Add(programs);
+        _header.Visible = false;
     }
 
     private void OpenBackup()
