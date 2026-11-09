@@ -95,7 +95,12 @@ internal sealed class ProgramManagerForm : UserControl
         _list.ItemChecked += (_, _) => { };
         group.Controls.Add(_list); group.Controls.Add(toolbar);
 
-        var statusPanel = new Panel { Dock = DockStyle.Bottom, Height = 34, BackColor = Surface };
+        var progressPanel = new Panel { Dock = DockStyle.Bottom, Height = 58, BackColor = Surface, Padding = new Padding(10, 4, 10, 4) };
+        _progressCaption.Dock = DockStyle.Top; _progressCaption.Height = 20; _progressCaption.ForeColor = TextMuted;
+        _progressBar.Dock = DockStyle.Bottom; _progressBar.Height = 25; _progressBar.Value = 0;
+        progressPanel.Controls.Add(_progressBar); progressPanel.Controls.Add(_progressCaption);
+
+        var statusPanel = new Panel { Dock = DockStyle.Bottom, Height = 30, BackColor = Surface };
         _status.ForeColor = TextMuted; _status.Padding = new Padding(8, 0, 0, 0); statusPanel.Controls.Add(_status);
 
         var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = Bg, Padding = new Padding(3, 2, 3, 2) };
@@ -110,10 +115,10 @@ internal sealed class ProgramManagerForm : UserControl
         actionBar.Controls.AddRange(new Control[] { _add, _addProgram, _remove, _install });
 
         content.Controls.Add(group);
-        Controls.Add(content); Controls.Add(statusPanel); Controls.Add(actionBar); Controls.Add(header);
+        Controls.Add(content); Controls.Add(progressPanel); Controls.Add(statusPanel); Controls.Add(actionBar); Controls.Add(header);
 
-        _add.Click += (_, _) => AddPortableFolder();
-        _addProgram.Click += (_, _) => AddInstallers();
+        _add.Click += async (_, _) => await AddPortableFolderAsync();
+        _addProgram.Click += async (_, _) => await AddInstallersAsync();
         _remove.Click += (_, _) => RemoveSelected();
         _install.Click += async (_, _) => await InstallSelectedAsync();
         _search.TextChanged += (_, _) => RefreshList();
@@ -178,34 +183,78 @@ internal sealed class ProgramManagerForm : UserControl
     private static string ArchitectureFolder(string architecture) => architecture switch { "x64" => "x64", "x86" => "x86", "Both" => "Compatible_x86_x64", "Universal" => "Compatible_x86_x64", _ => "Unknown" };
     private string DisplayName(string file) => Meta(file).DisplayName ?? Path.GetFileNameWithoutExtension(file);
 
-    private void AddPortableFolder()
+    private async Task AddPortableFolderAsync()
     {
         using var folderDialog = new FolderBrowserDialog { Description = "Selecciona la carpeta del programa portable o paquete (ej. Office con setup.exe)." };
         if (folderDialog.ShowDialog(this) != DialogResult.OK) return;
         using var exeDialog = new OpenFileDialog { InitialDirectory = folderDialog.SelectedPath, Filter = "Ejecutable (*.exe)|*.exe", Title = "Selecciona el ejecutable principal" };
         if (exeDialog.ShowDialog(this) != DialogResult.OK) return;
-        if (!exeDialog.FileName.StartsWith(folderDialog.SelectedPath, StringComparison.OrdinalIgnoreCase))
+        string root = Path.GetFullPath(folderDialog.SelectedPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!Path.GetFullPath(exeDialog.FileName).StartsWith(root, StringComparison.OrdinalIgnoreCase))
         { MessageBox.Show(this, "El ejecutable debe estar dentro de la carpeta seleccionada."); return; }
+
         string dest = Path.Combine(_library, "Portable_" + Guid.NewGuid().ToString("N"));
+        SetBusy(true, "Preparando archivos del programa portable...");
         try
         {
-            CopyDirectory(folderDialog.SelectedPath, dest);
+            await CopyDirectoryWithProgressAsync(folderDialog.SelectedPath, dest, "Copiando programa portable");
             string relative = Path.GetRelativePath(folderDialog.SelectedPath, exeDialog.FileName);
             string copiedExe = Path.Combine(dest, relative);
-
-            // El manifiesto identifica el único ejecutable que debe mostrarse en la biblioteca.
             File.WriteAllText(Path.Combine(dest, ".onko-portable-main.txt"), relative);
             var meta = Meta(copiedExe);
             meta.DisplayName = Path.GetFileName(folderDialog.SelectedPath);
             meta.Architecture = "Any";
             SaveMetadata();
-
-            _status.Text = "Paquete portable agregado: " + meta.DisplayName;
             RefreshList();
+            SetProgress(100, "Carga finalizada: " + meta.DisplayName);
             MessageBox.Show(this, "Se copió la carpeta completa.\n\nPrograma agregado: " + meta.DisplayName + "\nEjecutable principal: " + relative + "\n\nLos demás ejecutables quedan guardados como archivos de apoyo y no aparecerán por separado.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
-        { try { if (Directory.Exists(dest)) Directory.Delete(dest, true); } catch { } MessageBox.Show(this, ex.Message, "Error al copiar portable", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        {
+            try { if (Directory.Exists(dest)) Directory.Delete(dest, true); } catch { }
+            MessageBox.Show(this, ex.Message, "Error al copiar portable", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            SetProgress(0, "No se pudo cargar el programa portable");
+        }
+        finally { SetBusy(false); }
+    }
+
+    private async Task CopyDirectoryWithProgressAsync(string source, string destination, string caption)
+    {
+        var files = Directory.GetFiles(source, "*", SearchOption.AllDirectories);
+        long total = Math.Max(1, files.Sum(f => new FileInfo(f).Length));
+        long copied = 0;
+        Directory.CreateDirectory(destination);
+        foreach (string dir in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
+            Directory.CreateDirectory(Path.Combine(destination, Path.GetRelativePath(source, dir)));
+        foreach (string file in files)
+        {
+            string target = Path.Combine(destination, Path.GetRelativePath(source, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            using var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, true);
+            using var output = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None, 1024 * 1024, true);
+            byte[] buffer = new byte[1024 * 1024];
+            int read;
+            while ((read = await input.ReadAsync(buffer, 0, buffer.Length)) > 0)
+            {
+                await output.WriteAsync(buffer, 0, read);
+                copied += read;
+                int percent = (int)Math.Min(99, copied * 100.0 / total);
+                SetProgress(percent, caption + ": " + Path.GetFileName(file));
+            }
+        }
+    }
+
+    private void SetProgress(int value, string caption)
+    {
+        _progressBar.Value = Math.Max(0, Math.Min(100, value));
+        _progressCaption.Text = caption + " · " + _progressBar.Value + "%";
+    }
+
+    private void SetBusy(bool busy, string? caption = null)
+    {
+        _add.Enabled = _addProgram.Enabled = _remove.Enabled = _install.Enabled = !busy;
+        if (caption != null) SetProgress(0, caption);
+        if (!busy) _status.Text = "Listo";
     }
 
     private static void CopyDirectory(string source, string destination)
@@ -215,7 +264,7 @@ internal sealed class ProgramManagerForm : UserControl
         foreach (string d in Directory.GetDirectories(source)) CopyDirectory(d, Path.Combine(destination, Path.GetFileName(d)));
     }
 
-    private void AddInstallers()
+    private async Task AddInstallersAsync()
     {
         using var ofd = new OpenFileDialog
         {
@@ -225,43 +274,60 @@ internal sealed class ProgramManagerForm : UserControl
         };
         if (ofd.ShowDialog(this) != DialogResult.OK || ofd.FileNames.Length == 0) return;
 
-        int added = 0, failed = 0;
+        int added = 0, failed = 0, completed = 0;
         var errors = new List<string>();
-        foreach (string source in ofd.FileNames)
+        long total = Math.Max(1, ofd.FileNames.Sum(f => new FileInfo(f).Length));
+        long copied = 0;
+        SetBusy(true, "Cargando programas a la biblioteca...");
+        try
         {
-            string name = Path.GetFileNameWithoutExtension(source);
-            string destination = Path.Combine(_library, Path.GetFileName(source));
-            try
+            foreach (string source in ofd.FileNames)
             {
-                // No se clasifica ni filtra por arquitectura. Se agregan instaladores x86, x64 o mixtos.
-                if (File.Exists(destination))
+                string name = Path.GetFileNameWithoutExtension(source);
+                string destination = Path.Combine(_library, Path.GetFileName(source));
+                try
                 {
-                    string baseName = Path.GetFileNameWithoutExtension(source);
-                    string ext = Path.GetExtension(source);
-                    destination = Path.Combine(_library, baseName + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + ext);
+                    if (File.Exists(destination))
+                    {
+                        string baseName = Path.GetFileNameWithoutExtension(source);
+                        string ext = Path.GetExtension(source);
+                        destination = Path.Combine(_library, baseName + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + ext);
+                    }
+
+                    long fileLength = new FileInfo(source).Length;
+                    using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, true);
+                    using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024, true);
+                    byte[] buffer = new byte[1024 * 1024];
+                    int read;
+                    while ((read = await input.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                    {
+                        await output.WriteAsync(buffer, 0, read);
+                        copied += read;
+                        SetProgress((int)Math.Min(99, copied * 100.0 / total), "Cargando " + name);
+                    }
+                    var meta = Meta(destination);
+                    meta.DisplayName = name;
+                    meta.Architecture = "Any";
+                    meta.WingetId = "";
+                    added++;
                 }
-
-                File.Copy(source, destination);
-                var meta = Meta(destination);
-                meta.DisplayName = name;
-                meta.Architecture = "Any";
-                meta.WingetId = "";
-                added++;
+                catch (Exception ex)
+                {
+                    failed++;
+                    errors.Add(Path.GetFileName(source) + ": " + ex.Message);
+                }
+                completed++;
             }
-            catch (Exception ex)
-            {
-                failed++;
-                errors.Add(Path.GetFileName(source) + ": " + ex.Message);
-            }
+            SaveMetadata();
+            RefreshList();
+            SetProgress(100, "Carga finalizada: " + added + " programa(s)");
+            _status.Text = $"Agregados {added} instalador(es); errores: {failed}.";
+            string summary = $"Proceso terminado.\n\nAgregados: {added}\nErrores: {failed}";
+            if (errors.Count > 0) summary += "\n\n" + string.Join("\n", errors.Take(8));
+            MessageBox.Show(this, summary, "ONKOS · Agregar programas", MessageBoxButtons.OK,
+                failed == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
-
-        SaveMetadata();
-        RefreshList();
-        _status.Text = $"Agregados {added} instalador(es); errores: {failed}.";
-        string summary = $"Proceso terminado.\\n\\nAgregados: {added}\\nErrores: {failed}";
-        if (errors.Count > 0) summary += "\\n\\n" + string.Join("\\n", errors.Take(8));
-        MessageBox.Show(this, summary, "ONKOS · Agregar programas", MessageBoxButtons.OK,
-            failed == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        finally { SetBusy(false); }
     }
 
     private string? AskArchitecture(string fileName)
@@ -363,16 +429,15 @@ internal sealed class ProgramManagerForm : UserControl
         bool hasUnknown = selected.Any(i => i.Tag is string p && (Meta(p).Architecture == "Unknown" || Meta(p).Architecture == "ARM64"));
         string confirmText = $"Se ejecutarán {selected.Count} instalador(es), uno a la vez." + (hasUnknown ? "\n\nADVERTENCIA: hay instaladores cuya arquitectura no se pudo confirmar o que son ARM64. Asegúrate de que sean compatibles antes de continuar." : "") + "\n\n¿Continuar?";
         if (MessageBox.Show(confirmText, "Instalación secuencial", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-        _add.Enabled = _remove.Enabled = _install.Enabled = false; int ok = 0, failed = 0, completed = 0;
-        _progressBar.Value = 0;
-        _progressCaption.Text = $"Preparando instalación de {selected.Count} programa(s)...";
+        SetBusy(true, "Preparando instalación..."); int ok = 0, failed = 0, completed = 0;
+        SetProgress(0, $"Preparando instalación de {selected.Count} programa(s)");
         _status.Text = "Ahora: —";
         try
         {
             foreach (var item in selected)
             {
                 string path = (string)item.Tag!;
-                _progressCaption.Text = $"Instalando {completed + 1} de {selected.Count}: {DisplayName(path)}";
+                SetProgress((int)Math.Round(completed * 100.0 / selected.Count), $"Instalando {completed + 1} de {selected.Count}: {DisplayName(path)}");
                 _status.Text = "Ahora: " + DisplayName(path);
                 try
                 {
@@ -395,7 +460,7 @@ internal sealed class ProgramManagerForm : UserControl
                         mode = "normal";
                     }
 
-                    var psi = new ProcessStartInfo { FileName = executable, Arguments = args, UseShellExecute = true };
+                    var psi = new ProcessStartInfo { FileName = executable, Arguments = args, UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(path)! };
                     if (meta.RunAsAdmin) psi.Verb = "runas";
                     using var proc = Process.Start(psi);
                     if (proc == null) failed++;
@@ -403,13 +468,11 @@ internal sealed class ProgramManagerForm : UserControl
                 }
                 catch { failed++; }
                 completed++;
-                _progressBar.Value = (int)Math.Round(completed * 100.0 / selected.Count);
-                _progressCaption.Text = $"Progreso de instalación: {completed} de {selected.Count} ({_progressBar.Value}%)";
+                SetProgress((int)Math.Round(completed * 100.0 / selected.Count), $"Instalación: {completed} de {selected.Count}");
             }
         }
-        finally { _add.Enabled = _remove.Enabled = _install.Enabled = true; }
-        _progressBar.Value = 100;
-        _progressCaption.Text = $"Instalación finalizada · {ok} correcto(s), {failed} error(es)";
+        finally { SetBusy(false); }
+        SetProgress(100, $"Instalación finalizada · {ok} correcto(s), {failed} error(es)");
     }
 
     private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
