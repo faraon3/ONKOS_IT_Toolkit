@@ -3,16 +3,13 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>ONKOS_IT_Toolkit</AssemblyName>
     <RootNamespace>ONKOS.IT.Toolkit</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
-  <ItemGroup>
-    <Reference Include="UIAutomationClient" />
-    <Reference Include="UIAutomationTypes" />
-  </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\\**\\*.png" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\\**\\*.ico" CopyToOutputDirectory="PreserveNewest" />
