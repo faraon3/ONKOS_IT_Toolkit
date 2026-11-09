@@ -177,7 +177,7 @@ internal sealed class ProgramManagerForm : UserControl
 
     private void AddInstallers()
     {
-        using var dialog = new Form { Text = "Agregar programa a la biblioteca", Size = new Size(540, 285), StartPosition = FormStartPosition.CenterParent, BackColor = Surface, ForeColor = TextMain, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
+        using var dialog = new Form { Text = "Agregar programa a la biblioteca", Size = new Size(540, 330), StartPosition = FormStartPosition.CenterParent, BackColor = Surface, ForeColor = TextMain, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
         var nameLabel = new Label { Text = "Nombre del programa:", Bounds = new Rectangle(18, 15, 180, 22), ForeColor = TextMuted };
         var nameBox = new TextBox { Bounds = new Rectangle(18, 38, 480, 28), BackColor = Surface2, ForeColor = TextMain };
         var x86Label = new Label { Text = "Instalador Windows 32 bits (opcional):", Bounds = new Rectangle(18, 75, 300, 22), ForeColor = TextMuted };
@@ -189,8 +189,10 @@ internal sealed class ProgramManagerForm : UserControl
         string? x86File = null, x64File = null;
         void Pick(bool is64) { using var ofd = new OpenFileDialog { Filter = "Instaladores (*.exe;*.msi)|*.exe;*.msi" }; if (ofd.ShowDialog(dialog) == DialogResult.OK) { if (is64) { x64File = ofd.FileName; x64Box.Text = Path.GetFileName(x64File); } else { x86File = ofd.FileName; x86Box.Text = Path.GetFileName(x86File); } if (string.IsNullOrWhiteSpace(nameBox.Text)) nameBox.Text = Path.GetFileNameWithoutExtension(ofd.FileName); } }
         x86Browse.Click += (_, _) => Pick(false); x64Browse.Click += (_, _) => Pick(true);
-        var okButton = new Button { Text = "Guardar programa", Bounds = new Rectangle(350, 202, 148, 32), DialogResult = DialogResult.OK }; StyleButton(okButton, false);
-        dialog.Controls.AddRange(new Control[] { nameLabel, nameBox, x86Label, x86Box, x86Browse, x64Label, x64Box, x64Browse, okButton }); dialog.AcceptButton = okButton;
+        var wingetLabel = new Label { Text = "ID WinGet (opcional, para actualización automática):", Bounds = new Rectangle(18, 195, 420, 22), ForeColor = TextMuted };
+        var wingetBox = new TextBox { Bounds = new Rectangle(18, 218, 480, 27), BackColor = Surface2, ForeColor = TextMain };
+        var okButton = new Button { Text = "Guardar programa", Bounds = new Rectangle(350, 255, 148, 32), DialogResult = DialogResult.OK }; StyleButton(okButton, false);
+        dialog.Controls.AddRange(new Control[] { nameLabel, nameBox, x86Label, x86Box, x86Browse, x64Label, x64Box, x64Browse, wingetLabel, wingetBox, okButton }); dialog.AcceptButton = okButton;
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         if (string.IsNullOrWhiteSpace(nameBox.Text) || (x86File == null && x64File == null)) { MessageBox.Show("Indica el nombre y al menos un instalador."); return; }
         string groupId = Guid.NewGuid().ToString("N"); int added = 0;
@@ -201,7 +203,7 @@ internal sealed class ProgramManagerForm : UserControl
             {
                 string ext = Path.GetExtension(pair.source); string destination = Path.Combine(_library, groupId + "_" + pair.arch + ext);
                 File.Copy(pair.source, destination);
-                var meta = Meta(destination); meta.DisplayName = nameBox.Text.Trim(); meta.Architecture = pair.arch; meta.GroupId = groupId; added++;
+                var meta = Meta(destination); meta.DisplayName = nameBox.Text.Trim(); meta.Architecture = pair.arch; meta.GroupId = groupId; meta.WingetId = wingetBox.Text.Trim(); added++;
             }
             catch (Exception ex) { MessageBox.Show(this, $"Error copiando instalador: {ex.Message}", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
         }
