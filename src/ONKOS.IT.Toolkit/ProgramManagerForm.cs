@@ -23,8 +23,6 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly Button _install = new() { Text = "INSTALAR SELECCIONADOS" };
     private readonly Button _add = new() { Text = "+  AGREGAR INSTALADOR" };
     private readonly Button _remove = new() { Text = "ELIMINAR DE BIBLIOTECA" };
-    private readonly Button _editName = new() { Text = "CAMBIAR NOMBRE" };
-    private readonly Button _editLogo = new() { Text = "CAMBIAR LOGO" };
     private readonly Button _back = new() { Text = "‹  VOLVER AL INICIO" };
     private readonly TextBox _search = new() { Width = 300, PlaceholderText = "Buscar programa..." };
     private readonly Button _clearSearch = new() { Text = "×", Width = 34, Height = 32, Font = new Font("Segoe UI", 16F, FontStyle.Bold) };
@@ -70,32 +68,29 @@ internal sealed class ProgramManagerForm : UserControl
         _list.DrawItem += DrawProgramRow;
         _list.DrawSubItem += (_, _) => { };
         _list.MouseDown += ListMouseDown;
+        _list.MouseDoubleClick += ListMouseDoubleClick;
         _list.ItemChecked += (_, _) => { };
         group.Controls.Add(_list); group.Controls.Add(toolbar);
 
         var statusPanel = new Panel { Dock = DockStyle.Bottom, Height = 34, BackColor = Surface };
         _status.ForeColor = TextMuted; _status.Padding = new Padding(8, 0, 0, 0); statusPanel.Controls.Add(_status);
 
-        var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 102, BackColor = Bg, Padding = new Padding(3, 2, 3, 2) };
-        foreach (var button in new[] { _add, _remove, _editName, _editLogo, _install }) { button.Height = 46; button.Font = new Font("Segoe UI", 9.2F, FontStyle.Bold); }
-        StyleButton(_add, false); StyleButton(_remove, true); StyleButton(_editName, true); StyleButton(_editLogo, true); StyleButton(_install, false);
+        var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = Bg, Padding = new Padding(3, 2, 3, 2) };
+        foreach (var button in new[] { _add, _remove, _install }) { button.Height = 46; button.Font = new Font("Segoe UI", 9.2F, FontStyle.Bold); }
+        StyleButton(_add, false); StyleButton(_remove, true); StyleButton(_install, false);
         void LayoutActions()
         {
-            int w = actionBar.ClientSize.Width; int gap = 3; int row1 = (w - gap * 2) / 3;
-            _add.SetBounds(0, 0, row1, 44); _remove.SetBounds(row1 + gap, 0, row1, 44); _editName.SetBounds((row1 + gap) * 2, 0, w - (row1 + gap) * 2, 44);
-            int row2 = (w - gap) / 2;
-            _editLogo.SetBounds(0, 48, row2, 44); _install.SetBounds(row2 + gap, 48, w - row2 - gap, 44);
+            int w = actionBar.ClientSize.Width; int gap = 3; int third = (w - gap * 2) / 3;
+            _add.SetBounds(0, 0, third, 46); _remove.SetBounds(third + gap, 0, third, 46); _install.SetBounds((third + gap) * 2, 0, w - (third + gap) * 2, 46);
         }
         actionBar.Resize += (_, _) => LayoutActions(); LayoutActions();
-        actionBar.Controls.AddRange(new Control[] { _add, _remove, _editName, _editLogo, _install });
+        actionBar.Controls.AddRange(new Control[] { _add, _remove, _install });
 
         content.Controls.Add(group);
         Controls.Add(content); Controls.Add(statusPanel); Controls.Add(actionBar); Controls.Add(header);
 
         _add.Click += (_, _) => AddInstallers();
         _remove.Click += (_, _) => RemoveSelected();
-        _editName.Click += (_, _) => RenameProgram();
-        _editLogo.Click += (_, _) => ChangeLogo();
         _install.Click += async (_, _) => await InstallSelectedAsync();
         _search.TextChanged += (_, _) => RefreshList();
         RefreshList();
@@ -126,6 +121,15 @@ internal sealed class ProgramManagerForm : UserControl
         var p = new GraphicsPath(); int d = radius * 2;
         p.AddArc(r.X, r.Y, d, d, 180, 90); p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
         p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90); p.AddArc(r.X, r.Bottom - d, d, d, 90, 90); p.CloseFigure(); return p;
+    }
+
+    private void ListMouseDoubleClick(object? sender, MouseEventArgs e)
+    {
+        var item = _list.GetItemAt(e.X, e.Y);
+        if (item?.Tag is not string path) return;
+        int relativeX = e.X - item.Bounds.Left;
+        if (relativeX >= 44 && relativeX <= 82) ChangeLogo(item);
+        else if (relativeX >= 88) RenameProgram(item);
     }
 
     private void ListMouseDown(object? sender, MouseEventArgs e)
@@ -160,10 +164,9 @@ internal sealed class ProgramManagerForm : UserControl
         _status.Text = $"Agregados {added} instalador(es)."; RefreshList();
     }
 
-    private void RenameProgram()
+    private void RenameProgram(ListViewItem selectedItem)
     {
-        if (_list.SelectedItems.Count == 0) { MessageBox.Show("Selecciona un programa para cambiar su nombre."); return; }
-        string file = (string)_list.SelectedItems[0].Tag!;
+        string file = (string)selectedItem.Tag!;
         string current = DisplayName(file);
         using var dialog = new Form { Text = "Cambiar nombre del programa", Size = new Size(420, 150), StartPosition = FormStartPosition.CenterParent, BackColor = Surface, ForeColor = TextMain, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
         var text = new TextBox { Text = current, Bounds = new Rectangle(15, 15, 370, 30), BackColor = Surface2, ForeColor = TextMain };
@@ -172,10 +175,9 @@ internal sealed class ProgramManagerForm : UserControl
         if (dialog.ShowDialog(this) == DialogResult.OK && !string.IsNullOrWhiteSpace(text.Text)) { Meta(file).DisplayName = text.Text.Trim(); SaveMetadata(); RefreshList(); }
     }
 
-    private void ChangeLogo()
+    private void ChangeLogo(ListViewItem selectedItem)
     {
-        if (_list.SelectedItems.Count == 0) { MessageBox.Show("Selecciona un programa para cambiar su logo."); return; }
-        string file = (string)_list.SelectedItems[0].Tag!;
+        string file = (string)selectedItem.Tag!;
         using var dialog = new OpenFileDialog { Title = "Selecciona logo o imagen", Filter = "Imágenes (*.png;*.jpg;*.jpeg;*.bmp;*.ico)|*.png;*.jpg;*.jpeg;*.bmp;*.ico" };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         try
@@ -190,7 +192,7 @@ internal sealed class ProgramManagerForm : UserControl
     private Image LoadProgramImage(string file)
     {
         var m = Meta(file);
-        try { if (!string.IsNullOrWhiteSpace(m.LogoPath) && File.Exists(m.LogoPath)) return Image.FromFile(m.LogoPath); } catch { }
+        try { if (!string.IsNullOrWhiteSpace(m.LogoPath) && File.Exists(m.LogoPath)) { using var loaded = Image.FromFile(m.LogoPath); return new Bitmap(loaded); } } catch { }
         try { if (Path.GetExtension(file).Equals(".exe", StringComparison.OrdinalIgnoreCase)) { using var icon = Icon.ExtractAssociatedIcon(file); if (icon != null) return icon.ToBitmap(); } } catch { }
         return SystemIcons.Application.ToBitmap();
     }
