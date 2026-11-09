@@ -800,6 +800,7 @@ internal sealed class BackupForm : UserControl
         if (normalized.Contains("Juegos guardados", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Saved Games", StringComparison.OrdinalIgnoreCase)) return "Saved Games";
         if (normalized.Contains("Búsquedas", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Busquedas", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Searches", StringComparison.OrdinalIgnoreCase)) return "Searches";
         if (normalized.Contains("Vínculos", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Vinculos", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Links", StringComparison.OrdinalIgnoreCase)) return "Links";
+        if (normalized.Contains("Objetos 3D", StringComparison.OrdinalIgnoreCase) || normalized.Contains("3D Objects", StringComparison.OrdinalIgnoreCase)) return "3D Objects";
         return null;
     }
 
@@ -814,6 +815,7 @@ internal sealed class BackupForm : UserControl
         if (canonical.Equals("Videos", StringComparison.OrdinalIgnoreCase)) return value.Equals("Videos", StringComparison.OrdinalIgnoreCase) || value.Equals("Vídeos", StringComparison.OrdinalIgnoreCase);
         if (canonical.Equals("Favorites", StringComparison.OrdinalIgnoreCase)) return value.Equals("Favorites", StringComparison.OrdinalIgnoreCase) || value.Equals("Favoritos", StringComparison.OrdinalIgnoreCase);
         if (canonical.Equals("OneDrive", StringComparison.OrdinalIgnoreCase)) return value.Equals("OneDrive", StringComparison.OrdinalIgnoreCase);
+        if (canonical.Equals("3D Objects", StringComparison.OrdinalIgnoreCase)) return value.Equals("3D Objects", StringComparison.OrdinalIgnoreCase) || value.Equals("Objetos 3D", StringComparison.OrdinalIgnoreCase);
         return value.Equals(canonical, StringComparison.OrdinalIgnoreCase);
     }
 
