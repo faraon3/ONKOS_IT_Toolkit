@@ -85,15 +85,17 @@ internal sealed class ProgramManagerForm : UserControl
         toolbar.Controls.Add(searchBox);
 
         _list.BackColor = Surface; _list.ForeColor = TextMain; _list.Font = new Font("Segoe UI", 10F); _list.SmallImageList = _images;
-        // Vista en mosaicos de dos columnas para evitar que los programas queden apiñados.
-        _list.TileSize = new Size(Math.Max(300, (_list.ClientSize.Width - 28) / 2), 76);
-        _list.Resize += (_, _) => _list.TileSize = new Size(Math.Max(300, (_list.ClientSize.Width - 28) / 2), 76);
+        // Cuadrícula de tres columnas como en la referencia enviada.
+        _list.TileSize = new Size(Math.Max(280, (_list.ClientSize.Width - 36) / 3), 60);
+        _list.Resize += (_, _) => _list.TileSize = new Size(Math.Max(280, (_list.ClientSize.Width - 36) / 3), 60);
+        var listHeader = new Panel { Dock = DockStyle.Top, Height = 32, BackColor = Purple };
+        listHeader.Controls.Add(new Label { Text = "Selecciona / Programa", Dock = DockStyle.Fill, ForeColor = Color.White, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8, 0, 0, 0), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold) });
         _list.DrawItem += DrawProgramRow;
         _list.DrawSubItem += (_, _) => { };
         _list.MouseDown += ListMouseDown;
         _list.MouseDoubleClick += ListMouseDoubleClick;
         _list.ItemChecked += (_, _) => { };
-        group.Controls.Add(_list); group.Controls.Add(toolbar);
+        group.Controls.Add(_list); group.Controls.Add(listHeader); group.Controls.Add(toolbar);
 
         var progressPanel = new Panel { Dock = DockStyle.Bottom, Height = 58, BackColor = Surface, Padding = new Padding(10, 4, 10, 4) };
         _progressCaption.Dock = DockStyle.Top; _progressCaption.Height = 20; _progressCaption.ForeColor = TextMuted;
