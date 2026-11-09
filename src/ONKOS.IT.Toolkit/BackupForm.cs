@@ -675,7 +675,8 @@ internal sealed class BackupForm : UserControl
                 {
                     var item = files[i];
                     string source = item.BackupFile;
-                    string target = RemapProfilePath(item.OriginalFile, profileMap);
+                    string selectedFolder = GetBackupFolderLabel(item.BackupFile, backupRoot);
+                    string target = RemapProfilePath(item.OriginalFile, profileMap, selectedFolder);
                     try
                     {
                         if (!File.Exists(source)) throw new FileNotFoundException("No se encuentra el archivo dentro del respaldo.", source);
@@ -736,16 +737,84 @@ internal sealed class BackupForm : UserControl
         catch { return null; }
     }
 
-    private static string RemapProfilePath(string originalPath, Dictionary<string, string> profileMap)
+    private static string GetBackupFolderLabel(string backupFile, string backupRoot)
     {
+        try
+        {
+            string filesRoot = Path.Combine(backupRoot, "Archivos");
+            string relative = Path.GetRelativePath(filesRoot, backupFile);
+            string first = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
+            return first;
+        }
+        catch { return string.Empty; }
+    }
+
+    private static string RemapProfilePath(string originalPath, Dictionary<string, string> profileMap, string selectedFolderLabel)
+    {
+        string? knownFolder = GetKnownFolderName(selectedFolderLabel);
         foreach (var map in profileMap)
         {
             string oldRoot = map.Key.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            if (originalPath.Equals(oldRoot, StringComparison.OrdinalIgnoreCase)) return map.Value;
-            if (originalPath.StartsWith(oldRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-                return Path.Combine(map.Value, originalPath.Substring(oldRoot.Length + 1));
+            if (!originalPath.StartsWith(oldRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            string remainder = originalPath.Substring(oldRoot.Length + 1);
+            if (knownFolder is not null)
+            {
+                // La selección lógica (Documentos/Escritorio/etc.) manda sobre
+                // la ruta física original. Así no se conserva la redirección OneDrive.
+                string[] parts = remainder.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                int folderIndex = Array.FindIndex(parts, p => IsKnownFolderSegment(p, knownFolder));
+                if (folderIndex >= 0)
+                {
+                    string insideFolder = string.Join(Path.DirectorySeparatorChar, parts.Skip(folderIndex + 1));
+                    return string.IsNullOrEmpty(insideFolder) ? Path.Combine(map.Value, knownFolder) : Path.Combine(map.Value, knownFolder, insideFolder);
+                }
+
+                // Respaldo de perfiles adicionales con nombres de carpeta personalizados:
+                // la carpeta lógica seleccionada se conserva como raíz del destino.
+                return Path.Combine(map.Value, knownFolder, remainder);
+            }
+
+            return Path.Combine(map.Value, remainder);
         }
         return originalPath;
+    }
+
+    private static string? GetKnownFolderName(string label)
+    {
+        string normalized = label.Replace("_", " ").Trim();
+        // OneDrive solo se usa cuando fue seleccionado explícitamente.
+        if (normalized.Contains("OneDrive", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("One Drive", StringComparison.OrdinalIgnoreCase))
+            return "OneDrive";
+
+        if (normalized.Contains("Documentos", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Documents", StringComparison.OrdinalIgnoreCase)) return "Documents";
+        if (normalized.Contains("Escritorio", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Desktop", StringComparison.OrdinalIgnoreCase)) return "Desktop";
+        if (normalized.Contains("Descargas", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Downloads", StringComparison.OrdinalIgnoreCase)) return "Downloads";
+        if (normalized.Contains("Imágenes", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Imagenes", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Pictures", StringComparison.OrdinalIgnoreCase)) return "Pictures";
+        if (normalized.Contains("Música", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Musica", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Music", StringComparison.OrdinalIgnoreCase)) return "Music";
+        if (normalized.Contains("Videos", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Vídeos", StringComparison.OrdinalIgnoreCase)) return "Videos";
+        if (normalized.Contains("Favoritos", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Favorites", StringComparison.OrdinalIgnoreCase)) return "Favorites";
+        if (normalized.Contains("Contactos", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Contacts", StringComparison.OrdinalIgnoreCase)) return "Contacts";
+        if (normalized.Contains("Juegos guardados", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Saved Games", StringComparison.OrdinalIgnoreCase)) return "Saved Games";
+        if (normalized.Contains("Búsquedas", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Busquedas", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Searches", StringComparison.OrdinalIgnoreCase)) return "Searches";
+        if (normalized.Contains("Vínculos", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Vinculos", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Links", StringComparison.OrdinalIgnoreCase)) return "Links";
+        return null;
+    }
+
+    private static bool IsKnownFolderSegment(string segment, string canonical)
+    {
+        string value = segment.Trim();
+        if (canonical.Equals("Documents", StringComparison.OrdinalIgnoreCase)) return value.Equals("Documents", StringComparison.OrdinalIgnoreCase) || value.Equals("Documentos", StringComparison.OrdinalIgnoreCase);
+        if (canonical.Equals("Desktop", StringComparison.OrdinalIgnoreCase)) return value.Equals("Desktop", StringComparison.OrdinalIgnoreCase) || value.Equals("Escritorio", StringComparison.OrdinalIgnoreCase);
+        if (canonical.Equals("Downloads", StringComparison.OrdinalIgnoreCase)) return value.Equals("Downloads", StringComparison.OrdinalIgnoreCase) || value.Equals("Descargas", StringComparison.OrdinalIgnoreCase);
+        if (canonical.Equals("Pictures", StringComparison.OrdinalIgnoreCase)) return value.Equals("Pictures", StringComparison.OrdinalIgnoreCase) || value.Equals("Imágenes", StringComparison.OrdinalIgnoreCase) || value.Equals("Imagenes", StringComparison.OrdinalIgnoreCase);
+        if (canonical.Equals("Music", StringComparison.OrdinalIgnoreCase)) return value.Equals("Music", StringComparison.OrdinalIgnoreCase) || value.Equals("Música", StringComparison.OrdinalIgnoreCase) || value.Equals("Musica", StringComparison.OrdinalIgnoreCase);
+        if (canonical.Equals("Videos", StringComparison.OrdinalIgnoreCase)) return value.Equals("Videos", StringComparison.OrdinalIgnoreCase) || value.Equals("Vídeos", StringComparison.OrdinalIgnoreCase);
+        if (canonical.Equals("Favorites", StringComparison.OrdinalIgnoreCase)) return value.Equals("Favorites", StringComparison.OrdinalIgnoreCase) || value.Equals("Favoritos", StringComparison.OrdinalIgnoreCase);
+        if (canonical.Equals("OneDrive", StringComparison.OrdinalIgnoreCase)) return value.Equals("OneDrive", StringComparison.OrdinalIgnoreCase);
+        return value.Equals(canonical, StringComparison.OrdinalIgnoreCase);
     }
 
     private static List<string[]> ParseCsv(string csv)
