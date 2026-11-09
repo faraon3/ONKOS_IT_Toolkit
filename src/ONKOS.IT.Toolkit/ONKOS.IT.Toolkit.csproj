@@ -10,7 +10,11 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="Assets\**\*.png" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets\**\*.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Reference Include="UIAutomationClient" />
+    <Reference Include="UIAutomationTypes" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\\**\\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\\**\\*.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
