@@ -177,7 +177,7 @@ internal sealed class ProgramManagerForm : UserControl
     private void SaveMetadata() { try { File.WriteAllText(_metadataPath, JsonSerializer.Serialize(_metadata, new JsonSerializerOptions { WriteIndented = true })); } catch (Exception ex) { MessageBox.Show(this, "No se pudo guardar la configuración: " + ex.Message); } }
     private string MetaKey(string file) => Path.GetRelativePath(_library, file).Replace('\\', '/');
     private ProgramMeta Meta(string file) { string key = MetaKey(file); if (!_metadata.TryGetValue(key, out var m)) { if (_metadata.TryGetValue(Path.GetFileName(file), out var legacy)) { m = legacy; _metadata.Remove(Path.GetFileName(file)); _metadata[key] = m; } else _metadata[key] = m = new ProgramMeta(); } return m; }
-    private static string ArchitectureFolder(string architecture) => architecture switch { "x64" => "x64", "x86" => "x86", "Universal" => "Universal", _ => "Unknown" };
+    private static string ArchitectureFolder(string architecture) => architecture switch { "x64" => "x64", "x86" => "x86", "Both" => "Compatible_x86_x64", "Universal" => "Compatible_x86_x64", _ => "Unknown" };
     private string DisplayName(string file) => Meta(file).DisplayName ?? Path.GetFileNameWithoutExtension(file);
 
     private void AddPortableFolder()
@@ -225,13 +225,8 @@ internal sealed class ProgramManagerForm : UserControl
         foreach (string source in ofd.FileNames)
         {
             string name = Path.GetFileNameWithoutExtension(source);
-            string arch = DetectInstallerArchitecture(source);
-            if (arch == "Unknown")
-            {
-                var choice = MessageBox.Show(this, $"No se pudo determinar la arquitectura de {Path.GetFileName(source)}.\n\nSí = tratar como instalador universal (x86/x64).\nNo = guardar como desconocido y no ejecutarlo automáticamente.\nCancelar = omitir este archivo.", "Arquitectura desconocida", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-                if (choice == DialogResult.Cancel) continue;
-                if (choice == DialogResult.Yes) arch = "Universal";
-            }
+            string? arch = AskArchitecture(Path.GetFileName(source));
+            if (arch == null) continue;
             string normalizedName = NormalizeProgramName(name);
             string groupId = Guid.NewGuid().ToString("N");
             string archFolder = Path.Combine(_library, ArchitectureFolder(arch));
@@ -273,6 +268,21 @@ internal sealed class ProgramManagerForm : UserControl
         if (errors.Count > 0) summary += "\n\n" + string.Join("\n", errors.Take(8));
         MessageBox.Show(this, summary, "ONKOS · Agregar programas", MessageBoxButtons.OK,
             failed == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+    }
+
+    private string? AskArchitecture(string fileName)
+    {
+        using var dialog = new Form { Text = "Seleccionar arquitectura", Size = new Size(520, 230), StartPosition = FormStartPosition.CenterParent, BackColor = Surface, ForeColor = TextMain, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
+        var title = new Label { Text = "¿Qué arquitectura tiene este programa?", Font = new Font("Segoe UI", 12F, FontStyle.Bold), ForeColor = TextMain, TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Top, Height = 48 };
+        var info = new Label { Text = fileName + "\\nSelecciona la arquitectura del programa (no necesariamente la del setup).", ForeColor = TextMuted, TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Top, Height = 48 };
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 75, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(10), BackColor = Surface };
+        string? selected = null;
+        Button MakeChoice(string text, string value, Color color) { var b = new Button { Text = text, Width = 145, Height = 48, BackColor = color, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 9F, FontStyle.Bold), Cursor = Cursors.Hand }; b.Click += (_, _) => { selected = value; dialog.DialogResult = DialogResult.OK; dialog.Close(); }; return b; }
+        buttons.Controls.Add(MakeChoice("64 BITS (x64)", "x64", Color.FromArgb(72, 104, 174)));
+        buttons.Controls.Add(MakeChoice("32 BITS (x86)", "x86", Color.FromArgb(65, 125, 105)));
+        buttons.Controls.Add(MakeChoice("AMBOS (x86 + x64)", "Both", Purple));
+        dialog.Controls.Add(buttons); dialog.Controls.Add(info); dialog.Controls.Add(title);
+        return dialog.ShowDialog(this) == DialogResult.OK ? selected : null;
     }
 
     private static string DetectInstallerArchitecture(string file)
@@ -372,7 +382,7 @@ internal sealed class ProgramManagerForm : UserControl
                 done++;
                 string arch = Meta(old).Architecture ?? "";
                 string id = Meta(old).WingetId!.Trim();
-                if (arch != "x86" && arch != "x64") { skipped++; Progress(); continue; }
+                if (arch != "x86" && arch != "x64" && arch != "Both") { skipped++; Progress(); continue; }\n                if (arch == "Both") arch = "x64";
                 string dir = Path.Combine(temp, done.ToString()); Directory.CreateDirectory(dir);
                 _progressCaption.Text = $"Actualizando {done}/{files.Count}: {DisplayName(old)}";
                 _status.Text = "WinGet: " + id;
@@ -468,10 +478,9 @@ internal sealed class ProgramManagerForm : UserControl
             var entries = grp.ToList();
             string? chosen = _isWindows64
                 ? entries.FirstOrDefault(f => Meta(f).Architecture == "x64")
-                  ?? entries.FirstOrDefault(f => Meta(f).Architecture == "x86")
-                  ?? entries.FirstOrDefault(f => Meta(f).Architecture == "Universal")
+                  ?? entries.FirstOrDefault(f => Meta(f).Architecture == "Both")
                 : entries.FirstOrDefault(f => Meta(f).Architecture == "x86")
-                  ?? entries.FirstOrDefault(f => Meta(f).Architecture == "Universal");
+                  ?? entries.FirstOrDefault(f => Meta(f).Architecture == "Both");
 
             if (chosen == null && entries.Count == 1 && Meta(entries[0]).Architecture == "Unknown")
                 chosen = entries[0];
@@ -483,7 +492,7 @@ internal sealed class ProgramManagerForm : UserControl
             _list.Items.Add(new ListViewItem(name, _images.Images.Count - 1) { Tag = chosen });
         }
         _list.EndUpdate(); _list.Invalidate();
-        _status.Text = $"Windows detectado: {_architectureLabel}. x64 se prioriza en Windows x64; x86 es alternativa. Unknown/ARM64 requieren validación.";
+        _status.Text = $"Windows detectado: {_architectureLabel}. Se muestran programas compatibles con esta arquitectura (x86/x64 o ambos).";
     }
 
     private static string NormalizeProgramName(string name)
