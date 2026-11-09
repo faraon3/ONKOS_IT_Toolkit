@@ -21,7 +21,6 @@ internal sealed class BackupForm : UserControl
     private readonly TextBox _destination = new();
     private readonly TextBox _backupLabel = new();
     private readonly PurpleCheckBox _ipv4 = new() { Text = "Guardar configuración de red", Checked = true, AutoSize = false };
-    private readonly PurpleCheckBox _drivers = new() { Text = "Guardar controladores (drivers)", Checked = true, AutoSize = false };
     private readonly ModernProgressBar _bar = new();
     private readonly Label _status = new();
     private readonly Label _currentFile = new();
@@ -91,14 +90,13 @@ internal sealed class BackupForm : UserControl
         var optionsToggle = new Button { Text = "⚙  Opciones adicionales  ▸", Location = new Point(8, 5), Size = new Size(280, 32), TextAlign = ContentAlignment.MiddleLeft };
         StyleButton(optionsToggle, true);
         var options = new Panel { Location = new Point(8, 42), Height = 94, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, BackColor = Surface };
-        StyleCheck(_ipv4); StyleCheck(_drivers);
+        StyleCheck(_ipv4);
         _ipv4.SetBounds(8, 4, 270, 32);
-        _drivers.SetBounds(290, 4, 340, 32);
         var nameLabel = new Label { Text = "Nombre de la copia (opcional)", ForeColor = TextMain, Font = new Font("Segoe UI", 9F, FontStyle.Bold), AutoSize = true, Location = new Point(8, 43) };
         _backupLabel.SetBounds(8, 65, 850, 30); _backupLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         _backupLabel.PlaceholderText = "Ejemplo: Recepcion_Principal";
         StyleTextBox(_backupLabel);
-        options.Controls.Add(_ipv4); options.Controls.Add(_drivers); options.Controls.Add(nameLabel); options.Controls.Add(_backupLabel);
+        options.Controls.Add(_ipv4); options.Controls.Add(nameLabel); options.Controls.Add(_backupLabel);
         options.Visible = false;
         optionsToggle.Click += (_, _) =>
         {
@@ -381,7 +379,7 @@ internal sealed class BackupForm : UserControl
                 !string.Equals(entry.Path, other.Path, StringComparison.OrdinalIgnoreCase) &&
                 IsPathInside(entry.Path, other.Path)))
             .ToList();
-        if (selected.Count == 0 && !_ipv4.Checked && !_drivers.Checked) { MessageBox.Show(this, "Selecciona carpetas o una opción adicional.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        if (selected.Count == 0 && !_ipv4.Checked) { MessageBox.Show(this, "Selecciona carpetas o la opción de guardar configuración de red.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         string dest = _destination.Text.Trim();
         if (string.IsNullOrWhiteSpace(dest) || !Directory.Exists(dest)) { MessageBox.Show(this, "Selecciona primero el destino del respaldo.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         foreach (var f in selected)
@@ -431,7 +429,7 @@ internal sealed class BackupForm : UserControl
                 }
             }
 
-            int total = Math.Max(fileList.Count + (_ipv4.Checked ? 1 : 0) + (_drivers.Checked ? 1 : 0), 1);
+            int total = Math.Max(fileList.Count + (_ipv4.Checked ? 1 : 0), 1);
             int done = 0, copied = 0, verified = 0;
             var manifestRows = new List<string> { CsvRow("Estado", "Verificación", "Origen", "Destino", "Bytes", "Fecha", "Detalle") };
             IProgress<(int done, int total, string message, string current)> progress = new Progress<(int done, int total, string message, string current)>(p => { SetProgress(p.done, p.total, $"Copiando… {p.done} de {p.total}", p.current); if (!string.IsNullOrWhiteSpace(p.message)) WriteLog(p.message); });
@@ -517,11 +515,6 @@ internal sealed class BackupForm : UserControl
                     done++;
                     progress.Report((done, total, "Configuración de red procesada.", "Configuración IPv4"));
                 }
-            }
-            if (_drivers.Checked)
-            {
-                try { string driverDir = Path.Combine(root, "Drivers"); Directory.CreateDirectory(driverDir); var result = await RunProcessAsync("pnputil", $"/export-driver * \"{driverDir}\"", false); File.WriteAllText(Path.Combine(driverDir, "EXPORT_LOG.txt"), result); done++; progress.Report((done, total, "Exportación de drivers ejecutada.", "Controladores instalados")); }
-                catch (Exception ex) { errors++; ReportError(errorDetails, "Exportación de drivers", Path.Combine(root, "Drivers"), ex.Message); }
             }
             File.WriteAllText(Path.Combine(root, "MANIFIESTO_BACKUP.csv"), string.Join(Environment.NewLine, manifestRows), Encoding.UTF8);
 
@@ -707,32 +700,7 @@ internal sealed class BackupForm : UserControl
                 }
             });
 
-            // Restauración de componentes adicionales: controladores y configuración de red.
-            string driversPath = Path.Combine(backupRoot, "Drivers");
-            if (Directory.Exists(driversPath))
-            {
-                var infFiles = Directory.GetFiles(driversPath, "*.inf", SearchOption.AllDirectories);
-                if (infFiles.Length > 0)
-                {
-                    var driverChoice = MessageBox.Show(this,
-                        $"El respaldo contiene {infFiles.Length:N0} archivos INF de controladores.\n\n¿Deseas instalar/importar los drivers en este computador?\n\nSe requiere ejecutar ONKOS como administrador. Windows instalará solo los controladores compatibles que pueda utilizar.",
-                        "Restaurar controladores", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-                    if (driverChoice == DialogResult.Yes)
-                    {
-                        try
-                        {
-                            string driverOutput = await RunProcessAsync("pnputil.exe", $"/add-driver \"{Path.Combine(driversPath, "*.inf")}\" /subdirs /install", false);
-                            report.Add("=== RESTAURACIÓN DE DRIVERS ===");
-                            report.Add(driverOutput);
-                            WriteLog("Proceso de restauración de drivers ejecutado.");
-                        }
-                        catch (Exception ex) { errors++; report.Add("ERROR DRIVERS: " + ex.Message); WriteLog("ERROR DRIVERS: " + ex.Message); }
-                    }
-                    else report.Add("DRIVERS: omitidos por decisión del técnico.");
-                }
-                else report.Add("DRIVERS: no se encontraron archivos .INF para instalar.");
-            }
-
+            // Restauración de configuración IPv4 (si existe en el backup).
             string networkDump = Path.Combine(backupRoot, "Red", "IPv4_netsh_dump.txt");
             if (File.Exists(networkDump))
             {
