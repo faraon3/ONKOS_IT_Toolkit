@@ -428,10 +428,10 @@ internal sealed class ProgramManagerForm : UserControl
     {
         var selected = _list.Items.Cast<ListViewItem>().Where(i => i.Tag is string p && _checkedPaths.Contains(p)).ToList();
         if (selected.Count == 0) { MessageBox.Show("Marca los programas que deseas instalar con la casilla morada."); return; }
-        bool hasUnknown = selected.Any(i => i.Tag is string p && (Meta(p).Architecture == "Unknown" || Meta(p).Architecture == "ARM64"));
-        string confirmText = $"Se ejecutarán {selected.Count} instalador(es), uno a la vez." + (hasUnknown ? "\n\nADVERTENCIA: hay instaladores cuya arquitectura no se pudo confirmar o que son ARM64. Asegúrate de que sean compatibles antes de continuar." : "") + "\n\n¿Continuar?";
-        if (MessageBox.Show(confirmText, "Instalación secuencial", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-        SetBusy(true, "Preparando instalación..."); int ok = 0, failed = 0, completed = 0;
+        string confirmText = $"Se ejecutarán {selected.Count} programa(s), uno a la vez.\n\nONKOS no bloqueará programas por ser de 32 o 64 bits: cada instalador se abrirá tal como fue guardado.\n\nSi el propio instalador detecta incompatibilidades, mostrará su mensaje y ONKOS te informará el resultado al finalizar.\n\n¿Continuar?";
+        if (MessageBox.Show(confirmText, "Ejecutar programas", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        SetBusy(true, "Preparando ejecución..."); int ok = 0, failed = 0, completed = 0;
+        var failureDetails = new List<string>();
         SetProgress(0, $"Preparando instalación de {selected.Count} programa(s)");
         _status.Text = "Ahora: —";
         try
@@ -465,16 +465,38 @@ internal sealed class ProgramManagerForm : UserControl
                     var psi = new ProcessStartInfo { FileName = executable, Arguments = args, UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(path)! };
                     if (meta.RunAsAdmin) psi.Verb = "runas";
                     using var proc = Process.Start(psi);
-                    if (proc == null) failed++;
-                    else { await Task.Run(() => proc.WaitForExit()); if (proc.ExitCode == 0) ok++; else failed++; }
+                    if (proc == null)
+                    {
+                        failed++;
+                        failureDetails.Add(DisplayName(path) + ": Windows no pudo iniciar el instalador.");
+                    }
+                    else
+                    {
+                        await Task.Run(() => proc.WaitForExit());
+                        if (proc.ExitCode == 0) ok++;
+                        else
+                        {
+                            failed++;
+                            failureDetails.Add(DisplayName(path) + ": el instalador terminó con código " + proc.ExitCode + ". Revisa el mensaje mostrado por el propio instalador; puede ser incompatibilidad de arquitectura, requisitos previos o una instalación anterior.");
+                        }
+                    }
                 }
-                catch { failed++; }
+                catch (Exception ex)
+                {
+                    failed++;
+                    failureDetails.Add(DisplayName(path) + ": " + ex.Message);
+                }
                 completed++;
                 SetProgress((int)Math.Round(completed * 100.0 / selected.Count), $"Instalación: {completed} de {selected.Count}");
             }
         }
         finally { SetBusy(false); }
-        SetProgress(100, $"Instalación finalizada · {ok} correcto(s), {failed} error(es)");
+        SetProgress(100, $"Proceso finalizado · {ok} correcto(s), {failed} error(es)");
+        string resultMessage = $"Proceso terminado.\\n\\nEjecutados correctamente: {ok}\\nCon error: {failed}";
+        if (failureDetails.Count > 0)
+            resultMessage += "\\n\\nDETALLE DE LOS ERRORES:\\n" + string.Join("\\n\\n", failureDetails.Take(10));
+        MessageBox.Show(this, resultMessage, "ONKOS · Resultado", MessageBoxButtons.OK,
+            failed == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
     }
 
     private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
