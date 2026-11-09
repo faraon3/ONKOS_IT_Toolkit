@@ -56,7 +56,7 @@ internal sealed class ProgramManagerForm : UserControl
         _back.SetBounds(22, 5, 170, 25); StyleButton(_back, true);
         _back.Click += (_, _) => BackRequested?.Invoke(); header.Controls.Add(_back);
         header.Controls.Add(new Label { Text = "PROGRAMAS  /  INSTALADORES", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 30) });
-        header.Controls.Add(new Label { Text = "Biblioteca local de instaladores · Clínica ONKOS", ForeColor = Color.FromArgb(235, 225, 250), AutoSize = true, Location = new Point(25, 66) });
+        header.Controls.Add(new Label { Text = "Biblioteca local · " + _library, ForeColor = Color.FromArgb(235, 225, 250), AutoSize = true, Location = new Point(25, 66), MaximumSize = new Size(1500, 22) });
 
         var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), BackColor = Bg };
         var group = MakeGroup("01  ·  Biblioteca de programas  |  " + _architectureLabel); group.Dock = DockStyle.Fill;
