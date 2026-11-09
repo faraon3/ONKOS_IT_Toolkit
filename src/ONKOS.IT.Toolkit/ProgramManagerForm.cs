@@ -225,32 +225,21 @@ internal sealed class ProgramManagerForm : UserControl
         foreach (string source in ofd.FileNames)
         {
             string name = Path.GetFileNameWithoutExtension(source);
-            string? arch = AskArchitecture(Path.GetFileName(source));
-            if (arch == null) continue;
-            string normalizedName = NormalizeProgramName(name);
-            string groupId = Guid.NewGuid().ToString("N");
-            string archFolder = Path.Combine(_library, ArchitectureFolder(arch));
-            Directory.CreateDirectory(archFolder);
-            string destination = Path.Combine(archFolder, groupId + "_" + arch + Path.GetExtension(source));
+            string destination = Path.Combine(_library, Path.GetFileName(source));
             try
             {
-                // Reemplazar versión previa del mismo programa y arquitectura.
-                foreach (string existing in Directory.GetFiles(_library, "*", SearchOption.AllDirectories)
-                    .Where(f => (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
-                                 Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) &&
-                                string.Equals(NormalizeProgramName(DisplayName(f)), normalizedName, StringComparison.OrdinalIgnoreCase) &&
-                                string.Equals(Meta(f).Architecture, arch, StringComparison.OrdinalIgnoreCase))
-                    .ToList())
+                // No se clasifica ni filtra por arquitectura. Se agregan instaladores x86, x64 o mixtos.
+                if (File.Exists(destination))
                 {
-                    try { File.Delete(existing); } catch { }
-                    _metadata.Remove(MetaKey(existing)); _metadata.Remove(Path.GetFileName(existing));
+                    string baseName = Path.GetFileNameWithoutExtension(source);
+                    string ext = Path.GetExtension(source);
+                    destination = Path.Combine(_library, baseName + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + ext);
                 }
 
                 File.Copy(source, destination);
                 var meta = Meta(destination);
                 meta.DisplayName = name;
-                meta.Architecture = arch;
-                meta.GroupId = groupId;
+                meta.Architecture = "Any";
                 meta.WingetId = "";
                 added++;
             }
@@ -264,8 +253,8 @@ internal sealed class ProgramManagerForm : UserControl
         SaveMetadata();
         RefreshList();
         _status.Text = $"Agregados {added} instalador(es); errores: {failed}.";
-        string summary = $"Proceso terminado.\n\nAgregados: {added}\nErrores: {failed}";
-        if (errors.Count > 0) summary += "\n\n" + string.Join("\n", errors.Take(8));
+        string summary = $"Proceso terminado.\\n\\nAgregados: {added}\\nErrores: {failed}";
+        if (errors.Count > 0) summary += "\\n\\n" + string.Join("\\n", errors.Take(8));
         MessageBox.Show(this, summary, "ONKOS · Agregar programas", MessageBoxButtons.OK,
             failed == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
     }
@@ -465,46 +454,30 @@ internal sealed class ProgramManagerForm : UserControl
 
     private void RefreshList()
     {
-        _list.BeginUpdate(); _list.Items.Clear(); _images.Images.Clear();
+        _list.BeginUpdate();
+        _list.Items.Clear();
+        _images.Images.Clear();
         string query = _search.Text.Trim();
+
+        // Mostrar todos los instaladores de la biblioteca, sin importar si son x86, x64 o mixtos.
         var installers = Directory.GetFiles(_library, "*", SearchOption.AllDirectories)
             .Where(f => (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
                          Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) &&
-                        !Path.GetFileName(f).StartsWith(".")).ToList();
+                        !Path.GetFileName(f).StartsWith("."))
+            .OrderBy(f => DisplayName(f), StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
-        // Archivos añadidos masivamente reciben GroupId independiente: agrupar por nombre normalizado.
-        var groups = installers.GroupBy(f => NormalizeProgramName(DisplayName(f)), StringComparer.OrdinalIgnoreCase);
-        foreach (var grp in groups)
+        foreach (string file in installers)
         {
-            var entries = grp.ToList();
-            string? chosen = _isWindows64
-                ? entries.FirstOrDefault(f => Meta(f).Architecture == "x64")
-                  ?? entries.FirstOrDefault(f => Meta(f).Architecture == "Both")
-                : entries.FirstOrDefault(f => Meta(f).Architecture == "x86")
-                  ?? entries.FirstOrDefault(f => Meta(f).Architecture == "Both");
-
-            if (chosen == null && entries.Count == 1 && Meta(entries[0]).Architecture == "Unknown")
-                chosen = entries[0];
-            if (chosen == null) continue;
-
-            string name = DisplayName(chosen);
+            string name = DisplayName(file);
             if (!name.Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
-            _images.Images.Add(LoadProgramImage(chosen));
-            _list.Items.Add(new ListViewItem(name, _images.Images.Count - 1) { Tag = chosen });
+            _images.Images.Add(LoadProgramImage(file));
+            _list.Items.Add(new ListViewItem(name, _images.Images.Count - 1) { Tag = file });
         }
-        _list.EndUpdate(); _list.Invalidate();
-        _status.Text = $"Windows detectado: {_architectureLabel}. Se muestran programas compatibles con esta arquitectura (x86/x64 o ambos).";
-    }
 
-    private static string NormalizeProgramName(string name)
-    {
-        string normalized = Regex.Replace(name,
-            @"(?i)(?:[-_. ]?(?:x86_64|x64|amd64|win64|64-bit|64bit|x86|win32|32-bit|32bit))", " ");
-        // Eliminar versiones para reconocer distintas releases del mismo programa.
-        normalized = Regex.Replace(normalized,
-            @"(?i)(?:^|[\\s._-])v?\\d+(?:\\.\\d+){1,4}(?:[-+][a-z0-9.-]+)?(?=$|[\\s._-])", " ");
-        normalized = Regex.Replace(normalized, @"[^a-zA-Z0-9]+", " ").Trim();
-        return Regex.Replace(normalized, @"\\s+", " ");
+        _list.EndUpdate();
+        _list.Invalidate();
+        _status.Text = $"Windows detectado: {_architectureLabel}. Se muestran todos los programas, sin filtro de arquitectura.";
     }
 
     private GroupBox MakeGroup(string title) => new() { Text = title, ForeColor = Color.FromArgb(210, 197, 235), BackColor = Surface, Padding = new Padding(10), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), Margin = new Padding(0, 0, 0, 10), FlatStyle = FlatStyle.Flat };
