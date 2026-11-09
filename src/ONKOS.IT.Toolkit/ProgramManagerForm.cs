@@ -577,11 +577,19 @@ internal sealed class ProgramManagerForm : UserControl
                         mode = "normal";
                     }
 
-                    var psi = new ProcessStartInfo { FileName = executable, Arguments = args, UseShellExecute = true };
-                    if (meta.RunAsAdmin) psi.Verb = "runas";
-                    using var proc = Process.Start(psi);
-                    if (proc == null) failed++;
-                    else { await Task.Run(() => proc.WaitForExit()); if (proc.ExitCode == 0) ok++; else failed++; }
+                    if (!string.IsNullOrWhiteSpace(meta.RecordedStepsPath) && File.Exists(meta.RecordedStepsPath) && mode != "silent")
+                    {
+                        bool replayOk = await ReplayRecordedStepsAsync(executable, args, meta);
+                        if (replayOk) ok++; else failed++;
+                    }
+                    else
+                    {
+                        var psi = new ProcessStartInfo { FileName = executable, Arguments = args, UseShellExecute = true };
+                        if (meta.RunAsAdmin) psi.Verb = "runas";
+                        using var proc = Process.Start(psi);
+                        if (proc == null) failed++;
+                        else { await Task.Run(() => proc.WaitForExit()); if (proc.ExitCode == 0) ok++; else failed++; }
+                    }
                 }
                 catch { failed++; }
                 completed++;
@@ -595,6 +603,77 @@ internal sealed class ProgramManagerForm : UserControl
     }
 
     private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
+
+    private async Task<bool> ReplayRecordedStepsAsync(string installerPath, string arguments, ProgramMeta meta)
+    {
+        List<InstallerUiStep> steps;
+        try { steps = JsonSerializer.Deserialize<List<InstallerUiStep>>(File.ReadAllText(meta.RecordedStepsPath!)) ?? new(); }
+        catch (Exception ex) { MessageBox.Show(this, "No se pudo leer el perfil grabado: " + ex.Message, "ONKOS · Reproducción", MessageBoxButtons.OK, MessageBoxIcon.Error); return false; }
+        if (steps.Count == 0) return false;
+
+        try
+        {
+            var psi = new ProcessStartInfo { FileName = installerPath, Arguments = arguments, UseShellExecute = true };
+            if (meta.RunAsAdmin) psi.Verb = "runas";
+            using var process = Process.Start(psi);
+            if (process == null) return false;
+            _status.Text = "Reproduciendo perfil: " + DisplayName(installerPath);
+            await Task.Delay(1800);
+            int executed = 0, missed = 0;
+            foreach (var step in steps)
+            {
+                await Task.Delay(650);
+                var target = FindRecordedElement(step);
+                if (target == null) { missed++; continue; }
+                try
+                {
+                    if (step.EventType == "Invoke" && target.TryGetCurrentPattern(InvokePattern.Pattern, out object invoke)) ((InvokePattern)invoke).Invoke();
+                    else if (step.EventType == "Select" && target.TryGetCurrentPattern(SelectionItemPattern.Pattern, out object select)) ((SelectionItemPattern)select).Select();
+                    else if (step.EventType == "Toggle" && target.TryGetCurrentPattern(TogglePattern.Pattern, out object toggle)) ((TogglePattern)toggle).Toggle();
+                    else { missed++; continue; }
+                    executed++;
+                }
+                catch { missed++; }
+            }
+            try { await Task.Run(() => process.WaitForExit()); } catch { }
+            _status.Text = $"Perfil ejecutado: {executed} acción(es), {missed} no encontradas.";
+            if (missed > 0) MessageBox.Show(this, $"Acciones ejecutadas: {executed}. No encontradas/no compatibles: {missed}.\r\nVerifica el resultado del instalador.", "ONKOS · Reproducción", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return executed > 0 && missed == 0;
+        }
+        catch (Exception ex) { MessageBox.Show(this, "No se pudo reproducir: " + ex.Message, "ONKOS · Reproducción", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
+    }
+
+    private static AutomationElement? FindRecordedElement(InstallerUiStep step)
+    {
+        try
+        {
+            var all = AutomationElement.RootElement.FindAll(TreeScope.Descendants, Condition.TrueCondition);
+            AutomationElement? fallback = null;
+            foreach (AutomationElement element in all)
+            {
+                try
+                {
+                    var current = element.Current;
+                    if (!string.IsNullOrWhiteSpace(step.WindowTitle))
+                    {
+                        string windowName = "";
+                        var parent = TreeWalker.ControlViewWalker.GetParent(element);
+                        for (int depth = 0; depth < 10 && parent != null; depth++)
+                        {
+                            if (parent.Current.ControlType == ControlType.Window) { windowName = parent.Current.Name ?? ""; break; }
+                            parent = TreeWalker.ControlViewWalker.GetParent(parent);
+                        }
+                        if (!windowName.Equals(step.WindowTitle, StringComparison.OrdinalIgnoreCase)) continue;
+                    }
+                    if (!string.IsNullOrWhiteSpace(step.AutomationId) && current.AutomationId.Equals(step.AutomationId, StringComparison.OrdinalIgnoreCase) && (string.IsNullOrWhiteSpace(step.ControlType) || current.ControlType?.ProgrammaticName == step.ControlType)) return element;
+                    if (fallback == null && !string.IsNullOrWhiteSpace(step.Name) && current.Name.Equals(step.Name, StringComparison.OrdinalIgnoreCase) && (string.IsNullOrWhiteSpace(step.ControlType) || current.ControlType?.ProgrammaticName == step.ControlType)) fallback = element;
+                }
+                catch { }
+            }
+            return fallback;
+        }
+        catch { return null; }
+    }
 
     private void RefreshList()
     {
