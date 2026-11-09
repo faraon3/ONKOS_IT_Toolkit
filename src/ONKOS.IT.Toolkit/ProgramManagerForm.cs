@@ -252,6 +252,70 @@ internal sealed class ProgramManagerForm : UserControl
         SaveMetadata(); RefreshList();
     }
 
+    private async Task UpdateLibraryAsync()
+    {
+        var files = Directory.GetFiles(_library).Where(f =>
+            (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) &&
+            !Path.GetFileName(f).StartsWith(".") && !string.IsNullOrWhiteSpace(Meta(f).WingetId)).ToList();
+
+        if (files.Count == 0) { MessageBox.Show(this, "No hay instaladores individuales con ID WinGet configurado.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        if (MessageBox.Show(this, $"Se actualizarán {files.Count} instalador(es) con WinGet. Los programas agregados como carpeta no se modifican. ¿Continuar?", "Actualizar biblioteca", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+
+        _add.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = false;
+        int updated = 0, failed = 0, skipped = 0, done = 0;
+        string temp = Path.Combine(Path.GetTempPath(), "ONKOS_WG_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temp);
+        try
+        {
+            foreach (var old in files)
+            {
+                done++;
+                string arch = Meta(old).Architecture ?? "";
+                string id = Meta(old).WingetId!.Trim();
+                if (arch != "x86" && arch != "x64") { skipped++; Progress(); continue; }
+                string dir = Path.Combine(temp, done.ToString()); Directory.CreateDirectory(dir);
+                _progressCaption.Text = $"Actualizando {done}/{files.Count}: {DisplayName(old)}";
+                _status.Text = "WinGet: " + id;
+                try
+                {
+                    var psi = new ProcessStartInfo("winget", $"download --id \"{id}\" --exact --architecture {arch} --download-directory \"{dir}\" --accept-source-agreements --accept-package-agreements --skip-license --disable-interactivity")
+                    { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+                    using var proc = Process.Start(psi);
+                    if (proc == null) { failed++; Progress(); continue; }
+                    var stdout = proc.StandardOutput.ReadToEndAsync(); var stderr = proc.StandardError.ReadToEndAsync();
+                    await proc.WaitForExitAsync(); await stdout; await stderr;
+                    string ext = Path.GetExtension(old);
+                    var downloaded = Directory.GetFiles(dir, "*", SearchOption.AllDirectories)
+                        .Where(f => Path.GetExtension(f).Equals(ext, StringComparison.OrdinalIgnoreCase))
+                        .OrderByDescending(f => new FileInfo(f).Length).FirstOrDefault();
+                    if (proc.ExitCode != 0 || downloaded == null) { failed++; Progress(); continue; }
+
+                    string backup = old + ".previous";
+                    if (File.Exists(backup)) File.Delete(backup);
+                    File.Move(old, backup);
+                    try { File.Copy(downloaded, old, true); File.Delete(backup); updated++; }
+                    catch { if (File.Exists(old)) File.Delete(old); if (File.Exists(backup)) File.Move(backup, old); throw; }
+                }
+                catch (Exception ex) { failed++; _status.Text = $"Error {DisplayName(old)}: {ex.Message}"; }
+                Progress();
+            }
+        }
+        finally
+        {
+            try { Directory.Delete(temp, true); } catch { }
+            _add.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = true;
+        }
+        _progressBar.Value = 100;
+        _progressCaption.Text = $"Actualizado: {updated} · Omitido: {skipped} · Error: {failed}";
+        _status.Text = "Actualización terminada."; RefreshList();
+
+        void Progress()
+        {
+            _progressBar.Value = Math.Min(100, (int)Math.Round(done * 100.0 / files.Count));
+            _progressCaption.Text = $"Progreso {done}/{files.Count} ({_progressBar.Value}%)";
+        }
+    }
+
     private async Task InstallSelectedAsync()
     {
         var selected = _list.Items.Cast<ListViewItem>().Where(i => i.Tag is string p && _checkedPaths.Contains(p)).ToList();
