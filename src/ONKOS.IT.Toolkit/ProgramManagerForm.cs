@@ -28,7 +28,7 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly Button _install = new() { Text = "INSTALAR SELECCIONADOS" };
     private readonly Button _add = new() { Text = "+  AGREGAR PORTABLE" };
     private readonly Button _addProgram = new() { Text = "+  AGREGAR PROGRAMA" };
-    private readonly Button _remove = new() { Text = "ELIMINAR DE BIBLIOTECA" };
+    private readonly Button _remove = new() { Text = "ELIMINAR PROGRAMA" };
     private readonly Button _back = new() { Text = "‹  VOLVER AL INICIO" };
     private readonly TextBox _search = new() { Width = 300, PlaceholderText = "Buscar programa..." };
     private readonly Button _clearSearch = new() { Text = "×", Width = 34, Height = 32, Font = new Font("Segoe UI", 16F, FontStyle.Bold) };
@@ -72,7 +72,14 @@ internal sealed class ProgramManagerForm : UserControl
             e.Graphics.DrawPath(pen, outline);
         };
         searchBox.Resize += (_, _) => searchBox.Invalidate();
-        var searchIcon = new Label { Text = "⌕", Font = new Font("Segoe UI", 21F, FontStyle.Bold), ForeColor = PurpleHover, TextAlign = ContentAlignment.MiddleCenter, Bounds = new Rectangle(8, 0, 34, 34), BackColor = Color.Transparent };
+        var searchIcon = new Label { Bounds = new Rectangle(8, 0, 34, 34), BackColor = Color.Transparent };
+        searchIcon.Paint += (_, e) =>
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using var pen = new Pen(PurpleHover, 2.2F);
+            e.Graphics.DrawEllipse(pen, 9, 8, 12, 12);
+            e.Graphics.DrawLine(pen, 20, 20, 26, 26);
+        };
         _search.BorderStyle = BorderStyle.None; _search.BackColor = Surface2; _search.ForeColor = TextMain; _search.Font = new Font("Segoe UI", 10F);
         _search.SetBounds(43, 8, 300, 20);
         _clearSearch.FlatStyle = FlatStyle.Flat; _clearSearch.FlatAppearance.BorderSize = 0; _clearSearch.BackColor = Surface2; _clearSearch.ForeColor = TextMuted; _clearSearch.Cursor = Cursors.Hand;
@@ -111,7 +118,10 @@ internal sealed class ProgramManagerForm : UserControl
         void LayoutActions()
         {
             int w = actionBar.ClientSize.Width; int gap = 4; int each = (w - gap * 3) / 4;
-            _add.SetBounds(0, 0, each, 46); _addProgram.SetBounds(each + gap, 0, each, 46); _remove.SetBounds((each + gap) * 2, 0, each, 46); _install.SetBounds((each + gap) * 3, 0, w - (each + gap) * 3, 46);
+            _addProgram.SetBounds(0, 0, each, 46);
+            _add.SetBounds(each + gap, 0, each, 46);
+            _install.SetBounds((each + gap) * 2, 0, each, 46);
+            _remove.SetBounds((each + gap) * 3, 0, w - (each + gap) * 3, 46);
         }
         actionBar.Resize += (_, _) => LayoutActions(); LayoutActions();
         actionBar.Controls.AddRange(new Control[] { _add, _addProgram, _remove, _install });
