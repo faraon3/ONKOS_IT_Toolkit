@@ -47,7 +47,7 @@ internal sealed class BackupForm : UserControl
         var back = new Button { Text = "‹  VOLVER AL INICIO", Location = new Point(22, 5), Size = new Size(170, 25) };
         StyleButton(back, true); back.Click += (_, _) => BackRequested?.Invoke(); header.Controls.Add(back);
         header.Controls.Add(new Label { Text = "BACKUP  /  MIGRACIÓN", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 30) });
-        header.Controls.Add(new Label { Text = "Asistente de respaldo seguro · Clínica ONKOS", ForeColor = Color.FromArgb(235, 225, 250), AutoSize = true, Location = new Point(25, 66) });
+        // Se elimina el subtítulo para simplificar el encabezado.
 
         var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), AutoScroll = true, BackColor = Bg };
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
@@ -68,8 +68,11 @@ internal sealed class BackupForm : UserControl
         var sourceButtons = new Panel { Dock = DockStyle.Bottom, Height = 42, BackColor = Surface };
         _addFolder.Text = "+  Agregar carpeta desde cualquier disco"; StyleButton(_addFolder, true);
         _addFolder.SetBounds(8, 6, 270, 30); _addFolder.Click += (_, _) => AddCustomFolder();
-        var addUser = new Button { Text = "👤  Agregar carpetas de otro usuario", Location = new Point(286, 6), Size = new Size(300, 30) };
-        StyleButton(addUser, true); addUser.Click += (_, _) => AddOtherUserFolders();
+        var addUser = new Button { Text = "Otro usuario", Location = new Point(286, 6), Size = new Size(190, 30), ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(8, 0, 6, 0) };
+        StyleButton(addUser, true);
+        string otherUserIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "OtroUsuario.png");
+        if (File.Exists(otherUserIcon)) { using var icon = Image.FromFile(otherUserIcon); addUser.Image = new Bitmap(icon, new Size(20, 20)); }
+        addUser.Click += (_, _) => AddOtherUserFolders();
         sourceButtons.Controls.Add(_addFolder); sourceButtons.Controls.Add(addUser); sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons);
 
         var destinationGroup = MakeGroup("03  ·  Elige dónde guardar el respaldo");
@@ -87,8 +90,10 @@ internal sealed class BackupForm : UserControl
 
         // Opciones avanzadas plegables para mantener una pantalla simple.
         var optionsGroup = new Panel { Dock = DockStyle.Top, Height = 42, BackColor = Surface, Margin = new Padding(0, 0, 0, 8) };
-        var optionsToggle = new Button { Text = "⚙  Opciones adicionales  ▸", Location = new Point(8, 5), Size = new Size(280, 32), TextAlign = ContentAlignment.MiddleLeft };
+        var optionsToggle = new Button { Text = "Opciones adicionales  ▸", Location = new Point(8, 5), Size = new Size(280, 32), TextAlign = ContentAlignment.MiddleLeft, ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(8, 0, 6, 0) };
         StyleButton(optionsToggle, true);
+        string advancedIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "OpcionesAvanzadas.png");
+        if (File.Exists(advancedIcon)) { using var icon = Image.FromFile(advancedIcon); optionsToggle.Image = new Bitmap(icon, new Size(20, 20)); }
         var options = new Panel { Location = new Point(8, 42), Height = 94, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, BackColor = Surface };
         StyleCheck(_ipv4);
         _ipv4.SetBounds(8, 4, 270, 32);
@@ -102,7 +107,7 @@ internal sealed class BackupForm : UserControl
         {
             options.Visible = !options.Visible;
             optionsGroup.Height = options.Visible ? 145 : 42;
-            optionsToggle.Text = options.Visible ? "⚙  Opciones adicionales  ▾" : "⚙  Opciones adicionales  ▸";
+            optionsToggle.Text = options.Visible ? "Opciones adicionales  ▾" : "Opciones adicionales  ▸";
         };
         optionsGroup.Controls.Add(options); optionsGroup.Controls.Add(optionsToggle);
 
