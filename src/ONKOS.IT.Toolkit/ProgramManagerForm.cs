@@ -419,43 +419,26 @@ internal sealed class ProgramManagerForm : UserControl
         }
     }
 
-    private void ConfigureSelectedInstaller()
+    private async void ConfigureSelectedInstaller()
     {
         var item = _list.SelectedItems.Cast<ListViewItem>().FirstOrDefault();
         if (item?.Tag is not string file)
         {
-            MessageBox.Show(this, "Selecciona un programa de la lista (clic normal sobre su fila).", "Configurar instalación");
+            MessageBox.Show(this, "Selecciona un instalador de la lista.", "Grabar instalador");
             return;
         }
 
-        var meta = Meta(file);
-        using var dialog = new Form { Text = "Configurar instalación · " + DisplayName(file), Size = new Size(620, 440), StartPosition = FormStartPosition.CenterParent, BackColor = Surface, ForeColor = TextMain, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
-        var title = new Label { Text = "¿Cómo debe instalarse este programa?", Font = new Font("Segoe UI", 12F, FontStyle.Bold), ForeColor = TextMain, Location = new Point(20, 16), Size = new Size(560, 28) };
-        var methodLabel = new Label { Text = "Método de instalación", Location = new Point(20, 58), AutoSize = true, ForeColor = TextMuted };
-        var method = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(20, 82), Width = 560, BackColor = Surface2, ForeColor = TextMain };
-        method.Items.AddRange(new object[] { "Normal (mostrar asistente)", "Silenciosa / automática", "Argumentos personalizados" });
-        method.SelectedIndex = meta.InstallMode switch { "silent" => 1, "custom" => 2, _ => 0 };
-        var argsLabel = new Label { Text = "Parámetros / argumentos (para EXE o MSI)", Location = new Point(20, 132), AutoSize = true, ForeColor = TextMuted };
-        var args = new TextBox { Location = new Point(20, 156), Width = 560, Height = 32, Text = meta.InstallArguments ?? "", BackColor = Surface2, ForeColor = TextMain };
-        var hint = new Label { Text = "Ejemplos: /S · /silent · /verysilent · /qn /norestart\r\nLos parámetros dependen del fabricante. No se adivinan automáticamente.", Location = new Point(20, 196), Size = new Size(560, 48), ForeColor = TextMuted };
-        var admin = new CheckBox { Text = "Ejecutar como administrador", Checked = meta.RunAsAdmin, Location = new Point(20, 252), AutoSize = true, ForeColor = TextMain };
-        var pending = new Label { Text = "Grabación: " + (string.IsNullOrWhiteSpace(meta.RecordedStepsPath) ? "sin pasos guardados" : "perfil disponible"), Location = new Point(20, 286), Size = new Size(560, 28), ForeColor = Color.FromArgb(190, 170, 230) };
-        var save = new Button { Text = "GUARDAR CONFIGURACIÓN", Location = new Point(340, 330), Size = new Size(240, 42), DialogResult = DialogResult.OK };
-        var cancel = new Button { Text = "Cancelar", Location = new Point(220, 330), Size = new Size(110, 42), DialogResult = DialogResult.Cancel };
-        var record = new Button { Text = "GRABAR PASOS", Location = new Point(20, 330), Size = new Size(180, 42) };
-        StyleButton(save, false); StyleButton(cancel, true); StyleButton(record, true);
-        record.Click += (_, _) => { dialog.Hide(); try { RecordInstallerSteps(file, meta); } finally { dialog.Show(); pending.Text = "Grabación: " + (string.IsNullOrWhiteSpace(meta.RecordedStepsPath) ? "sin pasos guardados" : "perfil disponible"); } };
-        method.SelectedIndexChanged += (_, _) => { args.Enabled = method.SelectedIndex != 0; };
-        args.Enabled = method.SelectedIndex != 0;
-        dialog.Controls.AddRange(new Control[] { title, methodLabel, method, argsLabel, args, hint, admin, pending, save, cancel, record });
-        dialog.AcceptButton = save; dialog.CancelButton = cancel;
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        meta.InstallMode = method.SelectedIndex switch { 1 => "silent", 2 => "custom", _ => "normal" };
-        meta.InstallArguments = args.Text.Trim();
-        meta.RunAsAdmin = admin.Checked;
-        SaveMetadata(); RefreshList();
-        _status.Text = "Configuración guardada: " + DisplayName(file);
-        MessageBox.Show(this, "Configuración guardada. ONKOS utilizará estos ajustes en próximas instalaciones.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        _configure.Enabled = false;
+        _status.Text = "Grabando instalador: " + DisplayName(file) + " · completa el asistente.";
+        try
+        {
+            await RecordInstallerStepsAsync(file, Meta(file));
+        }
+        finally
+        {
+            _configure.Enabled = true;
+            RefreshList();
+        }
     }
 
     private sealed class InstallerUiStep
@@ -469,12 +452,13 @@ internal sealed class ProgramManagerForm : UserControl
         public DateTime RecordedAt { get; set; }
     }
 
-    private void RecordInstallerSteps(string installerPath, ProgramMeta meta)
+    private async Task RecordInstallerStepsAsync(string installerPath, ProgramMeta meta)
     {
         var steps = new List<InstallerUiStep>();
         AutomationEventHandler invokeHandler = (sender, e) => Capture(sender, "Invoke");
         AutomationEventHandler selectionHandler = (sender, e) => Capture(sender, "Select");
         AutomationPropertyChangedEventHandler toggleHandler = (sender, e) => Capture(sender, "Toggle");
+
         try
         {
             Automation.AddAutomationEventHandler(InvokePattern.InvokedEvent, AutomationElement.RootElement, TreeScope.Descendants, invokeHandler);
@@ -483,39 +467,53 @@ internal sealed class ProgramManagerForm : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "No se pudo iniciar la grabación UI Automation.\r\n" + ex.Message, "Grabación", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "No se pudo iniciar la grabación UI Automation.\r\n" + ex.Message, "Grabar instalador", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
-        using var dialog = new Form { Text = "Grabando instalación · " + DisplayName(installerPath), Size = new Size(520, 220), StartPosition = FormStartPosition.CenterParent, BackColor = Surface, ForeColor = TextMain, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
-        var info = new Label { Text = "Realiza la instalación normalmente. ONKOS registra acciones accesibles.\r\nNo se guardan textos escritos ni contraseñas.\r\nAlgunos controles/UAC pueden no ser detectados.", Location = new Point(18, 18), Size = new Size(470, 90), ForeColor = TextMain };
-        var count = new Label { Text = "Acciones registradas: 0", Location = new Point(18, 112), Size = new Size(260, 25), ForeColor = TextMuted };
-        var stop = new Button { Text = "FINALIZAR GRABACIÓN", Location = new Point(285, 110), Size = new Size(205, 38), DialogResult = DialogResult.OK };
-        StyleButton(stop, false); dialog.Controls.AddRange(new Control[] { info, count, stop });
-        var timer = new System.Windows.Forms.Timer { Interval = 500 };
-        timer.Tick += (_, _) => count.Text = "Acciones registradas: " + steps.Count; timer.Start();
+        Process? installer = null;
         try
         {
             var psi = new ProcessStartInfo(installerPath) { UseShellExecute = true };
             if (meta.RunAsAdmin) psi.Verb = "runas";
-            Process.Start(psi);
-            dialog.ShowDialog(this);
+            installer = Process.Start(psi);
+            if (installer == null)
+            {
+                MessageBox.Show(this, "Windows no pudo iniciar el instalador.", "Grabar instalador");
+                return;
+            }
+
+            _status.Text = "GRABANDO: " + DisplayName(installerPath) + " · no cierres ONKOS hasta terminar.";
+            await Task.Run(() => installer.WaitForExit());
         }
-        catch (Exception ex) { MessageBox.Show(this, "No se pudo iniciar el instalador: " + ex.Message); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "No se pudo iniciar/esperar el instalador: " + ex.Message, "Grabar instalador", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
         finally
         {
-            timer.Stop(); timer.Dispose();
             try { Automation.RemoveAutomationEventHandler(InvokePattern.InvokedEvent, AutomationElement.RootElement, invokeHandler); } catch { }
             try { Automation.RemoveAutomationEventHandler(SelectionItemPattern.ElementSelectedEvent, AutomationElement.RootElement, selectionHandler); } catch { }
             try { Automation.RemoveAutomationPropertyChangedEventHandler(AutomationElement.RootElement, toggleHandler); } catch { }
+            installer?.Dispose();
         }
 
-        if (steps.Count == 0) { MessageBox.Show(this, "No se detectaron acciones UI Automation. No se guardó perfil.", "Grabación"); return; }
-        string profiles = Path.Combine(AppContext.BaseDirectory, "Data", "Programs", ".profiles"); Directory.CreateDirectory(profiles);
+        if (steps.Count == 0)
+        {
+            _status.Text = "Instalador finalizado; no se detectaron acciones UI Automation.";
+            MessageBox.Show(this, "No se detectaron acciones UI Automation. No se guardó ningún perfil.", "Grabar instalador", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        string profiles = Path.Combine(AppContext.BaseDirectory, "Data", "Programs", ".profiles");
+        Directory.CreateDirectory(profiles);
         string profilePath = Path.Combine(profiles, Guid.NewGuid().ToString("N") + ".json");
         File.WriteAllText(profilePath, JsonSerializer.Serialize(steps, new JsonSerializerOptions { WriteIndented = true }));
-        meta.RecordedStepsPath = profilePath; SaveMetadata();
-        MessageBox.Show(this, $"Se guardaron {steps.Count} acciones.\r\nEste primer prototipo registra eventos de controles, pero aún no reproduce automáticamente el perfil. Se debe validar con instaladores de prueba.", "Perfil grabado", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        meta.RecordedStepsPath = profilePath;
+        SaveMetadata();
+        _status.Text = $"Grabación finalizada: {steps.Count} acciones registradas.";
+        MessageBox.Show(this, $"Se guardaron {steps.Count} acciones UI Automation.\r\nNota: el perfil registra eventos; todavía no reproduce automáticamente los pasos.", "Grabación finalizada", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
         void Capture(object? sender, string eventType)
         {
@@ -523,8 +521,13 @@ internal sealed class ProgramManagerForm : UserControl
             {
                 if (sender is not AutomationElement element) return;
                 string name = element.Current.Name ?? "", id = element.Current.AutomationId ?? "", type = element.Current.ControlType?.ProgrammaticName ?? "", cls = element.Current.ClassName ?? "";
-                var parent = TreeWalker.ControlViewWalker.GetParent(element); string window = "";
-                for (int i = 0; i < 8 && parent != null; i++) { if (parent.Current.ControlType == ControlType.Window) { window = parent.Current.Name ?? ""; break; } parent = TreeWalker.ControlViewWalker.GetParent(parent); }
+                var parent = TreeWalker.ControlViewWalker.GetParent(element);
+                string window = "";
+                for (int i = 0; i < 8 && parent != null; i++)
+                {
+                    if (parent.Current.ControlType == ControlType.Window) { window = parent.Current.Name ?? ""; break; }
+                    parent = TreeWalker.ControlViewWalker.GetParent(parent);
+                }
                 lock (steps)
                 {
                     if (steps.Count > 0 && steps[^1].EventType == eventType && steps[^1].Name == name && steps[^1].AutomationId == id && (DateTime.Now - steps[^1].RecordedAt).TotalMilliseconds < 350) return;
