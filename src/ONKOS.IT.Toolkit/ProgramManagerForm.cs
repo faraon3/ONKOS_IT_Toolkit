@@ -27,7 +27,7 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly ModernProgressBar _progressBar = new() { Dock = DockStyle.Top, Height = 28, Value = 0 };
     private readonly Label _progressCaption = new() { Dock = DockStyle.Top, Height = 22, Text = "Listo para comenzar", TextAlign = ContentAlignment.MiddleLeft };
     private readonly Button _install = new() { Text = "INSTALAR SELECCIONADOS" };
-    private readonly Button _configure = new() { Text = "CONFIGURAR COMANDO" };
+    private readonly Button _configure = new() { Text = "GRABAR INSTALADOR" };
     private readonly Button _add = new() { Text = "+  AGREGAR PORTABLE" };
     private readonly Button _addProgram = new() { Text = "+  AGREGAR PROGRAMA" };
     private readonly Button _update = new() { Text = "⟳  ACTUALIZAR" };
@@ -244,28 +244,6 @@ internal sealed class ProgramManagerForm : UserControl
                 meta.DisplayName = name;
                 meta.Architecture = "Any";
                 meta.WingetId = "";
-
-                // Identifica instaladores conocidos y propone parámetros silenciosos.
-                var silentSuggestion = SuggestSilentCommand(destination);
-                if (silentSuggestion != null)
-                {
-                    meta.InstallMode = "silent";
-                    meta.InstallArguments = silentSuggestion.Arguments;
-                    meta.RunAsAdmin = true;
-                    _status.Text = $"Detectado: {silentSuggestion.Product} · comando silencioso sugerido.";
-                }
-                else if (Path.GetExtension(destination).Equals(".msi", StringComparison.OrdinalIgnoreCase))
-                {
-                    // MSI usa parámetros estándar de Windows Installer.
-                    meta.InstallMode = "silent";
-                    meta.InstallArguments = "/qn /norestart";
-                    meta.RunAsAdmin = true;
-                }
-                else
-                {
-                    meta.InstallMode = "normal";
-                    meta.InstallArguments = "";
-                }
                 added++;
             }
             catch (Exception ex)
@@ -282,36 +260,6 @@ internal sealed class ProgramManagerForm : UserControl
         if (errors.Count > 0) summary += "\\n\\n" + string.Join("\\n", errors.Take(8));
         MessageBox.Show(this, summary, "ONKOS · Agregar programas", MessageBoxButtons.OK,
             failed == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-    }
-
-    private sealed record SilentCommandSuggestion(string Product, string Arguments);
-
-    private static SilentCommandSuggestion? SuggestSilentCommand(string installerPath)
-    {
-        string file = Path.GetFileNameWithoutExtension(installerPath).ToLowerInvariant();
-        // Patrones por nombre de archivo: son sugerencias, no garantizan compatibilidad
-        // con todas las versiones o paquetes personalizados.
-        var catalog = new (string[] Tokens, string Product, string Args)[]
-        {
-            (new[] { "7zip", "7-zip" }, "7-Zip", "/S"),
-            (new[] { "notepad++", "notepadplusplus" }, "Notepad++", "/S"),
-            (new[] { "vlc" }, "VLC", "/S"),
-            (new[] { "winrar" }, "WinRAR", "/S"),
-            (new[] { "firefox" }, "Mozilla Firefox", "-ms"),
-            (new[] { "brave" }, "Brave", "/silent /install"),
-            (new[] { "adobereader", "adobe reader", "acrobat" }, "Adobe Acrobat Reader", "/sAll /rs /msi"),
-            (new[] { "vscode", "vs code", "visualstudiocode" }, "Visual Studio Code", "/VERYSILENT /NORESTART"),
-            (new[] { "git-" , "git for windows" }, "Git for Windows", "/VERYSILENT /NORESTART"),
-            (new[] { "node-v", "nodejs" }, "Node.js", "/quiet /norestart"),
-            (new[] { "zoom" }, "Zoom", "/quiet /norestart")
-        };
-
-        foreach (var item in catalog)
-        {
-            if (item.Tokens.Any(token => file.Contains(token, StringComparison.OrdinalIgnoreCase)))
-                return new SilentCommandSuggestion(item.Product, item.Args);
-        }
-        return null;
     }
 
     private string? AskArchitecture(string fileName)
@@ -471,56 +419,24 @@ internal sealed class ProgramManagerForm : UserControl
         }
     }
 
-    private void ConfigureSelectedInstaller()
+    private async void ConfigureSelectedInstaller()
     {
         var item = _list.SelectedItems.Cast<ListViewItem>().FirstOrDefault();
         if (item?.Tag is not string file)
         {
-            MessageBox.Show(this, "Selecciona un instalador de la lista.", "Configurar comando");
+            MessageBox.Show(this, "Selecciona un instalador de la lista.", "Grabar instalador");
             return;
         }
 
-        var meta = Meta(file);
-        using var dialog = new Form
+        _configure.Enabled = false;
+        _status.Text = "Grabando instalador: " + DisplayName(file) + " · completa el asistente.";
+        try
         {
-            Text = "Configurar instalación · " + DisplayName(file),
-            Size = new Size(620, 360),
-            StartPosition = FormStartPosition.CenterParent,
-            BackColor = Surface,
-            ForeColor = TextMain,
-            FormBorderStyle = FormBorderStyle.FixedDialog,
-            MaximizeBox = false,
-            MinimizeBox = false
-        };
-
-        var lblMode = new Label { Text = "Modo de instalación", Bounds = new Rectangle(20, 18, 190, 25), ForeColor = TextMain };
-        var mode = new ComboBox { Bounds = new Rectangle(215, 15, 365, 30), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Surface2, ForeColor = TextMain };
-        mode.Items.AddRange(new object[] { "Silenciosa", "Normal / asistida" });
-        mode.SelectedIndex = string.Equals(meta.InstallMode, "silent", StringComparison.OrdinalIgnoreCase) ? 0 : 1;
-
-        var lblArgs = new Label { Text = "Argumentos silenciosos", Bounds = new Rectangle(20, 65, 190, 25), ForeColor = TextMain };
-        var args = new TextBox { Bounds = new Rectangle(215, 62, 365, 30), Text = meta.InstallArguments ?? "", BackColor = Surface2, ForeColor = TextMain };
-        var hint = new Label
+            await RecordInstallerStepsAsync(file, Meta(file));
+        }
+        finally
         {
-            Text = "Ejemplos: EXE /S · MSI /qn /norestart · Office usa XML/ODT.\r\nLos argumentos dependen del instalador; prueba antes.",
-            Bounds = new Rectangle(215, 96, 365, 48),
-            ForeColor = TextMuted
-        };
-        var admin = new CheckBox { Text = "Ejecutar como administrador (UAC)", Bounds = new Rectangle(215, 155, 365, 28), Checked = meta.RunAsAdmin, ForeColor = TextMain };
-        var note = new Label { Text = "ONKOS ejecutará la secuencia y esperará el proceso antes de continuar. Algunos instaladores que crean procesos hijos requieren una validación especial.", Bounds = new Rectangle(215, 195, 365, 65), ForeColor = TextMuted };
-        var cancel = new Button { Text = "Cancelar", DialogResult = DialogResult.Cancel, Bounds = new Rectangle(350, 290, 105, 34) };
-        var save = new Button { Text = "Guardar configuración", DialogResult = DialogResult.OK, Bounds = new Rectangle(460, 290, 120, 34) };
-        StyleButton(cancel, true); StyleButton(save, false);
-        dialog.Controls.AddRange(new Control[] { lblMode, mode, lblArgs, args, hint, admin, note, cancel, save });
-        dialog.AcceptButton = save; dialog.CancelButton = cancel;
-
-        if (dialog.ShowDialog(this) == DialogResult.OK)
-        {
-            meta.InstallMode = mode.SelectedIndex == 0 ? "silent" : "normal";
-            meta.InstallArguments = args.Text.Trim();
-            meta.RunAsAdmin = admin.Checked;
-            SaveMetadata();
-            _status.Text = "Comando guardado para " + DisplayName(file) + ".";
+            _configure.Enabled = true;
             RefreshList();
         }
     }
@@ -622,138 +538,68 @@ internal sealed class ProgramManagerForm : UserControl
         }
     }
 
-    // Motor secuencial inspirado en WPI: ejecutar comando, esperar su finalización
-    // y continuar con el siguiente programa. No reproduce clics de UI Automation.
     private async Task InstallSelectedAsync()
     {
-        var selected = _list.Items.Cast<ListViewItem>()
-            .Where(i => i.Tag is string p && _checkedPaths.Contains(p))
-            .ToList();
-
-        if (selected.Count == 0)
-        {
-            MessageBox.Show("Marca los programas que deseas instalar con la casilla morada.");
-            return;
-        }
-
-        bool hasUnknown = selected.Any(i => i.Tag is string p &&
-            (Meta(p).Architecture == "Unknown" || Meta(p).Architecture == "ARM64"));
-
-        string confirmText = $"Se ejecutarán {selected.Count} instalador(es), uno a la vez.\n" +
-            "ONKOS esperará a que termine cada proceso antes de iniciar el siguiente." +
-            (hasUnknown ? "\n\nADVERTENCIA: hay instaladores cuya arquitectura no se pudo confirmar o que son ARM64." : "") +
-            "\n\n¿Continuar?";
-
-        if (MessageBox.Show(this, confirmText, "Instalación secuencial", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
-            return;
-
-        _add.Enabled = _addProgram.Enabled = _configure.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = false;
-        int succeeded = 0, failed = 0, completed = 0;
-        var details = new List<string>();
+        var selected = _list.Items.Cast<ListViewItem>().Where(i => i.Tag is string p && _checkedPaths.Contains(p)).ToList();
+        if (selected.Count == 0) { MessageBox.Show("Marca los programas que deseas instalar con la casilla morada."); return; }
+        bool hasUnknown = selected.Any(i => i.Tag is string p && (Meta(p).Architecture == "Unknown" || Meta(p).Architecture == "ARM64"));
+        string confirmText = $"Se ejecutarán {selected.Count} instalador(es), uno a la vez." + (hasUnknown ? "\n\nADVERTENCIA: hay instaladores cuya arquitectura no se pudo confirmar o que son ARM64. Asegúrate de que sean compatibles antes de continuar." : "") + "\n\n¿Continuar?";
+        if (MessageBox.Show(confirmText, "Instalación secuencial", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        _add.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = false; int ok = 0, failed = 0, completed = 0;
         _progressBar.Value = 0;
         _progressCaption.Text = $"Preparando instalación de {selected.Count} programa(s)...";
         _status.Text = "Ahora: —";
-
         try
         {
             foreach (var item in selected)
             {
                 string path = (string)item.Tag!;
-                string name = DisplayName(path);
-                _progressCaption.Text = $"Instalando {completed + 1}/{selected.Count}: {name}";
-                _status.Text = "Ahora: " + name;
-
+                _progressCaption.Text = $"Instalando {completed + 1} de {selected.Count}: {DisplayName(path)}";
+                _status.Text = "Ahora: " + DisplayName(path);
                 try
                 {
                     var meta = Meta(path);
-                    string mode = (meta.InstallMode ?? "normal").Trim().ToLowerInvariant();
-                    string args = meta.InstallArguments?.Trim() ?? "";
+                    string mode = meta.InstallMode ?? "normal";
+                    string args = meta.InstallArguments ?? "";
+                    string ext = Path.GetExtension(path);
                     string executable = path;
-                    bool isMsi = Path.GetExtension(path).Equals(".msi", StringComparison.OrdinalIgnoreCase);
 
-                    if (isMsi)
+                    if (ext.Equals(".msi", StringComparison.OrdinalIgnoreCase))
                     {
-                        executable = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "msiexec.exe");
-                        if (mode == "silent")
-                        {
-                            // En MSI, los argumentos custom son opciones adicionales a /i.
-                            args = "/i " + Quote(path) + (string.IsNullOrWhiteSpace(args) ? " /qn /norestart" : " " + args);
-                        }
-                        else
-                        {
-                            args = "/i " + Quote(path) + (string.IsNullOrWhiteSpace(args) ? "" : " " + args);
-                        }
+                        executable = "msiexec.exe";
+                        if (mode == "normal") args = "/i " + Quote(path);
+                        else if (mode == "silent") args = string.IsNullOrWhiteSpace(args) ? "/i " + Quote(path) + " /qn /norestart" : "/i " + Quote(path) + " " + args;
+                        else args = "/i " + Quote(path) + " " + args;
                     }
                     else if (mode == "silent" && string.IsNullOrWhiteSpace(args))
                     {
-                        // No existe un switch silencioso universal para EXE.
-                        details.Add($"{name}: sin argumentos silenciosos configurados; se abrirá instalación normal.");
+                        // EXE no tiene un parámetro silencioso universal: se evita asumir uno.
                         mode = "normal";
                     }
 
-                    var psi = new ProcessStartInfo
+                    if (!string.IsNullOrWhiteSpace(meta.RecordedStepsPath) && File.Exists(meta.RecordedStepsPath) && mode != "silent")
                     {
-                        FileName = executable,
-                        Arguments = args,
-                        UseShellExecute = true,
-                        WorkingDirectory = Path.GetDirectoryName(path) ?? AppContext.BaseDirectory
-                    };
-
-                    if (meta.RunAsAdmin)
-                        psi.Verb = "runas";
-
-                    using Process? process = Process.Start(psi);
-                    if (process == null)
-                    {
-                        failed++;
-                        details.Add($"{name}: Windows no pudo iniciar el proceso.");
+                        bool replayOk = await ReplayRecordedStepsAsync(executable, args, meta);
+                        if (replayOk) ok++; else failed++;
                     }
                     else
                     {
-                        await process.WaitForExitAsync();
-                        int exitCode = process.ExitCode;
-                        // 0 = correcto; 3010/1641 = correcto, requiere reinicio.
-                        if (exitCode == 0 || exitCode == 3010 || exitCode == 1641)
-                        {
-                            succeeded++;
-                            details.Add(exitCode == 0
-                                ? $"{name}: completado (código 0)."
-                                : $"{name}: completado; el instalador solicita reinicio (código {exitCode}).");
-                        }
-                        else
-                        {
-                            failed++;
-                            details.Add($"{name}: código de salida {exitCode}.");
-                        }
+                        var psi = new ProcessStartInfo { FileName = executable, Arguments = args, UseShellExecute = true };
+                        if (meta.RunAsAdmin) psi.Verb = "runas";
+                        using var proc = Process.Start(psi);
+                        if (proc == null) failed++;
+                        else { await Task.Run(() => proc.WaitForExit()); if (proc.ExitCode == 0) ok++; else failed++; }
                     }
                 }
-                catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
-                {
-                    failed++;
-                    details.Add($"{name}: instalación cancelada por el usuario (UAC).");
-                }
-                catch (Exception ex)
-                {
-                    failed++;
-                    details.Add($"{name}: error — {ex.Message}");
-                }
-
+                catch { failed++; }
                 completed++;
-                _progressBar.Value = Math.Min(100, (int)Math.Round(completed * 100.0 / selected.Count));
-                _progressCaption.Text = $"Progreso: {completed}/{selected.Count} ({_progressBar.Value}%)";
+                _progressBar.Value = (int)Math.Round(completed * 100.0 / selected.Count);
+                _progressCaption.Text = $"Progreso de instalación: {completed} de {selected.Count} ({_progressBar.Value}%)";
             }
         }
-        finally
-        {
-            _add.Enabled = _addProgram.Enabled = _configure.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = true;
-        }
-
+        finally { _add.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = true; }
         _progressBar.Value = 100;
-        _progressCaption.Text = $"Instalación finalizada · {succeeded} correcto(s), {failed} error(es)";
-        _status.Text = "Secuencia finalizada.";
-        string summary = string.Join(Environment.NewLine, details);
-        MessageBox.Show(this, summary, "Resultado de instalaciones", MessageBoxButtons.OK,
-            failed == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        _progressCaption.Text = $"Instalación finalizada · {ok} correcto(s), {failed} error(es)";
     }
 
     private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
