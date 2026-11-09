@@ -26,6 +26,7 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly Label _progressCaption = new() { Dock = DockStyle.Top, Height = 22, Text = "Listo para comenzar", TextAlign = ContentAlignment.MiddleLeft };
     private readonly Button _install = new() { Text = "INSTALAR SELECCIONADOS" };
     private readonly Button _add = new() { Text = "+  AGREGAR PORTABLE" };
+    private readonly Button _update = new() { Text = "⟳  ACTUALIZAR" };
     private readonly Button _remove = new() { Text = "ELIMINAR DE BIBLIOTECA" };
     private readonly Button _back = new() { Text = "‹  VOLVER AL INICIO" };
     private readonly TextBox _search = new() { Width = 300, PlaceholderText = "Buscar programa..." };
@@ -42,7 +43,7 @@ internal sealed class ProgramManagerForm : UserControl
     private static readonly Color TextMuted = Color.FromArgb(183, 174, 199);
     private static readonly Color Border = Color.FromArgb(65, 57, 82);
 
-    private sealed class ProgramMeta { public string? DisplayName { get; set; } public string? LogoPath { get; set; } public string? Architecture { get; set; } public string? GroupId { get; set; } }
+    private sealed class ProgramMeta { public string? DisplayName { get; set; } public string? LogoPath { get; set; } public string? Architecture { get; set; } public string? GroupId { get; set; } public string? WingetId { get; set; } }
 
     public ProgramManagerForm()
     {
@@ -97,20 +98,21 @@ internal sealed class ProgramManagerForm : UserControl
         _status.ForeColor = TextMuted; _status.Padding = new Padding(8, 0, 0, 0); statusPanel.Controls.Add(_status);
 
         var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = Bg, Padding = new Padding(3, 2, 3, 2) };
-        foreach (var button in new[] { _add, _remove, _install }) { button.Height = 46; button.Font = new Font("Segoe UI", 9.2F, FontStyle.Bold); }
+        foreach (var button in new[] { _add, _remove, _update, _install }) { button.Height = 46; button.Font = new Font("Segoe UI", 9.2F, FontStyle.Bold); }
         StyleButton(_add, false); StyleButton(_remove, true); StyleButton(_install, false);
         void LayoutActions()
         {
-            int w = actionBar.ClientSize.Width; int gap = 3; int third = (w - gap * 2) / 3;
-            _add.SetBounds(0, 0, third, 46); _remove.SetBounds(third + gap, 0, third, 46); _install.SetBounds((third + gap) * 2, 0, w - (third + gap) * 2, 46);
+            int w = actionBar.ClientSize.Width; int gap = 3; int each = (w - gap * 3) / 4;
+            _add.SetBounds(0, 0, each, 46); _remove.SetBounds(each + gap, 0, each, 46); _update.SetBounds((each + gap) * 2, 0, each, 46); _install.SetBounds((each + gap) * 3, 0, w - (each + gap) * 3, 46);
         }
         actionBar.Resize += (_, _) => LayoutActions(); LayoutActions();
-        actionBar.Controls.AddRange(new Control[] { _add, _remove, _install });
+        actionBar.Controls.AddRange(new Control[] { _add, _remove, _update, _install });
 
         content.Controls.Add(group);
         Controls.Add(content); Controls.Add(statusPanel); Controls.Add(actionBar); Controls.Add(header);
 
         _add.Click += (_, _) => AddInstallers();
+        _update.Click += async (_, _) => await UpdateLibraryAsync();
         _remove.Click += (_, _) => RemoveSelected();
         _install.Click += async (_, _) => await InstallSelectedAsync();
         _search.TextChanged += (_, _) => RefreshList();
@@ -253,7 +255,7 @@ internal sealed class ProgramManagerForm : UserControl
         var selected = _list.Items.Cast<ListViewItem>().Where(i => i.Tag is string p && _checkedPaths.Contains(p)).ToList();
         if (selected.Count == 0) { MessageBox.Show("Marca los programas que deseas instalar con la casilla morada."); return; }
         if (MessageBox.Show($"Se ejecutarán {selected.Count} instalador(es), uno a la vez. ¿Continuar?", "Instalación secuencial", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-        _add.Enabled = _remove.Enabled = _install.Enabled = false; int ok = 0, failed = 0, completed = 0;
+        _add.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = false; int ok = 0, failed = 0, completed = 0;
         _progressBar.Value = 0;
         _progressCaption.Text = $"Preparando instalación de {selected.Count} programa(s)...";
         _status.Text = "Ahora: —";
@@ -277,7 +279,7 @@ internal sealed class ProgramManagerForm : UserControl
                 _progressCaption.Text = $"Progreso de instalación: {completed} de {selected.Count} ({_progressBar.Value}%)";
             }
         }
-        finally { _add.Enabled = _remove.Enabled = _install.Enabled = true; }
+        finally { _add.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = true; }
         _progressBar.Value = 100;
         _progressCaption.Text = $"Instalación finalizada · {ok} correcto(s), {failed} error(es)";
         _status.Text = "Ahora: —";
