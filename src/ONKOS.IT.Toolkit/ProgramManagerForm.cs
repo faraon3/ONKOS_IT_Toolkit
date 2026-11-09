@@ -6,7 +6,8 @@ using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using System.Text.RegularExpressions;\nusing System.Windows.Automation;
+using System.Text.RegularExpressions;
+using System.Windows.Automation;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
