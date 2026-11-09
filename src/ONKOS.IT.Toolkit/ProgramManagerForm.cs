@@ -7,7 +7,6 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Windows.Automation;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -27,10 +26,8 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly ModernProgressBar _progressBar = new() { Dock = DockStyle.Top, Height = 28, Value = 0 };
     private readonly Label _progressCaption = new() { Dock = DockStyle.Top, Height = 22, Text = "Listo para comenzar", TextAlign = ContentAlignment.MiddleLeft };
     private readonly Button _install = new() { Text = "INSTALAR SELECCIONADOS" };
-    private readonly Button _configure = new() { Text = "GRABAR INSTALADOR" };
     private readonly Button _add = new() { Text = "+  AGREGAR PORTABLE" };
     private readonly Button _addProgram = new() { Text = "+  AGREGAR PROGRAMA" };
-    private readonly Button _update = new() { Text = "⟳  ACTUALIZAR" };
     private readonly Button _remove = new() { Text = "ELIMINAR DE BIBLIOTECA" };
     private readonly Button _back = new() { Text = "‹  VOLVER AL INICIO" };
     private readonly TextBox _search = new() { Width = 300, PlaceholderText = "Buscar programa..." };
@@ -47,7 +44,7 @@ internal sealed class ProgramManagerForm : UserControl
     private static readonly Color TextMuted = Color.FromArgb(183, 174, 199);
     private static readonly Color Border = Color.FromArgb(65, 57, 82);
 
-    private sealed class ProgramMeta { public string? DisplayName { get; set; } public string? LogoPath { get; set; } public string? Architecture { get; set; } public string? GroupId { get; set; } public string? WingetId { get; set; } public string? InstallMode { get; set; } public string? InstallArguments { get; set; } public bool RunAsAdmin { get; set; } = true; public string? RecordedStepsPath { get; set; } }
+    private sealed class ProgramMeta { public string? DisplayName { get; set; } public string? LogoPath { get; set; } public string? Architecture { get; set; } public string? GroupId { get; set; } public string? WingetId { get; set; } public string? InstallMode { get; set; } public string? InstallArguments { get; set; } public bool RunAsAdmin { get; set; } = true; }
 
     public ProgramManagerForm()
     {
@@ -102,23 +99,21 @@ internal sealed class ProgramManagerForm : UserControl
         _status.ForeColor = TextMuted; _status.Padding = new Padding(8, 0, 0, 0); statusPanel.Controls.Add(_status);
 
         var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = Bg, Padding = new Padding(3, 2, 3, 2) };
-        foreach (var button in new[] { _add, _addProgram, _configure, _remove, _update, _install }) { button.Height = 46; button.Font = new Font("Segoe UI", 9.2F, FontStyle.Bold); }
+        foreach (var button in new[] { _add, _addProgram, _remove, _install }) { button.Height = 46; button.Font = new Font("Segoe UI", 9.2F, FontStyle.Bold); }
         StyleButton(_add, false); StyleButton(_remove, true); StyleButton(_install, false);
         void LayoutActions()
         {
-            int w = actionBar.ClientSize.Width; int gap = 3; int each = (w - gap * 5) / 6;
-            _add.SetBounds(0, 0, each, 46); _addProgram.SetBounds(each + gap, 0, each, 46); _configure.SetBounds((each + gap) * 2, 0, each, 46); _remove.SetBounds((each + gap) * 3, 0, each, 46); _update.SetBounds((each + gap) * 4, 0, each, 46); _install.SetBounds((each + gap) * 5, 0, w - (each + gap) * 5, 46);
+            int w = actionBar.ClientSize.Width; int gap = 4; int each = (w - gap * 3) / 4;
+            _add.SetBounds(0, 0, each, 46); _addProgram.SetBounds(each + gap, 0, each, 46); _remove.SetBounds((each + gap) * 2, 0, each, 46); _install.SetBounds((each + gap) * 3, 0, w - (each + gap) * 3, 46);
         }
         actionBar.Resize += (_, _) => LayoutActions(); LayoutActions();
-        actionBar.Controls.AddRange(new Control[] { _add, _addProgram, _configure, _remove, _update, _install });
+        actionBar.Controls.AddRange(new Control[] { _add, _addProgram, _remove, _install });
 
         content.Controls.Add(group);
         Controls.Add(content); Controls.Add(statusPanel); Controls.Add(actionBar); Controls.Add(header);
 
         _add.Click += (_, _) => AddPortableFolder();
-        _configure.Click += (_, _) => ConfigureSelectedInstaller();
         _addProgram.Click += (_, _) => AddInstallers();
-        _update.Click += async (_, _) => await UpdateLibraryAsync();
         _remove.Click += (_, _) => RemoveSelected();
         _install.Click += async (_, _) => await InstallSelectedAsync();
         _search.TextChanged += (_, _) => RefreshList();
@@ -354,190 +349,6 @@ internal sealed class ProgramManagerForm : UserControl
         SaveMetadata(); RefreshList();
     }
 
-    private async Task UpdateLibraryAsync()
-    {
-        var files = Directory.GetFiles(_library, "*", SearchOption.AllDirectories).Where(f =>
-            (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) &&
-            !Path.GetFileName(f).StartsWith(".") && !string.IsNullOrWhiteSpace(Meta(f).WingetId)).ToList();
-
-        if (files.Count == 0) { MessageBox.Show(this, "No hay instaladores individuales con ID WinGet configurado.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-        if (MessageBox.Show(this, $"Se actualizarán {files.Count} instalador(es) con WinGet. Los programas agregados como carpeta no se modifican. ¿Continuar?", "Actualizar biblioteca", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-
-        _add.Enabled = _addProgram.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = false;
-        int updated = 0, failed = 0, skipped = 0, done = 0;
-        string temp = Path.Combine(Path.GetTempPath(), "ONKOS_WG_" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(temp);
-        try
-        {
-            foreach (var old in files)
-            {
-                done++;
-                string arch = Meta(old).Architecture ?? "";
-                string id = Meta(old).WingetId!.Trim();
-                if (arch != "x86" && arch != "x64" && arch != "Both") { skipped++; Progress(); continue; }
-                if (arch == "Both") arch = "x64";
-                string dir = Path.Combine(temp, done.ToString()); Directory.CreateDirectory(dir);
-                _progressCaption.Text = $"Actualizando {done}/{files.Count}: {DisplayName(old)}";
-                _status.Text = "WinGet: " + id;
-                try
-                {
-                    var psi = new ProcessStartInfo("winget", $"download --id \"{id}\" --exact --architecture {arch} --download-directory \"{dir}\" --accept-source-agreements --accept-package-agreements --skip-license --disable-interactivity")
-                    { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-                    using var proc = Process.Start(psi);
-                    if (proc == null) { failed++; Progress(); continue; }
-                    var stdout = proc.StandardOutput.ReadToEndAsync(); var stderr = proc.StandardError.ReadToEndAsync();
-                    await proc.WaitForExitAsync(); await stdout; await stderr;
-                    string ext = Path.GetExtension(old);
-                    var downloaded = Directory.GetFiles(dir, "*", SearchOption.AllDirectories)
-                        .Where(f => Path.GetExtension(f).Equals(ext, StringComparison.OrdinalIgnoreCase))
-                        .OrderByDescending(f => new FileInfo(f).Length).FirstOrDefault();
-                    if (proc.ExitCode != 0 || downloaded == null) { failed++; Progress(); continue; }
-
-                    string backup = old + ".previous";
-                    if (File.Exists(backup)) File.Delete(backup);
-                    File.Move(old, backup);
-                    try { File.Copy(downloaded, old, true); File.Delete(backup); updated++; }
-                    catch { if (File.Exists(old)) File.Delete(old); if (File.Exists(backup)) File.Move(backup, old); throw; }
-                }
-                catch (Exception ex) { failed++; _status.Text = $"Error {DisplayName(old)}: {ex.Message}"; }
-                Progress();
-            }
-        }
-        finally
-        {
-            try { Directory.Delete(temp, true); } catch { }
-            _add.Enabled = _addProgram.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = true;
-        }
-        _progressBar.Value = 100;
-        _progressCaption.Text = $"Actualizado: {updated} · Omitido: {skipped} · Error: {failed}";
-        _status.Text = "Actualización terminada."; RefreshList();
-
-        void Progress()
-        {
-            _progressBar.Value = Math.Min(100, (int)Math.Round(done * 100.0 / files.Count));
-            _progressCaption.Text = $"Progreso {done}/{files.Count} ({_progressBar.Value}%)";
-        }
-    }
-
-    private async void ConfigureSelectedInstaller()
-    {
-        var item = _list.SelectedItems.Cast<ListViewItem>().FirstOrDefault();
-        if (item?.Tag is not string file)
-        {
-            MessageBox.Show(this, "Selecciona un instalador de la lista.", "Grabar instalador");
-            return;
-        }
-
-        _configure.Enabled = false;
-        _status.Text = "Grabando instalador: " + DisplayName(file) + " · completa el asistente.";
-        try
-        {
-            await RecordInstallerStepsAsync(file, Meta(file));
-        }
-        finally
-        {
-            _configure.Enabled = true;
-            RefreshList();
-        }
-    }
-
-    private sealed class InstallerUiStep
-    {
-        public string EventType { get; set; } = "";
-        public string Name { get; set; } = "";
-        public string AutomationId { get; set; } = "";
-        public string ControlType { get; set; } = "";
-        public string ClassName { get; set; } = "";
-        public string WindowTitle { get; set; } = "";
-        public DateTime RecordedAt { get; set; }
-    }
-
-    private async Task RecordInstallerStepsAsync(string installerPath, ProgramMeta meta)
-    {
-        var steps = new List<InstallerUiStep>();
-        AutomationEventHandler invokeHandler = (sender, e) => Capture(sender, "Invoke");
-        AutomationEventHandler selectionHandler = (sender, e) => Capture(sender, "Select");
-        AutomationPropertyChangedEventHandler toggleHandler = (sender, e) => Capture(sender, "Toggle");
-
-        try
-        {
-            Automation.AddAutomationEventHandler(InvokePattern.InvokedEvent, AutomationElement.RootElement, TreeScope.Descendants, invokeHandler);
-            Automation.AddAutomationEventHandler(SelectionItemPattern.ElementSelectedEvent, AutomationElement.RootElement, TreeScope.Descendants, selectionHandler);
-            Automation.AddAutomationPropertyChangedEventHandler(AutomationElement.RootElement, TreeScope.Descendants, toggleHandler, TogglePattern.ToggleStateProperty);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, "No se pudo iniciar la grabación UI Automation.\r\n" + ex.Message, "Grabar instalador", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        Process? installer = null;
-        try
-        {
-            var psi = new ProcessStartInfo(installerPath) { UseShellExecute = true };
-            if (meta.RunAsAdmin) psi.Verb = "runas";
-            installer = Process.Start(psi);
-            if (installer == null)
-            {
-                MessageBox.Show(this, "Windows no pudo iniciar el instalador.", "Grabar instalador");
-                return;
-            }
-
-            _status.Text = "GRABANDO: " + DisplayName(installerPath) + " · no cierres ONKOS hasta terminar.";
-            await Task.Run(() => installer.WaitForExit());
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, "No se pudo iniciar/esperar el instalador: " + ex.Message, "Grabar instalador", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        finally
-        {
-            try { Automation.RemoveAutomationEventHandler(InvokePattern.InvokedEvent, AutomationElement.RootElement, invokeHandler); } catch { }
-            try { Automation.RemoveAutomationEventHandler(SelectionItemPattern.ElementSelectedEvent, AutomationElement.RootElement, selectionHandler); } catch { }
-            try { Automation.RemoveAutomationPropertyChangedEventHandler(AutomationElement.RootElement, toggleHandler); } catch { }
-            installer?.Dispose();
-        }
-
-        if (steps.Count == 0)
-        {
-            _status.Text = "Instalador finalizado; no se detectaron acciones UI Automation.";
-            MessageBox.Show(this, "No se detectaron acciones UI Automation. No se guardó ningún perfil.", "Grabar instalador", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-
-        string profiles = Path.Combine(AppContext.BaseDirectory, "Data", "Programs", ".profiles");
-        Directory.CreateDirectory(profiles);
-        string profilePath = Path.Combine(profiles, Guid.NewGuid().ToString("N") + ".json");
-        File.WriteAllText(profilePath, JsonSerializer.Serialize(steps, new JsonSerializerOptions { WriteIndented = true }));
-        meta.RecordedStepsPath = profilePath;
-        SaveMetadata();
-        _status.Text = $"Grabación finalizada: {steps.Count} acciones registradas.";
-        MessageBox.Show(this, $"Se guardaron {steps.Count} acciones UI Automation.\r\nNota: el perfil registra eventos; todavía no reproduce automáticamente los pasos.", "Grabación finalizada", MessageBoxButtons.OK, MessageBoxIcon.Information);
-
-        void Capture(object? sender, string eventType)
-        {
-            try
-            {
-                if (sender is not AutomationElement element) return;
-                string name = element.Current.Name ?? "", id = element.Current.AutomationId ?? "", type = element.Current.ControlType?.ProgrammaticName ?? "", cls = element.Current.ClassName ?? "";
-                var parent = TreeWalker.ControlViewWalker.GetParent(element);
-                string window = "";
-                for (int i = 0; i < 8 && parent != null; i++)
-                {
-                    if (parent.Current.ControlType == ControlType.Window) { window = parent.Current.Name ?? ""; break; }
-                    parent = TreeWalker.ControlViewWalker.GetParent(parent);
-                }
-                lock (steps)
-                {
-                    if (steps.Count > 0 && steps[^1].EventType == eventType && steps[^1].Name == name && steps[^1].AutomationId == id && (DateTime.Now - steps[^1].RecordedAt).TotalMilliseconds < 350) return;
-                    steps.Add(new InstallerUiStep { EventType = eventType, Name = name, AutomationId = id, ControlType = type, ClassName = cls, WindowTitle = window, RecordedAt = DateTime.Now });
-                }
-            }
-            catch { }
-        }
-    }
-
     private async Task InstallSelectedAsync()
     {
         var selected = _list.Items.Cast<ListViewItem>().Where(i => i.Tag is string p && _checkedPaths.Contains(p)).ToList();
@@ -545,7 +356,7 @@ internal sealed class ProgramManagerForm : UserControl
         bool hasUnknown = selected.Any(i => i.Tag is string p && (Meta(p).Architecture == "Unknown" || Meta(p).Architecture == "ARM64"));
         string confirmText = $"Se ejecutarán {selected.Count} instalador(es), uno a la vez." + (hasUnknown ? "\n\nADVERTENCIA: hay instaladores cuya arquitectura no se pudo confirmar o que son ARM64. Asegúrate de que sean compatibles antes de continuar." : "") + "\n\n¿Continuar?";
         if (MessageBox.Show(confirmText, "Instalación secuencial", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-        _add.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = false; int ok = 0, failed = 0, completed = 0;
+        _add.Enabled = _remove.Enabled = _install.Enabled = false; int ok = 0, failed = 0, completed = 0;
         _progressBar.Value = 0;
         _progressCaption.Text = $"Preparando instalación de {selected.Count} programa(s)...";
         _status.Text = "Ahora: —";
@@ -577,19 +388,11 @@ internal sealed class ProgramManagerForm : UserControl
                         mode = "normal";
                     }
 
-                    if (!string.IsNullOrWhiteSpace(meta.RecordedStepsPath) && File.Exists(meta.RecordedStepsPath) && mode != "silent")
-                    {
-                        bool replayOk = await ReplayRecordedStepsAsync(executable, args, meta);
-                        if (replayOk) ok++; else failed++;
-                    }
-                    else
-                    {
-                        var psi = new ProcessStartInfo { FileName = executable, Arguments = args, UseShellExecute = true };
-                        if (meta.RunAsAdmin) psi.Verb = "runas";
-                        using var proc = Process.Start(psi);
-                        if (proc == null) failed++;
-                        else { await Task.Run(() => proc.WaitForExit()); if (proc.ExitCode == 0) ok++; else failed++; }
-                    }
+                    var psi = new ProcessStartInfo { FileName = executable, Arguments = args, UseShellExecute = true };
+                    if (meta.RunAsAdmin) psi.Verb = "runas";
+                    using var proc = Process.Start(psi);
+                    if (proc == null) failed++;
+                    else { await Task.Run(() => proc.WaitForExit()); if (proc.ExitCode == 0) ok++; else failed++; }
                 }
                 catch { failed++; }
                 completed++;
@@ -597,83 +400,12 @@ internal sealed class ProgramManagerForm : UserControl
                 _progressCaption.Text = $"Progreso de instalación: {completed} de {selected.Count} ({_progressBar.Value}%)";
             }
         }
-        finally { _add.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = true; }
+        finally { _add.Enabled = _remove.Enabled = _install.Enabled = true; }
         _progressBar.Value = 100;
         _progressCaption.Text = $"Instalación finalizada · {ok} correcto(s), {failed} error(es)";
     }
 
     private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
-
-    private async Task<bool> ReplayRecordedStepsAsync(string installerPath, string arguments, ProgramMeta meta)
-    {
-        List<InstallerUiStep> steps;
-        try { steps = JsonSerializer.Deserialize<List<InstallerUiStep>>(File.ReadAllText(meta.RecordedStepsPath!)) ?? new(); }
-        catch (Exception ex) { MessageBox.Show(this, "No se pudo leer el perfil grabado: " + ex.Message, "ONKOS · Reproducción", MessageBoxButtons.OK, MessageBoxIcon.Error); return false; }
-        if (steps.Count == 0) return false;
-
-        try
-        {
-            var psi = new ProcessStartInfo { FileName = installerPath, Arguments = arguments, UseShellExecute = true };
-            if (meta.RunAsAdmin) psi.Verb = "runas";
-            using var process = Process.Start(psi);
-            if (process == null) return false;
-            _status.Text = "Reproduciendo perfil: " + DisplayName(installerPath);
-            await Task.Delay(1800);
-            int executed = 0, missed = 0;
-            foreach (var step in steps)
-            {
-                await Task.Delay(650);
-                var target = FindRecordedElement(step);
-                if (target == null) { missed++; continue; }
-                try
-                {
-                    if (step.EventType == "Invoke" && target.TryGetCurrentPattern(InvokePattern.Pattern, out object invoke)) ((InvokePattern)invoke).Invoke();
-                    else if (step.EventType == "Select" && target.TryGetCurrentPattern(SelectionItemPattern.Pattern, out object select)) ((SelectionItemPattern)select).Select();
-                    else if (step.EventType == "Toggle" && target.TryGetCurrentPattern(TogglePattern.Pattern, out object toggle)) ((TogglePattern)toggle).Toggle();
-                    else { missed++; continue; }
-                    executed++;
-                }
-                catch { missed++; }
-            }
-            try { await Task.Run(() => process.WaitForExit()); } catch { }
-            _status.Text = $"Perfil ejecutado: {executed} acción(es), {missed} no encontradas.";
-            if (missed > 0) MessageBox.Show(this, $"Acciones ejecutadas: {executed}. No encontradas/no compatibles: {missed}.\r\nVerifica el resultado del instalador.", "ONKOS · Reproducción", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return executed > 0 && missed == 0;
-        }
-        catch (Exception ex) { MessageBox.Show(this, "No se pudo reproducir: " + ex.Message, "ONKOS · Reproducción", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
-    }
-
-    private static AutomationElement? FindRecordedElement(InstallerUiStep step)
-    {
-        try
-        {
-            var all = AutomationElement.RootElement.FindAll(TreeScope.Descendants, Condition.TrueCondition);
-            AutomationElement? fallback = null;
-            foreach (AutomationElement element in all)
-            {
-                try
-                {
-                    var current = element.Current;
-                    if (!string.IsNullOrWhiteSpace(step.WindowTitle))
-                    {
-                        string windowName = "";
-                        var parent = TreeWalker.ControlViewWalker.GetParent(element);
-                        for (int depth = 0; depth < 10 && parent != null; depth++)
-                        {
-                            if (parent.Current.ControlType == ControlType.Window) { windowName = parent.Current.Name ?? ""; break; }
-                            parent = TreeWalker.ControlViewWalker.GetParent(parent);
-                        }
-                        if (!windowName.Equals(step.WindowTitle, StringComparison.OrdinalIgnoreCase)) continue;
-                    }
-                    if (!string.IsNullOrWhiteSpace(step.AutomationId) && current.AutomationId.Equals(step.AutomationId, StringComparison.OrdinalIgnoreCase) && (string.IsNullOrWhiteSpace(step.ControlType) || current.ControlType?.ProgrammaticName == step.ControlType)) return element;
-                    if (fallback == null && !string.IsNullOrWhiteSpace(step.Name) && current.Name.Equals(step.Name, StringComparison.OrdinalIgnoreCase) && (string.IsNullOrWhiteSpace(step.ControlType) || current.ControlType?.ProgrammaticName == step.ControlType)) fallback = element;
-                }
-                catch { }
-            }
-            return fallback;
-        }
-        catch { return null; }
-    }
 
     private void RefreshList()
     {
