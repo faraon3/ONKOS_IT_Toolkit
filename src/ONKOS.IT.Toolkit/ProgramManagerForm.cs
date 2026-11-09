@@ -224,10 +224,23 @@ internal sealed class ProgramManagerForm : UserControl
         {
             string name = Path.GetFileNameWithoutExtension(source);
             string arch = DetectInstallerArchitecture(source);
+            string normalizedName = NormalizeProgramName(name);
             string groupId = Guid.NewGuid().ToString("N");
             string destination = Path.Combine(_library, groupId + "_" + arch + Path.GetExtension(source));
             try
             {
+                // Reemplazar versión previa del mismo programa y arquitectura.
+                foreach (string existing in Directory.GetFiles(_library)
+                    .Where(f => (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
+                                 Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) &&
+                                string.Equals(NormalizeProgramName(DisplayName(f)), normalizedName, StringComparison.OrdinalIgnoreCase) &&
+                                string.Equals(Meta(f).Architecture, arch, StringComparison.OrdinalIgnoreCase))
+                    .ToList())
+                {
+                    try { File.Delete(existing); } catch { }
+                    _metadata.Remove(existing);
+                }
+
                 File.Copy(source, destination);
                 var meta = Meta(destination);
                 meta.DisplayName = name;
@@ -461,11 +474,11 @@ internal sealed class ProgramManagerForm : UserControl
     {
         string normalized = Regex.Replace(name,
             @"(?i)(?:[-_. ]?(?:x86_64|x64|amd64|win64|64-bit|64bit|x86|win32|32-bit|32bit))", " ");
+        // Eliminar versiones para reconocer distintas releases del mismo programa.
+        normalized = Regex.Replace(normalized,
+            @"(?i)(?:^|[\\s._-])v?\\d+(?:\\.\\d+){1,4}(?:[-+][a-z0-9.-]+)?(?=$|[\\s._-])", " ");
         normalized = Regex.Replace(normalized, @"[^a-zA-Z0-9]+", " ").Trim();
-        return Regex.Replace(normalized, @"\s+", " ");
-    }
-
- se ocultan automáticamente.";
+        return Regex.Replace(normalized, @"\\s+", " ");
     }
 
     private GroupBox MakeGroup(string title) => new() { Text = title, ForeColor = Color.FromArgb(210, 197, 235), BackColor = Surface, Padding = new Padding(10), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), Margin = new Padding(0, 0, 0, 10), FlatStyle = FlatStyle.Flat };
