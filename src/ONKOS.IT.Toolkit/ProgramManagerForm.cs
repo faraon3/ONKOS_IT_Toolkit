@@ -287,7 +287,7 @@ internal sealed class ProgramManagerForm : UserControl
     {
         _list.BeginUpdate(); _list.Items.Clear(); _images.Images.Clear();
         string query = _search.Text.Trim();
-        var installers = Directory.GetFiles(_library).Where(f => (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) && !Path.GetFileName(f).StartsWith(".") && Path.GetFileName(f).Contains(query, StringComparison.OrdinalIgnoreCase));
+        var installers = Directory.GetFiles(_library).Where(f => (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) && !Path.GetFileName(f).StartsWith("."));
         var groups = installers.GroupBy(f => Meta(f).GroupId ?? Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
         foreach (var grp in groups)
         {
@@ -302,7 +302,7 @@ internal sealed class ProgramManagerForm : UserControl
             _list.Items.Add(item);
         }
         _list.EndUpdate(); _list.Invalidate();
-        _status.Text = $"{_list.Items.Count} programa(s) en biblioteca. Marca las casillas para instalar.";
+        _status.Text = $"{_list.Items.Count} programa(s) compatibles con {_architectureLabel}. Los incompatibles se ocultan automáticamente.";
     }
 
     private GroupBox MakeGroup(string title) => new() { Text = title, ForeColor = Color.FromArgb(210, 197, 235), BackColor = Surface, Padding = new Padding(10), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), Margin = new Padding(0, 0, 0, 10), FlatStyle = FlatStyle.Flat };
