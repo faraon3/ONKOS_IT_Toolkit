@@ -577,9 +577,6 @@ internal sealed class BackupForm : UserControl
         try { rows = ParseCsv(File.ReadAllText(manifestPath, Encoding.UTF8)); }
         catch (Exception ex) { MessageBox.Show(this, "No se pudo leer el manifiesto: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
 
-        // Las rutas "Destino" del manifiesto son absolutas y pueden apuntar a otra
-        // unidad (por ejemplo D:\\BK), aunque el usuario haya movido el backup a E:\\BK.
-        // Reconstruir siempre el origen del archivo respaldado desde la carpeta elegida.
         var files = rows.Skip(1)
             .Where(r => r.Length >= 4 && string.Equals(r[0], "COPIADO", StringComparison.OrdinalIgnoreCase))
             .Select(r =>
@@ -601,8 +598,64 @@ internal sealed class BackupForm : UserControl
             return;
         }
 
+        // Detectar los perfiles Windows de origen incluidos en las rutas del manifiesto.
+        var oldProfiles = files.Select(x => GetWindowsProfileRoot(x.OriginalFile))
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+
+        var profileMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string currentProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+
+        if (oldProfiles.Count > 0)
+        {
+            using var mapping = new Form
+            {
+                Text = "Destino de restauración — perfiles de usuario",
+                StartPosition = FormStartPosition.CenterParent,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false, MinimizeBox = false,
+                ClientSize = new Size(700, Math.Min(180 + oldProfiles.Count * 76, 520)),
+                BackColor = Bg, ForeColor = TextMain, Font = new Font("Segoe UI", 9.5F)
+            };
+            var intro = new Label
+            {
+                Text = "El backup contiene carpetas de otro usuario. Selecciona dónde restaurar cada perfil para evitar crear carpetas con el nombre del usuario antiguo.",
+                Location = new Point(14, 12), Size = new Size(670, 42), ForeColor = TextMain
+            };
+            mapping.Controls.Add(intro);
+            var rowsPanel = new Panel { Location = new Point(12, 58), Size = new Size(676, oldProfiles.Count * 76), AutoScroll = true, BackColor = Bg };
+            mapping.Controls.Add(rowsPanel);
+            int y = 0;
+            foreach (string oldProfile in oldProfiles)
+            {
+                var label = new Label { Text = "Perfil original: " + oldProfile, Location = new Point(4, y), Size = new Size(650, 22), ForeColor = TextMuted };
+                var target = new TextBox { Text = currentProfile, Location = new Point(4, y + 25), Size = new Size(545, 28), BackColor = Surface2, ForeColor = TextMain, BorderStyle = BorderStyle.FixedSingle };
+                var browse = new Button { Text = "Examinar…", Location = new Point(555, y + 23), Size = new Size(105, 30), BackColor = Surface2, ForeColor = TextMain, FlatStyle = FlatStyle.Flat };
+                browse.Click += (_, _) =>
+                {
+                    using var folder = new FolderBrowserDialog { Description = "Selecciona la carpeta del perfil de usuario destino (por ejemplo C:\\Users\\Paula Andrea).", SelectedPath = Directory.Exists(target.Text) ? target.Text : currentProfile };
+                    if (folder.ShowDialog(mapping) == DialogResult.OK) target.Text = folder.SelectedPath;
+                };
+                rowsPanel.Controls.Add(label); rowsPanel.Controls.Add(target); rowsPanel.Controls.Add(browse);
+                profileMap[oldProfile] = target.Text;
+                target.TextChanged += (_, _) => profileMap[oldProfile] = target.Text.Trim();
+                y += 76;
+            }
+            var note = new Label { Text = "Se conservará la estructura interna (Documentos, Escritorio, OneDrive, etc.). Las rutas fuera de C:\\Users\\… no se modificarán.", Location = new Point(14, rowsPanel.Bottom + 4), Size = new Size(670, 34), ForeColor = TextMuted };
+            mapping.Controls.Add(note);
+            var ok = new Button { Text = "CONTINUAR", DialogResult = DialogResult.OK, Location = new Point(460, mapping.ClientSize.Height - 42), Size = new Size(105, 32), BackColor = Purple, ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
+            var cancel = new Button { Text = "CANCELAR", DialogResult = DialogResult.Cancel, Location = new Point(575, mapping.ClientSize.Height - 42), Size = new Size(105, 32), BackColor = Surface2, ForeColor = TextMain, FlatStyle = FlatStyle.Flat };
+            mapping.Controls.Add(ok); mapping.Controls.Add(cancel); mapping.AcceptButton = ok; mapping.CancelButton = cancel;
+            if (mapping.ShowDialog(this) != DialogResult.OK) return;
+            if (profileMap.Any(kv => string.IsNullOrWhiteSpace(kv.Value) || !Directory.Exists(kv.Value)))
+            {
+                MessageBox.Show(this, "Selecciona una carpeta de usuario destino válida para cada perfil.", "Destino inválido", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+        }
+
         var overwriteChoice = MessageBox.Show(this,
-            $"Se encontraron {files.Count:N0} archivos respaldados.\n\n¿Deseas reemplazar archivos que ya existan en las rutas originales?\n\nSí = reemplazar\nNo = conservar los existentes y omitirlos",
+            $"Se encontraron {files.Count:N0} archivos respaldados.\n\n¿Deseas reemplazar archivos que ya existan en el destino seleccionado?\n\nSí = reemplazar\nNo = conservar los existentes y omitirlos",
             "Confirmar restauración", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
         if (overwriteChoice == DialogResult.Cancel) return;
         bool overwrite = overwriteChoice == DialogResult.Yes;
@@ -610,7 +663,9 @@ internal sealed class BackupForm : UserControl
         _busy = true; _run.Enabled = false; _log.Clear();
         SetProgress(0, files.Count, "Preparando restauración…", "Leyendo manifiesto");
         int restored = 0, skipped = 0, errors = 0;
-        var report = new List<string> { "INFORME DE RESTAURACIÓN ONKOS", $"Fecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss}", $"Backup: {backupRoot}", "" };
+        var report = new List<string> { "INFORME DE RESTAURACIÓN ONKOS", $"Fecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss}", $"Backup: {backupRoot}", "MAPEO DE PERFILES:" };
+        foreach (var map in profileMap) report.Add($"  {map.Key} => {map.Value}");
+        report.Add("");
         try
         {
             await Task.Run(() =>
@@ -618,7 +673,8 @@ internal sealed class BackupForm : UserControl
                 for (int i = 0; i < files.Count; i++)
                 {
                     var item = files[i];
-                    string source = item.BackupFile, target = item.OriginalFile;
+                    string source = item.BackupFile;
+                    string target = RemapProfilePath(item.OriginalFile, profileMap);
                     try
                     {
                         if (!File.Exists(source)) throw new FileNotFoundException("No se encuentra el archivo dentro del respaldo.", source);
@@ -662,6 +718,33 @@ internal sealed class BackupForm : UserControl
             MessageBox.Show(this, ex.Message, "Error restaurando", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { _busy = false; _run.Enabled = true; }
+    }
+
+    private static string? GetWindowsProfileRoot(string path)
+    {
+        try
+        {
+            string full = Path.GetFullPath(path);
+            string usersRoot = Path.Combine(Path.GetPathRoot(full) ?? "C:\\", "Users");
+            if (!full.StartsWith(usersRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return null;
+            string remainder = full.Substring(usersRoot.Length + 1);
+            int separator = remainder.IndexOf(Path.DirectorySeparatorChar);
+            if (separator <= 0) return null;
+            return Path.Combine(usersRoot, remainder.Substring(0, separator));
+        }
+        catch { return null; }
+    }
+
+    private static string RemapProfilePath(string originalPath, Dictionary<string, string> profileMap)
+    {
+        foreach (var map in profileMap)
+        {
+            string oldRoot = map.Key.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (originalPath.Equals(oldRoot, StringComparison.OrdinalIgnoreCase)) return map.Value;
+            if (originalPath.StartsWith(oldRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                return Path.Combine(map.Value, originalPath.Substring(oldRoot.Length + 1));
+        }
+        return originalPath;
     }
 
     private static List<string[]> ParseCsv(string csv)
