@@ -209,37 +209,72 @@ internal sealed class ProgramManagerForm : UserControl
 
     private void AddInstallers()
     {
-        using var dialog = new Form { Text = "Agregar programa a la biblioteca", Size = new Size(540, 330), StartPosition = FormStartPosition.CenterParent, BackColor = Surface, ForeColor = TextMain, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
-        var nameLabel = new Label { Text = "Nombre del programa:", Bounds = new Rectangle(18, 15, 180, 22), ForeColor = TextMuted };
-        var nameBox = new TextBox { Bounds = new Rectangle(18, 38, 480, 28), BackColor = Surface2, ForeColor = TextMain };
-        var x86Label = new Label { Text = "Instalador Windows 32 bits (opcional):", Bounds = new Rectangle(18, 75, 300, 22), ForeColor = TextMuted };
-        var x86Box = new TextBox { Bounds = new Rectangle(18, 98, 390, 27), ReadOnly = true, BackColor = Surface2, ForeColor = TextMain };
-        var x86Browse = new Button { Text = "Examinar", Bounds = new Rectangle(414, 98, 84, 27) }; StyleButton(x86Browse, true);
-        var x64Label = new Label { Text = "Instalador Windows 64 bits (opcional):", Bounds = new Rectangle(18, 135, 300, 22), ForeColor = TextMuted };
-        var x64Box = new TextBox { Bounds = new Rectangle(18, 158, 390, 27), ReadOnly = true, BackColor = Surface2, ForeColor = TextMain };
-        var x64Browse = new Button { Text = "Examinar", Bounds = new Rectangle(414, 158, 84, 27) }; StyleButton(x64Browse, true);
-        string? x86File = null, x64File = null;
-        void Pick(bool is64) { using var ofd = new OpenFileDialog { Filter = "Instaladores (*.exe;*.msi)|*.exe;*.msi" }; if (ofd.ShowDialog(dialog) == DialogResult.OK) { if (is64) { x64File = ofd.FileName; x64Box.Text = Path.GetFileName(x64File); } else { x86File = ofd.FileName; x86Box.Text = Path.GetFileName(x86File); } if (string.IsNullOrWhiteSpace(nameBox.Text)) nameBox.Text = Path.GetFileNameWithoutExtension(ofd.FileName); } }
-        x86Browse.Click += (_, _) => Pick(false); x64Browse.Click += (_, _) => Pick(true);
-        var wingetLabel = new Label { Text = "ID WinGet (opcional, para actualización automática):", Bounds = new Rectangle(18, 195, 420, 22), ForeColor = TextMuted };
-        var wingetBox = new TextBox { Bounds = new Rectangle(18, 218, 480, 27), BackColor = Surface2, ForeColor = TextMain };
-        var okButton = new Button { Text = "Guardar programa", Bounds = new Rectangle(350, 255, 148, 32), DialogResult = DialogResult.OK }; StyleButton(okButton, false);
-        dialog.Controls.AddRange(new Control[] { nameLabel, nameBox, x86Label, x86Box, x86Browse, x64Label, x64Box, x64Browse, wingetLabel, wingetBox, okButton }); dialog.AcceptButton = okButton;
-        if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        if (string.IsNullOrWhiteSpace(nameBox.Text) || (x86File == null && x64File == null)) { MessageBox.Show("Indica el nombre y al menos un instalador."); return; }
-        string groupId = Guid.NewGuid().ToString("N"); int added = 0;
-        foreach (var pair in new[] { (source: x86File, arch: "x86"), (source: x64File, arch: "x64") })
+        using var ofd = new OpenFileDialog
         {
-            if (pair.source == null) continue;
-            try
-            {
-                string ext = Path.GetExtension(pair.source); string destination = Path.Combine(_library, groupId + "_" + pair.arch + ext);
-                File.Copy(pair.source, destination);
-                var meta = Meta(destination); meta.DisplayName = nameBox.Text.Trim(); meta.Architecture = pair.arch; meta.GroupId = groupId; meta.WingetId = wingetBox.Text.Trim(); added++;
-            }
-            catch (Exception ex) { MessageBox.Show(this, $"Error copiando instalador: {ex.Message}", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+            Title = "Selecciona el instalador que deseas agregar",
+            Filter = "Instaladores (*.exe;*.msi)|*.exe;*.msi",
+            Multiselect = false
+        };
+        if (ofd.ShowDialog(this) != DialogResult.OK) return;
+
+        string source = ofd.FileName;
+        string name = Path.GetFileNameWithoutExtension(source);
+        string arch = DetectInstallerArchitecture(source);
+        string groupId = Guid.NewGuid().ToString("N");
+        string destination = Path.Combine(_library, groupId + "_" + arch + Path.GetExtension(source));
+
+        try
+        {
+            File.Copy(source, destination);
+            var meta = Meta(destination);
+            meta.DisplayName = name;
+            meta.Architecture = arch;
+            meta.GroupId = groupId;
+            meta.WingetId = "";
+            SaveMetadata();
+            _status.Text = $"Agregado: {name} ({arch})";
+            RefreshList();
+            MessageBox.Show(this, $"Programa agregado automáticamente.\n\nNombre: {name}\nArquitectura detectada: {arch}\n\nSi el instalador es un asistente universal (compatible con x86 y x64), verifica la arquitectura detectada.", "ONKOS · Programa agregado", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
-        SaveMetadata(); _status.Text = $"Agregado(s) {added} instalador(es) para {nameBox.Text.Trim()}."; RefreshList();
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"No se pudo copiar el instalador: {ex.Message}", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private static string DetectInstallerArchitecture(string file)
+    {
+        // Los EXE se inspeccionan por su cabecera PE. MSI usa pistas del nombre;
+        // cuando no es concluyente se registra como x86, compatible con Windows x64.
+        try
+        {
+            if (Path.GetExtension(file).Equals(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                using var stream = File.OpenRead(file);
+                using var reader = new BinaryReader(stream);
+                if (stream.Length >= 64 && reader.ReadUInt16() == 0x5A4D)
+                {
+                    stream.Position = 0x3C;
+                    int peOffset = reader.ReadInt32();
+                    if (peOffset > 0 && peOffset + 6 <= stream.Length)
+                    {
+                        stream.Position = peOffset;
+                        if (reader.ReadUInt32() == 0x00004550)
+                        {
+                            ushort machine = reader.ReadUInt16();
+                            if (machine == 0x8664 || machine == 0xAA64) return "x64";
+                            if (machine == 0x014c) return "x86";
+                        }
+                    }
+                }
+            }
+        }
+        catch { }
+
+        string lower = Path.GetFileName(file).ToLowerInvariant();
+        if (lower.Contains("x64") || lower.Contains("amd64") || lower.Contains("64bit") || lower.Contains("64-bit")) return "x64";
+        if (lower.Contains("x86") || lower.Contains("32bit") || lower.Contains("32-bit")) return "x86";
+        return "x86";
     }
 
     private void RenameProgram(ListViewItem selectedItem)
@@ -391,7 +426,7 @@ internal sealed class ProgramManagerForm : UserControl
         var groups = installers.GroupBy(f => Meta(f).GroupId ?? Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
         foreach (var grp in groups)
         {
-            string? compatible = grp.FirstOrDefault(f => string.Equals(Meta(f).Architecture, _isWindows64 ? "x64" : "x86", StringComparison.OrdinalIgnoreCase));
+            string? compatible = grp.FirstOrDefault(f => string.Equals(Meta(f).Architecture, _isWindows64 ? "x64" : "x86", StringComparison.OrdinalIgnoreCase) || (_isWindows64 && string.Equals(Meta(f).Architecture, "x86", StringComparison.OrdinalIgnoreCase)));
             // Legacy single installer: architecture must be explicitly registered or presumed compatible for old entries.
             if (compatible == null && grp.Count() == 1 && string.IsNullOrWhiteSpace(Meta(grp.First()).Architecture)) compatible = grp.First();
             if (compatible == null) continue;
