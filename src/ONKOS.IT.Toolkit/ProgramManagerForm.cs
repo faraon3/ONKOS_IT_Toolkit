@@ -25,7 +25,7 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly ModernProgressBar _progressBar = new() { Dock = DockStyle.Top, Height = 28, Value = 0 };
     private readonly Label _progressCaption = new() { Dock = DockStyle.Top, Height = 22, Text = "Listo para comenzar", TextAlign = ContentAlignment.MiddleLeft };
     private readonly Button _install = new() { Text = "INSTALAR SELECCIONADOS" };
-    private readonly Button _add = new() { Text = "+  AGREGAR INSTALADOR" };
+    private readonly Button _add = new() { Text = "+  AGREGAR PORTABLE" };
     private readonly Button _remove = new() { Text = "ELIMINAR DE BIBLIOTECA" };
     private readonly Button _back = new() { Text = "‹  VOLVER AL INICIO" };
     private readonly TextBox _search = new() { Width = 300, PlaceholderText = "Buscar programa..." };
