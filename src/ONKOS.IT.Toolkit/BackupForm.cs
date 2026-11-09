@@ -600,6 +600,7 @@ internal sealed class BackupForm : UserControl
 
         // Detectar los perfiles Windows de origen incluidos en las rutas del manifiesto.
         var oldProfiles = files.Select(x => GetWindowsProfileRoot(x.OriginalFile))
+            .OfType<string>()
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
