@@ -131,7 +131,13 @@ internal sealed class ProgramManagerForm : UserControl
         using var pathCb = RoundedRect(cb, 4); g.FillPath(cbFill, pathCb); g.DrawPath(cbPen, pathCb);
         if (checkedItem) { using var tick = new Pen(Color.White, 2F); g.DrawLines(tick, new[] { new Point(cb.X + 3, cb.Y + 9), new Point(cb.X + 7, cb.Y + 13), new Point(cb.X + 14, cb.Y + 4) }); }
         int imageIndex = e.Item.ImageIndex;
-        if (imageIndex >= 0 && imageIndex < _images.Images.Count)\n        {\n            // Icono centrado verticalmente y separado de la línea divisoria de cada fila.\n            const int logoSize = 36;\n            int logoY = e.Bounds.Top + (e.Bounds.Height - logoSize) / 2;\n            g.DrawImage(_images.Images[imageIndex], e.Bounds.Left + 44, logoY, logoSize, logoSize);\n        }
+        if (imageIndex >= 0 && imageIndex < _images.Images.Count)
+        {
+            // Icono centrado verticalmente y separado de la línea divisoria de cada fila.
+            const int logoSize = 36;
+            int logoY = e.Bounds.Top + (e.Bounds.Height - logoSize) / 2;
+            g.DrawImage(_images.Images[imageIndex], e.Bounds.Left + 44, logoY, logoSize, logoSize);
+        }
         TextRenderer.DrawText(g, e.Item.Text, new Font("Segoe UI", 10F, FontStyle.Bold), new Rectangle(e.Bounds.Left + 92, e.Bounds.Top + 2, e.Bounds.Width - 104, e.Bounds.Height - 4), TextMain, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 
