@@ -17,6 +17,8 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly string _library = Path.Combine(AppContext.BaseDirectory, "Data", "Programs");
     private readonly string _logos = Path.Combine(AppContext.BaseDirectory, "Data", "Programs", ".logos");
     private readonly string _metadataPath = Path.Combine(AppContext.BaseDirectory, "Data", "Programs", "programs.json");
+    private readonly bool _isWindows64 = Environment.Is64BitOperatingSystem;
+    private readonly string _architectureLabel = Environment.Is64BitOperatingSystem ? "Windows 64 bits (x64)" : "Windows 32 bits (x86)";
     private readonly ListView _list = new() { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, MultiSelect = true, GridLines = false, CheckBoxes = false, BorderStyle = BorderStyle.None, OwnerDraw = true, HideSelection = false };
     private readonly ImageList _images = new() { ImageSize = new Size(44, 44), ColorDepth = ColorDepth.Depth32Bit };
     private readonly Label _status = new() { Dock = DockStyle.Bottom, Height = 25, TextAlign = ContentAlignment.MiddleLeft };
@@ -40,7 +42,7 @@ internal sealed class ProgramManagerForm : UserControl
     private static readonly Color TextMuted = Color.FromArgb(183, 174, 199);
     private static readonly Color Border = Color.FromArgb(65, 57, 82);
 
-    private sealed class ProgramMeta { public string? DisplayName { get; set; } public string? LogoPath { get; set; } }
+    private sealed class ProgramMeta { public string? DisplayName { get; set; } public string? LogoPath { get; set; } public string? Architecture { get; set; } public string? GroupId { get; set; } }
 
     public ProgramManagerForm()
     {
@@ -54,7 +56,7 @@ internal sealed class ProgramManagerForm : UserControl
         header.Controls.Add(new Label { Text = "Biblioteca local de instaladores · Clínica ONKOS", ForeColor = Color.FromArgb(235, 225, 250), AutoSize = true, Location = new Point(25, 66) });
 
         var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), BackColor = Bg };
-        var group = MakeGroup("01  ·  Biblioteca de programas"); group.Dock = DockStyle.Fill;
+        var group = MakeGroup("01  ·  Biblioteca de programas  |  " + _architectureLabel); group.Dock = DockStyle.Fill;
 
         var toolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = Surface };
 
@@ -173,20 +175,35 @@ internal sealed class ProgramManagerForm : UserControl
 
     private void AddInstallers()
     {
-        using var dialog = new OpenFileDialog { Title = "Selecciona instaladores", Filter = "Instaladores (*.exe;*.msi)|*.exe;*.msi", Multiselect = true };
+        using var dialog = new Form { Text = "Agregar programa a la biblioteca", Size = new Size(540, 285), StartPosition = FormStartPosition.CenterParent, BackColor = Surface, ForeColor = TextMain, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
+        var nameLabel = new Label { Text = "Nombre del programa:", Bounds = new Rectangle(18, 15, 180, 22), ForeColor = TextMuted };
+        var nameBox = new TextBox { Bounds = new Rectangle(18, 38, 480, 28), BackColor = Surface2, ForeColor = TextMain };
+        var x86Label = new Label { Text = "Instalador Windows 32 bits (opcional):", Bounds = new Rectangle(18, 75, 300, 22), ForeColor = TextMuted };
+        var x86Box = new TextBox { Bounds = new Rectangle(18, 98, 390, 27), ReadOnly = true, BackColor = Surface2, ForeColor = TextMain };
+        var x86Browse = new Button { Text = "Examinar", Bounds = new Rectangle(414, 98, 84, 27) }; StyleButton(x86Browse, true);
+        var x64Label = new Label { Text = "Instalador Windows 64 bits (opcional):", Bounds = new Rectangle(18, 135, 300, 22), ForeColor = TextMuted };
+        var x64Box = new TextBox { Bounds = new Rectangle(18, 158, 390, 27), ReadOnly = true, BackColor = Surface2, ForeColor = TextMain };
+        var x64Browse = new Button { Text = "Examinar", Bounds = new Rectangle(414, 158, 84, 27) }; StyleButton(x64Browse, true);
+        string? x86File = null, x64File = null;
+        void Pick(bool is64) { using var ofd = new OpenFileDialog { Filter = "Instaladores (*.exe;*.msi)|*.exe;*.msi" }; if (ofd.ShowDialog(dialog) == DialogResult.OK) { if (is64) { x64File = ofd.FileName; x64Box.Text = Path.GetFileName(x64File); } else { x86File = ofd.FileName; x86Box.Text = Path.GetFileName(x86File); } if (string.IsNullOrWhiteSpace(nameBox.Text)) nameBox.Text = Path.GetFileNameWithoutExtension(ofd.FileName); } }
+        x86Browse.Click += (_, _) => Pick(false); x64Browse.Click += (_, _) => Pick(true);
+        var okButton = new Button { Text = "Guardar programa", Bounds = new Rectangle(350, 202, 148, 32), DialogResult = DialogResult.OK }; StyleButton(okButton, false);
+        dialog.Controls.AddRange(new Control[] { nameLabel, nameBox, x86Label, x86Box, x86Browse, x64Label, x64Box, x64Browse, okButton }); dialog.AcceptButton = okButton;
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        int added = 0;
-        foreach (string source in dialog.FileNames)
+        if (string.IsNullOrWhiteSpace(nameBox.Text) || (x86File == null && x64File == null)) { MessageBox.Show("Indica el nombre y al menos un instalador."); return; }
+        string groupId = Guid.NewGuid().ToString("N"); int added = 0;
+        foreach (var pair in new[] { (source: x86File, arch: "x86"), (source: x64File, arch: "x64") })
         {
+            if (pair.source == null) continue;
             try
             {
-                string destination = Path.Combine(_library, Path.GetFileName(source));
-                if (File.Exists(destination)) destination = Path.Combine(_library, Path.GetFileNameWithoutExtension(source) + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + Path.GetExtension(source));
-                File.Copy(source, destination); added++;
+                string ext = Path.GetExtension(pair.source); string destination = Path.Combine(_library, groupId + "_" + pair.arch + ext);
+                File.Copy(pair.source, destination);
+                var meta = Meta(destination); meta.DisplayName = nameBox.Text.Trim(); meta.Architecture = pair.arch; meta.GroupId = groupId; added++;
             }
             catch (Exception ex) { MessageBox.Show(this, $"Error copiando instalador: {ex.Message}", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
         }
-        _status.Text = $"Agregados {added} instalador(es)."; RefreshList();
+        SaveMetadata(); _status.Text = $"Agregado(s) {added} instalador(es) para {nameBox.Text.Trim()}."; RefreshList();
     }
 
     private void RenameProgram(ListViewItem selectedItem)
@@ -270,10 +287,18 @@ internal sealed class ProgramManagerForm : UserControl
     {
         _list.BeginUpdate(); _list.Items.Clear(); _images.Images.Clear();
         string query = _search.Text.Trim();
-        foreach (string file in Directory.GetFiles(_library).Where(f => (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) && Path.GetFileName(f).Contains(query, StringComparison.OrdinalIgnoreCase)).OrderBy(f => DisplayName(f)))
+        var installers = Directory.GetFiles(_library).Where(f => (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) && !Path.GetFileName(f).StartsWith(".") && Path.GetFileName(f).Contains(query, StringComparison.OrdinalIgnoreCase));
+        var groups = installers.GroupBy(f => Meta(f).GroupId ?? Path.GetFileName(f), StringComparer.OrdinalIgnoreCase);
+        foreach (var grp in groups)
         {
-            _images.Images.Add(LoadProgramImage(file));
-            var item = new ListViewItem(DisplayName(file), _images.Images.Count - 1) { Tag = file };
+            string? compatible = grp.FirstOrDefault(f => string.Equals(Meta(f).Architecture, _isWindows64 ? "x64" : "x86", StringComparison.OrdinalIgnoreCase));
+            // Legacy single installer: architecture must be explicitly registered or presumed compatible for old entries.
+            if (compatible == null && grp.Count() == 1 && string.IsNullOrWhiteSpace(Meta(grp.First()).Architecture)) compatible = grp.First();
+            if (compatible == null) continue;
+            string name = DisplayName(compatible);
+            if (!name.Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
+            _images.Images.Add(LoadProgramImage(compatible));
+            var item = new ListViewItem(name, _images.Images.Count - 1) { Tag = compatible };
             _list.Items.Add(item);
         }
         _list.EndUpdate(); _list.Invalidate();
