@@ -382,7 +382,8 @@ internal sealed class ProgramManagerForm : UserControl
                 done++;
                 string arch = Meta(old).Architecture ?? "";
                 string id = Meta(old).WingetId!.Trim();
-                if (arch != "x86" && arch != "x64" && arch != "Both") { skipped++; Progress(); continue; }\n                if (arch == "Both") arch = "x64";
+                if (arch != "x86" && arch != "x64" && arch != "Both") { skipped++; Progress(); continue; }
+                if (arch == "Both") arch = "x64";
                 string dir = Path.Combine(temp, done.ToString()); Directory.CreateDirectory(dir);
                 _progressCaption.Text = $"Actualizando {done}/{files.Count}: {DisplayName(old)}";
                 _status.Text = "WinGet: " + id;
