@@ -438,7 +438,9 @@ internal sealed class ProgramManagerForm : UserControl
         finally { _add.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = true; }
         _progressBar.Value = 100;
         _progressCaption.Text = $"Instalación finalizada · {ok} correcto(s), {failed} error(es)";
-        private void RefreshList()
+    }
+
+    private void RefreshList()
     {
         _list.BeginUpdate(); _list.Items.Clear(); _images.Images.Clear();
         string query = _search.Text.Trim();
