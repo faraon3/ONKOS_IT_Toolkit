@@ -248,7 +248,7 @@ internal sealed class ProgramManagerForm : UserControl
                     .ToList())
                 {
                     try { File.Delete(existing); } catch { }
-                    _metadata.Remove(existing);
+                    _metadata.Remove(MetaKey(existing)); _metadata.Remove(Path.GetFileName(existing));
                 }
 
                 File.Copy(source, destination);
@@ -420,7 +420,9 @@ internal sealed class ProgramManagerForm : UserControl
     {
         var selected = _list.Items.Cast<ListViewItem>().Where(i => i.Tag is string p && _checkedPaths.Contains(p)).ToList();
         if (selected.Count == 0) { MessageBox.Show("Marca los programas que deseas instalar con la casilla morada."); return; }
-        if (MessageBox.Show($"Se ejecutarán {selected.Count} instalador(es), uno a la vez. ¿Continuar?", "Instalación secuencial", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        bool hasUnknown = selected.Any(i => i.Tag is string p && (Meta(p).Architecture == "Unknown" || Meta(p).Architecture == "ARM64"));
+        string confirmText = $"Se ejecutarán {selected.Count} instalador(es), uno a la vez." + (hasUnknown ? "\n\nADVERTENCIA: hay instaladores cuya arquitectura no se pudo confirmar o que son ARM64. Asegúrate de que sean compatibles antes de continuar." : "") + "\n\n¿Continuar?";
+        if (MessageBox.Show(confirmText, "Instalación secuencial", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         _add.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = false; int ok = 0, failed = 0, completed = 0;
         _progressBar.Value = 0;
         _progressCaption.Text = $"Preparando instalación de {selected.Count} programa(s)...";
