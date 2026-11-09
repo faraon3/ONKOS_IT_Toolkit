@@ -26,6 +26,7 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly ModernProgressBar _progressBar = new() { Dock = DockStyle.Top, Height = 28, Value = 0 };
     private readonly Label _progressCaption = new() { Dock = DockStyle.Top, Height = 22, Text = "Listo para comenzar", TextAlign = ContentAlignment.MiddleLeft };
     private readonly Button _install = new() { Text = "INSTALAR SELECCIONADOS" };
+    private readonly Button _configure = new() { Text = "CONFIGURAR INSTALACIÓN" };
     private readonly Button _add = new() { Text = "+  AGREGAR PORTABLE" };
     private readonly Button _addProgram = new() { Text = "+  AGREGAR PROGRAMA" };
     private readonly Button _update = new() { Text = "⟳  ACTUALIZAR" };
@@ -45,7 +46,7 @@ internal sealed class ProgramManagerForm : UserControl
     private static readonly Color TextMuted = Color.FromArgb(183, 174, 199);
     private static readonly Color Border = Color.FromArgb(65, 57, 82);
 
-    private sealed class ProgramMeta { public string? DisplayName { get; set; } public string? LogoPath { get; set; } public string? Architecture { get; set; } public string? GroupId { get; set; } public string? WingetId { get; set; } }
+    private sealed class ProgramMeta { public string? DisplayName { get; set; } public string? LogoPath { get; set; } public string? Architecture { get; set; } public string? GroupId { get; set; } public string? WingetId { get; set; } public string? InstallMode { get; set; } public string? InstallArguments { get; set; } public bool RunAsAdmin { get; set; } = true; }
 
     public ProgramManagerForm()
     {
@@ -100,20 +101,21 @@ internal sealed class ProgramManagerForm : UserControl
         _status.ForeColor = TextMuted; _status.Padding = new Padding(8, 0, 0, 0); statusPanel.Controls.Add(_status);
 
         var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = Bg, Padding = new Padding(3, 2, 3, 2) };
-        foreach (var button in new[] { _add, _addProgram, _remove, _update, _install }) { button.Height = 46; button.Font = new Font("Segoe UI", 9.2F, FontStyle.Bold); }
+        foreach (var button in new[] { _add, _addProgram, _configure, _remove, _update, _install }) { button.Height = 46; button.Font = new Font("Segoe UI", 9.2F, FontStyle.Bold); }
         StyleButton(_add, false); StyleButton(_remove, true); StyleButton(_install, false);
         void LayoutActions()
         {
-            int w = actionBar.ClientSize.Width; int gap = 3; int each = (w - gap * 4) / 5;
-            _add.SetBounds(0, 0, each, 46); _addProgram.SetBounds(each + gap, 0, each, 46); _remove.SetBounds((each + gap) * 2, 0, each, 46); _update.SetBounds((each + gap) * 3, 0, each, 46); _install.SetBounds((each + gap) * 4, 0, w - (each + gap) * 4, 46);
+            int w = actionBar.ClientSize.Width; int gap = 3; int each = (w - gap * 5) / 6;
+            _add.SetBounds(0, 0, each, 46); _addProgram.SetBounds(each + gap, 0, each, 46); _configure.SetBounds((each + gap) * 2, 0, each, 46); _remove.SetBounds((each + gap) * 3, 0, each, 46); _update.SetBounds((each + gap) * 4, 0, each, 46); _install.SetBounds((each + gap) * 5, 0, w - (each + gap) * 5, 46);
         }
         actionBar.Resize += (_, _) => LayoutActions(); LayoutActions();
-        actionBar.Controls.AddRange(new Control[] { _add, _addProgram, _remove, _update, _install });
+        actionBar.Controls.AddRange(new Control[] { _add, _addProgram, _configure, _remove, _update, _install });
 
         content.Controls.Add(group);
         Controls.Add(content); Controls.Add(statusPanel); Controls.Add(actionBar); Controls.Add(header);
 
         _add.Click += (_, _) => AddPortableFolder();
+        _configure.Click += (_, _) => ConfigureSelectedInstaller();
         _addProgram.Click += (_, _) => AddInstallers();
         _update.Click += async (_, _) => await UpdateLibraryAsync();
         _remove.Click += (_, _) => RemoveSelected();
@@ -416,6 +418,43 @@ internal sealed class ProgramManagerForm : UserControl
         }
     }
 
+    private void ConfigureSelectedInstaller()
+    {
+        var item = _list.SelectedItems.Cast<ListViewItem>().FirstOrDefault();
+        if (item?.Tag is not string file)
+        {
+            MessageBox.Show(this, "Selecciona un programa de la lista (clic normal sobre su fila).", "Configurar instalación");
+            return;
+        }
+
+        var meta = Meta(file);
+        using var dialog = new Form { Text = "Configurar instalación · " + DisplayName(file), Size = new Size(620, 440), StartPosition = FormStartPosition.CenterParent, BackColor = Surface, ForeColor = TextMain, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
+        var title = new Label { Text = "¿Cómo debe instalarse este programa?", Font = new Font("Segoe UI", 12F, FontStyle.Bold), ForeColor = TextMain, Location = new Point(20, 16), Size = new Size(560, 28) };
+        var methodLabel = new Label { Text = "Método de instalación", Location = new Point(20, 58), AutoSize = true, ForeColor = TextMuted };
+        var method = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(20, 82), Width = 560, BackColor = Surface2, ForeColor = TextMain };
+        method.Items.AddRange(new object[] { "Normal (mostrar asistente)", "Silenciosa / automática", "Argumentos personalizados" });
+        method.SelectedIndex = meta.InstallMode switch { "silent" => 1, "custom" => 2, _ => 0 };
+        var argsLabel = new Label { Text = "Parámetros / argumentos (para EXE o MSI)", Location = new Point(20, 132), AutoSize = true, ForeColor = TextMuted };
+        var args = new TextBox { Location = new Point(20, 156), Width = 560, Height = 32, Text = meta.InstallArguments ?? "", BackColor = Surface2, ForeColor = TextMain };
+        var hint = new Label { Text = "Ejemplos: /S · /silent · /verysilent · /qn /norestart\r\nLos parámetros dependen del fabricante. No se adivinan automáticamente.", Location = new Point(20, 196), Size = new Size(560, 48), ForeColor = TextMuted };
+        var admin = new CheckBox { Text = "Ejecutar como administrador", Checked = meta.RunAsAdmin, Location = new Point(20, 252), AutoSize = true, ForeColor = TextMain };
+        var pending = new Label { Text = "Estado: configuración guardada solo para este instalador.", Location = new Point(20, 286), Size = new Size(560, 28), ForeColor = Color.FromArgb(190, 170, 230) };
+        var save = new Button { Text = "GUARDAR CONFIGURACIÓN", Location = new Point(340, 330), Size = new Size(240, 42), DialogResult = DialogResult.OK };
+        var cancel = new Button { Text = "Cancelar", Location = new Point(220, 330), Size = new Size(110, 42), DialogResult = DialogResult.Cancel };
+        StyleButton(save, false); StyleButton(cancel, true);
+        method.SelectedIndexChanged += (_, _) => { args.Enabled = method.SelectedIndex != 0; };
+        args.Enabled = method.SelectedIndex != 0;
+        dialog.Controls.AddRange(new Control[] { title, methodLabel, method, argsLabel, args, hint, admin, pending, save, cancel });
+        dialog.AcceptButton = save; dialog.CancelButton = cancel;
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        meta.InstallMode = method.SelectedIndex switch { 1 => "silent", 2 => "custom", _ => "normal" };
+        meta.InstallArguments = args.Text.Trim();
+        meta.RunAsAdmin = admin.Checked;
+        SaveMetadata(); RefreshList();
+        _status.Text = "Configuración guardada: " + DisplayName(file);
+        MessageBox.Show(this, "Configuración guardada. ONKOS utilizará estos ajustes en próximas instalaciones.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
     private async Task InstallSelectedAsync()
     {
         var selected = _list.Items.Cast<ListViewItem>().Where(i => i.Tag is string p && _checkedPaths.Contains(p)).ToList();
@@ -436,7 +475,27 @@ internal sealed class ProgramManagerForm : UserControl
                 _status.Text = "Ahora: " + DisplayName(path);
                 try
                 {
-                    var psi = new ProcessStartInfo { FileName = path, UseShellExecute = true, Verb = "runas" };
+                    var meta = Meta(path);
+                    string mode = meta.InstallMode ?? "normal";
+                    string args = meta.InstallArguments ?? "";
+                    string ext = Path.GetExtension(path);
+                    string executable = path;
+
+                    if (ext.Equals(".msi", StringComparison.OrdinalIgnoreCase))
+                    {
+                        executable = "msiexec.exe";
+                        if (mode == "normal") args = "/i " + Quote(path);
+                        else if (mode == "silent") args = string.IsNullOrWhiteSpace(args) ? "/i " + Quote(path) + " /qn /norestart" : "/i " + Quote(path) + " " + args;
+                        else args = "/i " + Quote(path) + " " + args;
+                    }
+                    else if (mode == "silent" && string.IsNullOrWhiteSpace(args))
+                    {
+                        // EXE no tiene un parámetro silencioso universal: se evita asumir uno.
+                        mode = "normal";
+                    }
+
+                    var psi = new ProcessStartInfo { FileName = executable, Arguments = args, UseShellExecute = true };
+                    if (meta.RunAsAdmin) psi.Verb = "runas";
                     using var proc = Process.Start(psi);
                     if (proc == null) failed++;
                     else { await Task.Run(() => proc.WaitForExit()); if (proc.ExitCode == 0) ok++; else failed++; }
@@ -451,6 +510,8 @@ internal sealed class ProgramManagerForm : UserControl
         _progressBar.Value = 100;
         _progressCaption.Text = $"Instalación finalizada · {ok} correcto(s), {failed} error(es)";
     }
+
+    private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
 
     private void RefreshList()
     {
