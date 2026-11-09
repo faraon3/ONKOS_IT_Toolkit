@@ -27,7 +27,7 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly ModernProgressBar _progressBar = new() { Dock = DockStyle.Top, Height = 28, Value = 0 };
     private readonly Label _progressCaption = new() { Dock = DockStyle.Top, Height = 22, Text = "Listo para comenzar", TextAlign = ContentAlignment.MiddleLeft };
     private readonly Button _install = new() { Text = "INSTALAR SELECCIONADOS" };
-    private readonly Button _configure = new() { Text = "GRABAR INSTALADOR" };
+    private readonly Button _configure = new() { Text = "CONFIGURAR COMANDO" };
     private readonly Button _add = new() { Text = "+  AGREGAR PORTABLE" };
     private readonly Button _addProgram = new() { Text = "+  AGREGAR PROGRAMA" };
     private readonly Button _update = new() { Text = "⟳  ACTUALIZAR" };
@@ -197,8 +197,7 @@ internal sealed class ProgramManagerForm : UserControl
             CopyDirectory(folderDialog.SelectedPath, dest);
             string relative = Path.GetRelativePath(folderDialog.SelectedPath, exeDialog.FileName);
             string copiedExe = Path.Combine(dest, relative);
-            string launcher = Path.Combine(_library, Path.GetFileName(dest) + ".cmd");
-            File.WriteAllText(launcher, "@echo off\r\ncd /d \"" + dest + "\"\r\nstart \"\" \"" + copiedExe + "\"\r\n");
+            string launcher = Path.Combine(_library, Path.GetFileName(dest) + ".cmd");            File.WriteAllText(launcher, "@echo off\r\ncd /d \"" + dest + "\"\r\nstart \"\" \"" + copiedExe + "\"\r\n");
             _status.Text = "Paquete portable copiado: " + Path.GetFileName(folderDialog.SelectedPath);
             MessageBox.Show(this, "Se copió la carpeta completa. Ejecutable seleccionado: " + relative + "\n\nEl paquete queda almacenado en la biblioteca.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
@@ -397,8 +396,7 @@ internal sealed class ProgramManagerForm : UserControl
         return SystemIcons.Application.ToBitmap();
     }
 
-    private void RemoveSelected()
-    {
+    private void RemoveSelected()    {
         var selected = _list.SelectedItems.Cast<ListViewItem>().ToList();
         if (selected.Count == 0) { MessageBox.Show("Selecciona un instalador de la lista."); return; }
         if (MessageBox.Show(this, $"¿Eliminar {selected.Count} instalador(es) de la biblioteca?", "Confirmar", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
@@ -471,24 +469,57 @@ internal sealed class ProgramManagerForm : UserControl
         }
     }
 
-    private async void ConfigureSelectedInstaller()
+    private void ConfigureSelectedInstaller()
     {
         var item = _list.SelectedItems.Cast<ListViewItem>().FirstOrDefault();
         if (item?.Tag is not string file)
         {
-            MessageBox.Show(this, "Selecciona un instalador de la lista.", "Grabar instalador");
+            MessageBox.Show(this, "Selecciona un instalador de la lista.", "Configurar comando");
             return;
         }
 
-        _configure.Enabled = false;
-        _status.Text = "Grabando instalador: " + DisplayName(file) + " · completa el asistente.";
-        try
+        var meta = Meta(file);
+        using var dialog = new Form
         {
-            await RecordInstallerStepsAsync(file, Meta(file));
-        }
-        finally
+            Text = "Configurar instalación · " + DisplayName(file),
+            Size = new Size(620, 390),
+            StartPosition = FormStartPosition.CenterParent,
+            BackColor = Surface,
+            ForeColor = TextMain,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+
+        var lblMode = new Label { Text = "Modo de instalación", Bounds = new Rectangle(20, 18, 190, 25), ForeColor = TextMain };
+        var mode = new ComboBox { Bounds = new Rectangle(215, 15, 365, 30), DropDownStyle = ComboBoxStyle.DropDownList, BackColor = Surface2, ForeColor = TextMain };
+        mode.Items.AddRange(new object[] { "Silenciosa", "Normal / asistida" });
+        mode.SelectedIndex = string.Equals(meta.InstallMode, "silent", StringComparison.OrdinalIgnoreCase) ? 0 : 1;
+
+        var lblArgs = new Label { Text = "Argumentos / comando", Bounds = new Rectangle(20, 65, 190, 25), ForeColor = TextMain };
+        var args = new TextBox { Bounds = new Rectangle(215, 62, 365, 30), Text = meta.InstallArguments ?? "", BackColor = Surface2, ForeColor = TextMain };
+        var hint = new Label
         {
-            _configure.Enabled = true;
+            Text = "Ejemplos: EXE /S · MSI /qn /norestart · Office usa XML/ODT.\r\nLos argumentos dependen del instalador y deben probarse antes.",
+            Bounds = new Rectangle(215, 96, 365, 48),
+            ForeColor = TextMuted
+        };
+        var admin = new CheckBox { Text = "Ejecutar como administrador (UAC)", Bounds = new Rectangle(215, 155, 365, 28), Checked = meta.RunAsAdmin, ForeColor = TextMain };
+        var wait = new CheckBox { Text = "Esperar a que termine antes del siguiente programa", Bounds = new Rectangle(215, 190, 365, 28), Checked = true, ForeColor = TextMain };
+        var waitInfo = new Label { Text = "ONKOS ejecuta la biblioteca secuencialmente. Algunos instaladores abren procesos hijos; en esos casos la espera puede requerir ajustes específicos.", Bounds = new Rectangle(215, 222, 365, 52), ForeColor = TextMuted };
+        var cancel = new Button { Text = "Cancelar", DialogResult = DialogResult.Cancel, Bounds = new Rectangle(350, 310, 105, 34) };
+        var save = new Button { Text = "Guardar configuración", DialogResult = DialogResult.OK, Bounds = new Rectangle(460, 310, 120, 34) };
+        StyleButton(cancel, true); StyleButton(save, false);
+        dialog.Controls.AddRange(new Control[] { lblMode, mode, lblArgs, args, hint, admin, wait, waitInfo, cancel, save });
+        dialog.AcceptButton = save; dialog.CancelButton = cancel;
+
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+        {
+            meta.InstallMode = mode.SelectedIndex == 0 ? "silent" : "normal";
+            meta.InstallArguments = args.Text.Trim();
+            meta.RunAsAdmin = admin.Checked;
+            SaveMetadata();
+            _status.Text = "Configuración guardada para " + DisplayName(file) + ".";
             RefreshList();
         }
     }
@@ -597,7 +628,6 @@ internal sealed class ProgramManagerForm : UserControl
         var selected = _list.Items.Cast<ListViewItem>()
             .Where(i => i.Tag is string p && _checkedPaths.Contains(p))
             .ToList();
-
         if (selected.Count == 0)
         {
             MessageBox.Show("Marca los programas que deseas instalar con la casilla morada.");
@@ -798,39 +828,3 @@ internal sealed class ProgramManagerForm : UserControl
     }
 
     private void RefreshList()
-    {
-        _list.BeginUpdate();
-        _list.Items.Clear();
-        _images.Images.Clear();
-        string query = _search.Text.Trim();
-
-        // Mostrar todos los instaladores de la biblioteca, sin importar si son x86, x64 o mixtos.
-        var installers = Directory.GetFiles(_library, "*", SearchOption.AllDirectories)
-            .Where(f => (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
-                         Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) &&
-                        !Path.GetFileName(f).StartsWith("."))
-            .OrderBy(f => DisplayName(f), StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        foreach (string file in installers)
-        {
-            string name = DisplayName(file);
-            if (!name.Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
-            _images.Images.Add(LoadProgramImage(file));
-            _list.Items.Add(new ListViewItem(name, _images.Images.Count - 1) { Tag = file });
-        }
-
-        _list.EndUpdate();
-        _list.Invalidate();
-        _status.Text = $"Windows detectado: {_architectureLabel}. Se muestran todos los programas, sin filtro de arquitectura.";
-    }
-
-    private GroupBox MakeGroup(string title) => new() { Text = title, ForeColor = Color.FromArgb(210, 197, 235), BackColor = Surface, Padding = new Padding(10), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), Margin = new Padding(0, 0, 0, 10), FlatStyle = FlatStyle.Flat };
-    private static void StyleButton(Button b, bool secondary)
-    {
-        b.FlatStyle = FlatStyle.Flat; b.FlatAppearance.BorderColor = Border; b.FlatAppearance.BorderSize = secondary ? 1 : 0;
-        b.BackColor = secondary ? Surface2 : Purple; b.ForeColor = TextMain; b.Cursor = Cursors.Hand;
-        b.FlatAppearance.MouseOverBackColor = secondary ? Color.FromArgb(52, 45, 67) : PurpleHover;
-    }
-    private static void StyleTextBox(TextBox t) { t.BackColor = Surface2; t.ForeColor = TextMain; t.BorderStyle = BorderStyle.FixedSingle; t.Font = new Font("Segoe UI", 10F); }
-}
