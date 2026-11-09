@@ -19,7 +19,9 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly string _metadataPath = Path.Combine(AppContext.BaseDirectory, "Data", "Programs", "programs.json");
     private readonly ListView _list = new() { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, MultiSelect = true, GridLines = false, CheckBoxes = false, BorderStyle = BorderStyle.None, OwnerDraw = true, HideSelection = false };
     private readonly ImageList _images = new() { ImageSize = new Size(34, 34), ColorDepth = ColorDepth.Depth32Bit };
-    private readonly Label _status = new() { Dock = DockStyle.Bottom, Height = 28, TextAlign = ContentAlignment.MiddleLeft };
+    private readonly Label _status = new() { Dock = DockStyle.Bottom, Height = 25, TextAlign = ContentAlignment.MiddleLeft };
+    private readonly ModernProgressBar _progressBar = new() { Dock = DockStyle.Top, Height = 28, Value = 0 };
+    private readonly Label _progressCaption = new() { Dock = DockStyle.Top, Height = 22, Text = "Listo para comenzar", TextAlign = ContentAlignment.MiddleLeft };
     private readonly Button _install = new() { Text = "INSTALAR SELECCIONADOS" };
     private readonly Button _add = new() { Text = "+  AGREGAR INSTALADOR" };
     private readonly Button _remove = new() { Text = "ELIMINAR DE BIBLIOTECA" };
@@ -228,18 +230,34 @@ internal sealed class ProgramManagerForm : UserControl
         var selected = _list.Items.Cast<ListViewItem>().Where(i => i.Tag is string p && _checkedPaths.Contains(p)).ToList();
         if (selected.Count == 0) { MessageBox.Show("Marca los programas que deseas instalar con la casilla morada."); return; }
         if (MessageBox.Show($"Se ejecutarán {selected.Count} instalador(es), uno a la vez. ¿Continuar?", "Instalación secuencial", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-        _add.Enabled = _remove.Enabled = _install.Enabled = false; int ok = 0, failed = 0;
+        _add.Enabled = _remove.Enabled = _install.Enabled = false; int ok = 0, failed = 0, completed = 0;
+        _progressBar.Value = 0;
+        _progressCaption.Text = $"Preparando instalación de {selected.Count} programa(s)...";
+        _status.Text = "Ahora: —";
         try
         {
             foreach (var item in selected)
             {
-                string path = (string)item.Tag!; _status.Text = "Ejecutando: " + DisplayName(path);
-                try { var psi = new ProcessStartInfo { FileName = path, UseShellExecute = true, Verb = "runas" }; using var proc = Process.Start(psi); if (proc == null) { failed++; continue; } await Task.Run(() => proc.WaitForExit()); if (proc.ExitCode == 0) ok++; else failed++; }
+                string path = (string)item.Tag!;
+                _progressCaption.Text = $"Instalando {completed + 1} de {selected.Count}: {DisplayName(path)}";
+                _status.Text = "Ahora: " + DisplayName(path);
+                try
+                {
+                    var psi = new ProcessStartInfo { FileName = path, UseShellExecute = true, Verb = "runas" };
+                    using var proc = Process.Start(psi);
+                    if (proc == null) failed++;
+                    else { await Task.Run(() => proc.WaitForExit()); if (proc.ExitCode == 0) ok++; else failed++; }
+                }
                 catch { failed++; }
+                completed++;
+                _progressBar.Value = (int)Math.Round(completed * 100.0 / selected.Count);
+                _progressCaption.Text = $"Progreso de instalación: {completed} de {selected.Count} ({_progressBar.Value}%)";
             }
         }
         finally { _add.Enabled = _remove.Enabled = _install.Enabled = true; }
-        _status.Text = $"Proceso terminado. Correctos: {ok}; error/cancelados: {failed}.";
+        _progressBar.Value = 100;
+        _progressCaption.Text = $"Instalación finalizada · {ok} correcto(s), {failed} error(es)";
+        _status.Text = "Ahora: —";
     }
 
     private void RefreshList()
