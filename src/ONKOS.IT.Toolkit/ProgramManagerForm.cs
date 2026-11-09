@@ -18,7 +18,7 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly string _logos = Path.Combine(AppContext.BaseDirectory, "Data", "Programs", ".logos");
     private readonly string _metadataPath = Path.Combine(AppContext.BaseDirectory, "Data", "Programs", "programs.json");
     private readonly ListView _list = new() { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, MultiSelect = true, GridLines = false, CheckBoxes = false, BorderStyle = BorderStyle.None, OwnerDraw = true, HideSelection = false };
-    private readonly ImageList _images = new() { ImageSize = new Size(34, 34), ColorDepth = ColorDepth.Depth32Bit };
+    private readonly ImageList _images = new() { ImageSize = new Size(44, 44), ColorDepth = ColorDepth.Depth32Bit };
     private readonly Label _status = new() { Dock = DockStyle.Bottom, Height = 25, TextAlign = ContentAlignment.MiddleLeft };
     private readonly ModernProgressBar _progressBar = new() { Dock = DockStyle.Top, Height = 28, Value = 0 };
     private readonly Label _progressCaption = new() { Dock = DockStyle.Top, Height = 22, Text = "Listo para comenzar", TextAlign = ContentAlignment.MiddleLeft };
@@ -125,14 +125,14 @@ internal sealed class ProgramManagerForm : UserControl
         using var bg = new SolidBrush(selected ? Color.FromArgb(54, 45, 72) : Surface);
         g.FillRectangle(bg, e.Bounds);
         using var separator = new Pen(Border); g.DrawLine(separator, e.Bounds.Left + 10, e.Bounds.Bottom - 1, e.Bounds.Right - 10, e.Bounds.Bottom - 1);
-        var cb = new Rectangle(e.Bounds.Left + 12, e.Bounds.Top + 12, 18, 18);
+        var cb = new Rectangle(e.Bounds.Left + 12, e.Bounds.Top + (e.Bounds.Height - 18) / 2, 18, 18);
         using var cbFill = new SolidBrush(checkedItem ? Purple : Color.FromArgb(46, 40, 59));
         using var cbPen = new Pen(checkedItem ? PurpleHover : Border, 1.2F);
         using var pathCb = RoundedRect(cb, 4); g.FillPath(cbFill, pathCb); g.DrawPath(cbPen, pathCb);
         if (checkedItem) { using var tick = new Pen(Color.White, 2F); g.DrawLines(tick, new[] { new Point(cb.X + 3, cb.Y + 9), new Point(cb.X + 7, cb.Y + 13), new Point(cb.X + 14, cb.Y + 4) }); }
         int imageIndex = e.Item.ImageIndex;
-        if (imageIndex >= 0 && imageIndex < _images.Images.Count) g.DrawImage(_images.Images[imageIndex], e.Bounds.Left + 44, e.Bounds.Top + 5, 34, 34);
-        TextRenderer.DrawText(g, e.Item.Text, new Font("Segoe UI", 10F, FontStyle.Bold), new Rectangle(e.Bounds.Left + 88, e.Bounds.Top, e.Bounds.Width - 100, e.Bounds.Height), TextMain, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        if (imageIndex >= 0 && imageIndex < _images.Images.Count)\n        {\n            // Icono centrado verticalmente y separado de la línea divisoria de cada fila.\n            const int logoSize = 36;\n            int logoY = e.Bounds.Top + (e.Bounds.Height - logoSize) / 2;\n            g.DrawImage(_images.Images[imageIndex], e.Bounds.Left + 44, logoY, logoSize, logoSize);\n        }
+        TextRenderer.DrawText(g, e.Item.Text, new Font("Segoe UI", 10F, FontStyle.Bold), new Rectangle(e.Bounds.Left + 92, e.Bounds.Top + 2, e.Bounds.Width - 104, e.Bounds.Height - 4), TextMain, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 
     private static GraphicsPath RoundedRect(Rectangle r, int radius)
