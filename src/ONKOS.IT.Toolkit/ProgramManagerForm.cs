@@ -20,7 +20,7 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly string _metadataPath = Path.Combine(AppContext.BaseDirectory, "Data", "Programs", "programs.json");
     private readonly bool _isWindows64 = Environment.Is64BitOperatingSystem;
     private readonly string _architectureLabel = Environment.Is64BitOperatingSystem ? "Windows 64 bits (x64)" : "Windows 32 bits (x86)";
-    private readonly ListView _list = new() { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, MultiSelect = true, GridLines = false, CheckBoxes = false, BorderStyle = BorderStyle.None, OwnerDraw = true, HideSelection = false };
+    private readonly ListView _list = new() { Dock = DockStyle.Fill, View = View.Tile, FullRowSelect = true, MultiSelect = true, GridLines = false, CheckBoxes = false, BorderStyle = BorderStyle.None, OwnerDraw = true, HideSelection = false, TileSize = new Size(360, 76) };
     private readonly ImageList _images = new() { ImageSize = new Size(44, 44), ColorDepth = ColorDepth.Depth32Bit };
     private readonly Label _status = new() { Dock = DockStyle.Bottom, Height = 25, TextAlign = ContentAlignment.MiddleLeft };
     private readonly ModernProgressBar _progressBar = new() { Dock = DockStyle.Top, Height = 28, Value = 0 };
@@ -85,9 +85,9 @@ internal sealed class ProgramManagerForm : UserControl
         toolbar.Controls.Add(searchBox);
 
         _list.BackColor = Surface; _list.ForeColor = TextMain; _list.Font = new Font("Segoe UI", 10F); _list.SmallImageList = _images;
-        _list.Columns.Add("Selecciona / Programa", 650);
-        _list.Resize += (_, _) => { if (_list.Columns.Count > 0) _list.Columns[0].Width = Math.Max(250, _list.ClientSize.Width - 4); };
-        _list.DrawColumnHeader += (_, e) => { using var br = new SolidBrush(Purple); e.Graphics.FillRectangle(br, e.Bounds); TextRenderer.DrawText(e.Graphics, e.Header?.Text ?? "", new Font("Segoe UI", 9.5F, FontStyle.Bold), e.Bounds, Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter); };
+        // Vista en mosaicos de dos columnas para evitar que los programas queden apiñados.
+        _list.TileSize = new Size(Math.Max(300, (_list.ClientSize.Width - 28) / 2), 76);
+        _list.Resize += (_, _) => _list.TileSize = new Size(Math.Max(300, (_list.ClientSize.Width - 28) / 2), 76);
         _list.DrawItem += DrawProgramRow;
         _list.DrawSubItem += (_, _) => { };
         _list.MouseDown += ListMouseDown;
