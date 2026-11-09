@@ -26,6 +26,7 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly Label _progressCaption = new() { Dock = DockStyle.Top, Height = 22, Text = "Listo para comenzar", TextAlign = ContentAlignment.MiddleLeft };
     private readonly Button _install = new() { Text = "INSTALAR SELECCIONADOS" };
     private readonly Button _add = new() { Text = "+  AGREGAR PORTABLE" };
+    private readonly Button _addProgram = new() { Text = "+  AGREGAR PROGRAMA" };
     private readonly Button _update = new() { Text = "⟳  ACTUALIZAR" };
     private readonly Button _remove = new() { Text = "ELIMINAR DE BIBLIOTECA" };
     private readonly Button _back = new() { Text = "‹  VOLVER AL INICIO" };
@@ -98,20 +99,21 @@ internal sealed class ProgramManagerForm : UserControl
         _status.ForeColor = TextMuted; _status.Padding = new Padding(8, 0, 0, 0); statusPanel.Controls.Add(_status);
 
         var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = Bg, Padding = new Padding(3, 2, 3, 2) };
-        foreach (var button in new[] { _add, _remove, _update, _install }) { button.Height = 46; button.Font = new Font("Segoe UI", 9.2F, FontStyle.Bold); }
+        foreach (var button in new[] { _add, _addProgram, _remove, _update, _install }) { button.Height = 46; button.Font = new Font("Segoe UI", 9.2F, FontStyle.Bold); }
         StyleButton(_add, false); StyleButton(_remove, true); StyleButton(_install, false);
         void LayoutActions()
         {
-            int w = actionBar.ClientSize.Width; int gap = 3; int each = (w - gap * 3) / 4;
-            _add.SetBounds(0, 0, each, 46); _remove.SetBounds(each + gap, 0, each, 46); _update.SetBounds((each + gap) * 2, 0, each, 46); _install.SetBounds((each + gap) * 3, 0, w - (each + gap) * 3, 46);
+            int w = actionBar.ClientSize.Width; int gap = 3; int each = (w - gap * 4) / 5;
+            _add.SetBounds(0, 0, each, 46); _addProgram.SetBounds(each + gap, 0, each, 46); _remove.SetBounds((each + gap) * 2, 0, each, 46); _update.SetBounds((each + gap) * 3, 0, each, 46); _install.SetBounds((each + gap) * 4, 0, w - (each + gap) * 4, 46);
         }
         actionBar.Resize += (_, _) => LayoutActions(); LayoutActions();
-        actionBar.Controls.AddRange(new Control[] { _add, _remove, _update, _install });
+        actionBar.Controls.AddRange(new Control[] { _add, _addProgram, _remove, _update, _install });
 
         content.Controls.Add(group);
         Controls.Add(content); Controls.Add(statusPanel); Controls.Add(actionBar); Controls.Add(header);
 
-        _add.Click += (_, _) => AddInstallers();
+        _add.Click += (_, _) => AddPortableFolder();
+        _addProgram.Click += (_, _) => AddInstallers();
         _update.Click += async (_, _) => await UpdateLibraryAsync();
         _remove.Click += (_, _) => RemoveSelected();
         _install.Click += async (_, _) => await InstallSelectedAsync();
@@ -174,6 +176,36 @@ internal sealed class ProgramManagerForm : UserControl
     private void SaveMetadata() { try { File.WriteAllText(_metadataPath, JsonSerializer.Serialize(_metadata, new JsonSerializerOptions { WriteIndented = true })); } catch (Exception ex) { MessageBox.Show(this, "No se pudo guardar la configuración: " + ex.Message); } }
     private ProgramMeta Meta(string file) { if (!_metadata.TryGetValue(Path.GetFileName(file), out var m)) _metadata[Path.GetFileName(file)] = m = new ProgramMeta(); return m; }
     private string DisplayName(string file) => Meta(file).DisplayName ?? Path.GetFileNameWithoutExtension(file);
+
+    private void AddPortableFolder()
+    {
+        using var folderDialog = new FolderBrowserDialog { Description = "Selecciona la carpeta del programa portable o paquete (ej. Office con setup.exe)." };
+        if (folderDialog.ShowDialog(this) != DialogResult.OK) return;
+        using var exeDialog = new OpenFileDialog { InitialDirectory = folderDialog.SelectedPath, Filter = "Ejecutable (*.exe)|*.exe", Title = "Selecciona el ejecutable principal" };
+        if (exeDialog.ShowDialog(this) != DialogResult.OK) return;
+        if (!exeDialog.FileName.StartsWith(folderDialog.SelectedPath, StringComparison.OrdinalIgnoreCase))
+        { MessageBox.Show(this, "El ejecutable debe estar dentro de la carpeta seleccionada."); return; }
+        string dest = Path.Combine(_library, "Portable_" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            CopyDirectory(folderDialog.SelectedPath, dest);
+            string relative = Path.GetRelativePath(folderDialog.SelectedPath, exeDialog.FileName);
+            string copiedExe = Path.Combine(dest, relative);
+            string launcher = Path.Combine(_library, Path.GetFileName(dest) + ".cmd");
+            File.WriteAllText(launcher, "@echo off\r\ncd /d \"" + dest + "\"\r\nstart \"\" \"" + copiedExe + "\"\r\n");
+            _status.Text = "Paquete portable copiado: " + Path.GetFileName(folderDialog.SelectedPath);
+            MessageBox.Show(this, "Se copió la carpeta completa. Ejecutable seleccionado: " + relative + "\n\nEl paquete queda almacenado en la biblioteca.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        { try { if (Directory.Exists(dest)) Directory.Delete(dest, true); } catch { } MessageBox.Show(this, ex.Message, "Error al copiar portable", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+    }
+
+    private static void CopyDirectory(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (string f in Directory.GetFiles(source)) File.Copy(f, Path.Combine(destination, Path.GetFileName(f)), true);
+        foreach (string d in Directory.GetDirectories(source)) CopyDirectory(d, Path.Combine(destination, Path.GetFileName(d)));
+    }
 
     private void AddInstallers()
     {
@@ -261,7 +293,7 @@ internal sealed class ProgramManagerForm : UserControl
         if (files.Count == 0) { MessageBox.Show(this, "No hay instaladores individuales con ID WinGet configurado.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         if (MessageBox.Show(this, $"Se actualizarán {files.Count} instalador(es) con WinGet. Los programas agregados como carpeta no se modifican. ¿Continuar?", "Actualizar biblioteca", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
 
-        _add.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = false;
+        _add.Enabled = _addProgram.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = false;
         int updated = 0, failed = 0, skipped = 0, done = 0;
         string temp = Path.Combine(Path.GetTempPath(), "ONKOS_WG_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temp);
@@ -303,7 +335,7 @@ internal sealed class ProgramManagerForm : UserControl
         finally
         {
             try { Directory.Delete(temp, true); } catch { }
-            _add.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = true;
+            _add.Enabled = _addProgram.Enabled = _remove.Enabled = _update.Enabled = _install.Enabled = true;
         }
         _progressBar.Value = 100;
         _progressCaption.Text = $"Actualizado: {updated} · Omitido: {skipped} · Error: {failed}";
