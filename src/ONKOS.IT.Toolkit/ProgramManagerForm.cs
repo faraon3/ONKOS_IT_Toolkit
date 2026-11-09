@@ -244,6 +244,28 @@ internal sealed class ProgramManagerForm : UserControl
                 meta.DisplayName = name;
                 meta.Architecture = "Any";
                 meta.WingetId = "";
+
+                // Identifica instaladores conocidos y propone parámetros silenciosos.
+                var silentSuggestion = SuggestSilentCommand(destination);
+                if (silentSuggestion != null)
+                {
+                    meta.InstallMode = "silent";
+                    meta.InstallArguments = silentSuggestion.Arguments;
+                    meta.RunAsAdmin = true;
+                    _status.Text = $"Detectado: {silentSuggestion.Product} · comando silencioso sugerido.";
+                }
+                else if (Path.GetExtension(destination).Equals(".msi", StringComparison.OrdinalIgnoreCase))
+                {
+                    // MSI usa parámetros estándar de Windows Installer.
+                    meta.InstallMode = "silent";
+                    meta.InstallArguments = "/qn /norestart";
+                    meta.RunAsAdmin = true;
+                }
+                else
+                {
+                    meta.InstallMode = "normal";
+                    meta.InstallArguments = "";
+                }
                 added++;
             }
             catch (Exception ex)
@@ -260,6 +282,36 @@ internal sealed class ProgramManagerForm : UserControl
         if (errors.Count > 0) summary += "\\n\\n" + string.Join("\\n", errors.Take(8));
         MessageBox.Show(this, summary, "ONKOS · Agregar programas", MessageBoxButtons.OK,
             failed == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+    }
+
+    private sealed record SilentCommandSuggestion(string Product, string Arguments);
+
+    private static SilentCommandSuggestion? SuggestSilentCommand(string installerPath)
+    {
+        string file = Path.GetFileNameWithoutExtension(installerPath).ToLowerInvariant();
+        // Patrones por nombre de archivo: son sugerencias, no garantizan compatibilidad
+        // con todas las versiones o paquetes personalizados.
+        var catalog = new (string[] Tokens, string Product, string Args)[]
+        {
+            (new[] { "7zip", "7-zip" }, "7-Zip", "/S"),
+            (new[] { "notepad++", "notepadplusplus" }, "Notepad++", "/S"),
+            (new[] { "vlc" }, "VLC", "/S"),
+            (new[] { "winrar" }, "WinRAR", "/S"),
+            (new[] { "firefox" }, "Mozilla Firefox", "-ms"),
+            (new[] { "brave" }, "Brave", "/silent /install"),
+            (new[] { "adobereader", "adobe reader", "acrobat" }, "Adobe Acrobat Reader", "/sAll /rs /msi"),
+            (new[] { "vscode", "vs code", "visualstudiocode" }, "Visual Studio Code", "/VERYSILENT /NORESTART"),
+            (new[] { "git-" , "git for windows" }, "Git for Windows", "/VERYSILENT /NORESTART"),
+            (new[] { "node-v", "nodejs" }, "Node.js", "/quiet /norestart"),
+            (new[] { "zoom" }, "Zoom", "/quiet /norestart")
+        };
+
+        foreach (var item in catalog)
+        {
+            if (item.Tokens.Any(token => file.Contains(token, StringComparison.OrdinalIgnoreCase)))
+                return new SilentCommandSuggestion(item.Product, item.Args);
+        }
+        return null;
     }
 
     private string? AskArchitecture(string fileName)
