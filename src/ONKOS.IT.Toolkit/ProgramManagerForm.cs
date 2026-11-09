@@ -192,10 +192,17 @@ internal sealed class ProgramManagerForm : UserControl
             CopyDirectory(folderDialog.SelectedPath, dest);
             string relative = Path.GetRelativePath(folderDialog.SelectedPath, exeDialog.FileName);
             string copiedExe = Path.Combine(dest, relative);
-            string launcher = Path.Combine(_library, Path.GetFileName(dest) + ".cmd");
-            File.WriteAllText(launcher, "@echo off\r\ncd /d \"" + dest + "\"\r\nstart \"\" \"" + copiedExe + "\"\r\n");
-            _status.Text = "Paquete portable copiado: " + Path.GetFileName(folderDialog.SelectedPath);
-            MessageBox.Show(this, "Se copió la carpeta completa. Ejecutable seleccionado: " + relative + "\n\nEl paquete queda almacenado en la biblioteca.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            // El manifiesto identifica el único ejecutable que debe mostrarse en la biblioteca.
+            File.WriteAllText(Path.Combine(dest, ".onko-portable-main.txt"), relative);
+            var meta = Meta(copiedExe);
+            meta.DisplayName = Path.GetFileName(folderDialog.SelectedPath);
+            meta.Architecture = "Any";
+            SaveMetadata();
+
+            _status.Text = "Paquete portable agregado: " + meta.DisplayName;
+            RefreshList();
+            MessageBox.Show(this, "Se copió la carpeta completa.\n\nPrograma agregado: " + meta.DisplayName + "\nEjecutable principal: " + relative + "\n\nLos demás ejecutables quedan guardados como archivos de apoyo y no aparecerán por separado.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         { try { if (Directory.Exists(dest)) Directory.Delete(dest, true); } catch { } MessageBox.Show(this, ex.Message, "Error al copiar portable", MessageBoxButtons.OK, MessageBoxIcon.Error); }
@@ -407,6 +414,30 @@ internal sealed class ProgramManagerForm : UserControl
 
     private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
 
+    private bool IsVisibleLibraryInstaller(string file)
+    {
+        try
+        {
+            var directory = new DirectoryInfo(Path.GetDirectoryName(file)!);
+            while (directory != null && !directory.FullName.Equals(_library, StringComparison.OrdinalIgnoreCase))
+            {
+                string manifest = Path.Combine(directory.FullName, ".onko-portable-main.txt");
+                if (File.Exists(manifest))
+                {
+                    string relative = File.ReadAllText(manifest).Trim();
+                    if (string.IsNullOrWhiteSpace(relative)) return false;
+                    string mainExecutable = Path.GetFullPath(Path.Combine(directory.FullName, relative));
+                    return Path.GetFullPath(file).Equals(mainExecutable, StringComparison.OrdinalIgnoreCase);
+                }
+                directory = directory.Parent;
+            }
+        }
+        catch { return false; }
+
+        // Los instaladores individuales y los paquetes antiguos sin manifiesto conservan su comportamiento.
+        return true;
+    }
+
     private void RefreshList()
     {
         _list.BeginUpdate();
@@ -414,11 +445,12 @@ internal sealed class ProgramManagerForm : UserControl
         _images.Images.Clear();
         string query = _search.Text.Trim();
 
-        // Mostrar todos los instaladores de la biblioteca, sin importar si son x86, x64 o mixtos.
+        // En paquetes portables solo se muestra el ejecutable principal elegido al agregarlos.
         var installers = Directory.GetFiles(_library, "*", SearchOption.AllDirectories)
             .Where(f => (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
                          Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) &&
                         !Path.GetFileName(f).StartsWith("."))
+            .Where(IsVisibleLibraryInstaller)
             .OrderBy(f => DisplayName(f), StringComparer.OrdinalIgnoreCase)
             .ToList();
 
