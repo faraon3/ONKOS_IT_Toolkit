@@ -55,11 +55,28 @@ internal sealed class ProgramManagerForm : UserControl
         var group = MakeGroup("01  ·  Biblioteca de programas"); group.Dock = DockStyle.Fill;
 
         var toolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = Surface };
-        var searchIcon = new Label { Text = "⌕", Font = new Font("Segoe UI", 22F, FontStyle.Bold), ForeColor = PurpleHover, TextAlign = ContentAlignment.MiddleCenter, Bounds = new Rectangle(10, 7, 34, 34) };
-        StyleTextBox(_search); _search.SetBounds(44, 8, 300, 32);
-        StyleButton(_clearSearch, true); _clearSearch.SetBounds(348, 8, 34, 32);
+
+        // Buscador integrado en un único contenedor visual.
+        var searchBox = new Panel { Bounds = new Rectangle(10, 6, 390, 36), BackColor = Surface2 };
+        searchBox.Paint += (_, e) =>
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using var pen = new Pen(_search.Focused ? PurpleHover : Border, _search.Focused ? 1.8F : 1.2F);
+            using var outline = RoundedRect(new Rectangle(1, 1, searchBox.Width - 3, searchBox.Height - 3), 8);
+            e.Graphics.DrawPath(pen, outline);
+        };
+        searchBox.Resize += (_, _) => searchBox.Invalidate();
+        var searchIcon = new Label { Text = "⌕", Font = new Font("Segoe UI", 21F, FontStyle.Bold), ForeColor = PurpleHover, TextAlign = ContentAlignment.MiddleCenter, Bounds = new Rectangle(8, 0, 34, 34), BackColor = Color.Transparent };
+        _search.BorderStyle = BorderStyle.None; _search.BackColor = Surface2; _search.ForeColor = TextMain; _search.Font = new Font("Segoe UI", 10F);
+        _search.SetBounds(43, 8, 300, 20);
+        _clearSearch.FlatStyle = FlatStyle.Flat; _clearSearch.FlatAppearance.BorderSize = 0; _clearSearch.BackColor = Surface2; _clearSearch.ForeColor = TextMuted; _clearSearch.Cursor = Cursors.Hand;
+        _clearSearch.FlatAppearance.MouseOverBackColor = Color.FromArgb(58, 48, 72);
+        _clearSearch.SetBounds(347, 2, 36, 30);
         _clearSearch.Click += (_, _) => { _search.Clear(); _search.Focus(); };
-        toolbar.Controls.Add(searchIcon); toolbar.Controls.Add(_search); toolbar.Controls.Add(_clearSearch);
+        _search.GotFocus += (_, _) => searchBox.Invalidate();
+        _search.LostFocus += (_, _) => searchBox.Invalidate();
+        searchBox.Controls.Add(searchIcon); searchBox.Controls.Add(_search); searchBox.Controls.Add(_clearSearch);
+        toolbar.Controls.Add(searchBox);
 
         _list.BackColor = Surface; _list.ForeColor = TextMain; _list.Font = new Font("Segoe UI", 10F); _list.SmallImageList = _images;
         _list.Columns.Add("Selecciona / Programa", 650);
