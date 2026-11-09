@@ -211,35 +211,44 @@ internal sealed class ProgramManagerForm : UserControl
     {
         using var ofd = new OpenFileDialog
         {
-            Title = "Selecciona el instalador que deseas agregar",
+            Title = "Selecciona uno o varios instaladores para agregar",
             Filter = "Instaladores (*.exe;*.msi)|*.exe;*.msi",
-            Multiselect = false
+            Multiselect = true
         };
-        if (ofd.ShowDialog(this) != DialogResult.OK) return;
+        if (ofd.ShowDialog(this) != DialogResult.OK || ofd.FileNames.Length == 0) return;
 
-        string source = ofd.FileName;
-        string name = Path.GetFileNameWithoutExtension(source);
-        string arch = DetectInstallerArchitecture(source);
-        string groupId = Guid.NewGuid().ToString("N");
-        string destination = Path.Combine(_library, groupId + "_" + arch + Path.GetExtension(source));
+        int added = 0, failed = 0;
+        var errors = new List<string>();
+        foreach (string source in ofd.FileNames)
+        {
+            string name = Path.GetFileNameWithoutExtension(source);
+            string arch = DetectInstallerArchitecture(source);
+            string groupId = Guid.NewGuid().ToString("N");
+            string destination = Path.Combine(_library, groupId + "_" + arch + Path.GetExtension(source));
+            try
+            {
+                File.Copy(source, destination);
+                var meta = Meta(destination);
+                meta.DisplayName = name;
+                meta.Architecture = arch;
+                meta.GroupId = groupId;
+                meta.WingetId = "";
+                added++;
+            }
+            catch (Exception ex)
+            {
+                failed++;
+                errors.Add(Path.GetFileName(source) + ": " + ex.Message);
+            }
+        }
 
-        try
-        {
-            File.Copy(source, destination);
-            var meta = Meta(destination);
-            meta.DisplayName = name;
-            meta.Architecture = arch;
-            meta.GroupId = groupId;
-            meta.WingetId = "";
-            SaveMetadata();
-            _status.Text = $"Agregado: {name} ({arch})";
-            RefreshList();
-            MessageBox.Show(this, $"Programa agregado automáticamente.\n\nNombre: {name}\nArquitectura detectada: {arch}\n\nSi el instalador es un asistente universal (compatible con x86 y x64), verifica la arquitectura detectada.", "ONKOS · Programa agregado", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, $"No se pudo copiar el instalador: {ex.Message}", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
+        SaveMetadata();
+        RefreshList();
+        _status.Text = $"Agregados {added} instalador(es); errores: {failed}.";
+        string summary = $"Proceso terminado.\n\nAgregados: {added}\nErrores: {failed}";
+        if (errors.Count > 0) summary += "\n\n" + string.Join("\n", errors.Take(8));
+        MessageBox.Show(this, summary, "ONKOS · Agregar programas", MessageBoxButtons.OK,
+            failed == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
     }
 
     private static string DetectInstallerArchitecture(string file)
