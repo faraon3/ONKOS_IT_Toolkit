@@ -741,7 +741,7 @@ internal sealed class BackupForm : UserControl
         try
         {
             string full = Path.GetFullPath(path);
-            string usersRoot = Path.Combine(Path.GetPathRoot(full) ?? "C:\\", "Users");
+            string usersRoot = Path.Combine(Path.GetPathRoot(full) ?? @"C:\", "Users");
             if (!full.StartsWith(usersRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return null;
             string remainder = full.Substring(usersRoot.Length + 1);
             int separator = remainder.IndexOf(Path.DirectorySeparatorChar);
