@@ -175,7 +175,9 @@ internal sealed class ProgramManagerForm : UserControl
         try { if (File.Exists(_metadataPath)) { var loaded = JsonSerializer.Deserialize<Dictionary<string, ProgramMeta>>(File.ReadAllText(_metadataPath)); if (loaded != null) foreach (var pair in loaded) _metadata[pair.Key] = pair.Value; } } catch { }
     }
     private void SaveMetadata() { try { File.WriteAllText(_metadataPath, JsonSerializer.Serialize(_metadata, new JsonSerializerOptions { WriteIndented = true })); } catch (Exception ex) { MessageBox.Show(this, "No se pudo guardar la configuración: " + ex.Message); } }
-    private ProgramMeta Meta(string file) { if (!_metadata.TryGetValue(Path.GetFileName(file), out var m)) _metadata[Path.GetFileName(file)] = m = new ProgramMeta(); return m; }
+    private string MetaKey(string file) => Path.GetRelativePath(_library, file).Replace('\\', '/');
+    private ProgramMeta Meta(string file) { string key = MetaKey(file); if (!_metadata.TryGetValue(key, out var m)) { if (_metadata.TryGetValue(Path.GetFileName(file), out var legacy)) { m = legacy; _metadata.Remove(Path.GetFileName(file)); _metadata[key] = m; } else _metadata[key] = m = new ProgramMeta(); } return m; }
+    private static string ArchitectureFolder(string architecture) => architecture switch { "x64" => "x64", "x86" => "x86", "Universal" => "Universal", _ => "Unknown" };
     private string DisplayName(string file) => Meta(file).DisplayName ?? Path.GetFileNameWithoutExtension(file);
 
     private void AddPortableFolder()
@@ -224,13 +226,21 @@ internal sealed class ProgramManagerForm : UserControl
         {
             string name = Path.GetFileNameWithoutExtension(source);
             string arch = DetectInstallerArchitecture(source);
+            if (arch == "Unknown")
+            {
+                var choice = MessageBox.Show(this, $"No se pudo determinar la arquitectura de {Path.GetFileName(source)}.\n\nSí = tratar como instalador universal (x86/x64).\nNo = guardar como desconocido y no ejecutarlo automáticamente.\nCancelar = omitir este archivo.", "Arquitectura desconocida", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                if (choice == DialogResult.Cancel) continue;
+                if (choice == DialogResult.Yes) arch = "Universal";
+            }
             string normalizedName = NormalizeProgramName(name);
             string groupId = Guid.NewGuid().ToString("N");
-            string destination = Path.Combine(_library, groupId + "_" + arch + Path.GetExtension(source));
+            string archFolder = Path.Combine(_library, ArchitectureFolder(arch));
+            Directory.CreateDirectory(archFolder);
+            string destination = Path.Combine(archFolder, groupId + "_" + arch + Path.GetExtension(source));
             try
             {
                 // Reemplazar versión previa del mismo programa y arquitectura.
-                foreach (string existing in Directory.GetFiles(_library)
+                foreach (string existing in Directory.GetFiles(_library, "*", SearchOption.AllDirectories)
                     .Where(f => (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
                                  Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) &&
                                 string.Equals(NormalizeProgramName(DisplayName(f)), normalizedName, StringComparison.OrdinalIgnoreCase) &&
@@ -267,8 +277,7 @@ internal sealed class ProgramManagerForm : UserControl
 
     private static string DetectInstallerArchitecture(string file)
     {
-        // Los EXE se inspeccionan por su cabecera PE. MSI usa pistas del nombre;
-        // cuando no es concluyente se registra como x86, compatible con Windows x64.
+        // Detecta arquitectura del EXE. La arquitectura del setup puede diferir del payload instalado.
         try
         {
             if (Path.GetExtension(file).Equals(".exe", StringComparison.OrdinalIgnoreCase))
@@ -285,7 +294,8 @@ internal sealed class ProgramManagerForm : UserControl
                         if (reader.ReadUInt32() == 0x00004550)
                         {
                             ushort machine = reader.ReadUInt16();
-                            if (machine == 0x8664 || machine == 0xAA64) return "x64";
+                            if (machine == 0x8664) return "x64";
+                            if (machine == 0xAA64) return "ARM64";
                             if (machine == 0x014c) return "x86";
                         }
                     }
@@ -296,8 +306,8 @@ internal sealed class ProgramManagerForm : UserControl
 
         string lower = Path.GetFileName(file).ToLowerInvariant();
         if (lower.Contains("x64") || lower.Contains("amd64") || lower.Contains("64bit") || lower.Contains("64-bit")) return "x64";
-        if (lower.Contains("x86") || lower.Contains("32bit") || lower.Contains("32-bit")) return "x86";
-        return "x86";
+        if (lower.Contains("x86") || lower.Contains("32bit") || lower.Contains("32-bit") || lower.Contains("win32")) return "x86";
+        return "Unknown";
     }
 
     private void RenameProgram(ListViewItem selectedItem)
@@ -344,7 +354,7 @@ internal sealed class ProgramManagerForm : UserControl
 
     private async Task UpdateLibraryAsync()
     {
-        var files = Directory.GetFiles(_library).Where(f =>
+        var files = Directory.GetFiles(_library, "*", SearchOption.AllDirectories).Where(f =>
             (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) || Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) &&
             !Path.GetFileName(f).StartsWith(".") && !string.IsNullOrWhiteSpace(Meta(f).WingetId)).ToList();
 
@@ -444,7 +454,7 @@ internal sealed class ProgramManagerForm : UserControl
     {
         _list.BeginUpdate(); _list.Items.Clear(); _images.Images.Clear();
         string query = _search.Text.Trim();
-        var installers = Directory.GetFiles(_library)
+        var installers = Directory.GetFiles(_library, "*", SearchOption.AllDirectories)
             .Where(f => (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
                          Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) &&
                         !Path.GetFileName(f).StartsWith(".")).ToList();
@@ -455,11 +465,13 @@ internal sealed class ProgramManagerForm : UserControl
         {
             var entries = grp.ToList();
             string? chosen = _isWindows64
-                ? entries.FirstOrDefault(f => string.Equals(Meta(f).Architecture, "x64", StringComparison.OrdinalIgnoreCase))
-                  ?? entries.FirstOrDefault(f => string.Equals(Meta(f).Architecture, "x86", StringComparison.OrdinalIgnoreCase))
-                : entries.FirstOrDefault(f => string.Equals(Meta(f).Architecture, "x86", StringComparison.OrdinalIgnoreCase));
+                ? entries.FirstOrDefault(f => Meta(f).Architecture == "x64")
+                  ?? entries.FirstOrDefault(f => Meta(f).Architecture == "x86")
+                  ?? entries.FirstOrDefault(f => Meta(f).Architecture == "Universal")
+                : entries.FirstOrDefault(f => Meta(f).Architecture == "x86")
+                  ?? entries.FirstOrDefault(f => Meta(f).Architecture == "Universal");
 
-            if (chosen == null && entries.Count == 1 && string.IsNullOrWhiteSpace(Meta(entries[0]).Architecture))
+            if (chosen == null && entries.Count == 1 && Meta(entries[0]).Architecture == "Unknown")
                 chosen = entries[0];
             if (chosen == null) continue;
 
@@ -469,7 +481,7 @@ internal sealed class ProgramManagerForm : UserControl
             _list.Items.Add(new ListViewItem(name, _images.Images.Count - 1) { Tag = chosen });
         }
         _list.EndUpdate(); _list.Invalidate();
-        _status.Text = $"{_list.Items.Count} programa(s) compatibles con {_architectureLabel}. En Windows x64 se prioriza x64 si existe la versión correspondiente.";
+        _status.Text = $"Windows detectado: {_architectureLabel}. x64 se prioriza en Windows x64; x86 es alternativa. Unknown/ARM64 requieren validación.";
     }
 
     private static string NormalizeProgramName(string name)
