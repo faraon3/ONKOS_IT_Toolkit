@@ -715,13 +715,13 @@ internal sealed class BackupForm : UserControl
                 if (infFiles.Length > 0)
                 {
                     var driverChoice = MessageBox.Show(this,
-                        $"El respaldo contiene {infFiles.Length:N0} archivos INF de controladores.\\n\\n¿Deseas instalar/importar los drivers en este computador?\\n\\nSe requiere ejecutar ONKOS como administrador. Windows instalará solo los controladores compatibles que pueda utilizar.",
+                        $"El respaldo contiene {infFiles.Length:N0} archivos INF de controladores.\n\n¿Deseas instalar/importar los drivers en este computador?\n\nSe requiere ejecutar ONKOS como administrador. Windows instalará solo los controladores compatibles que pueda utilizar.",
                         "Restaurar controladores", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
                     if (driverChoice == DialogResult.Yes)
                     {
                         try
                         {
-                            string driverOutput = await RunProcessAsync("pnputil.exe", $"/add-driver \\"{Path.Combine(driversPath, "*.inf")}\\" /subdirs /install", false);
+                            string driverOutput = await RunProcessAsync("pnputil.exe", $"/add-driver \"{Path.Combine(driversPath, "*.inf")}\" /subdirs /install", false);
                             report.Add("=== RESTAURACIÓN DE DRIVERS ===");
                             report.Add(driverOutput);
                             WriteLog("Proceso de restauración de drivers ejecutado.");
@@ -737,13 +737,13 @@ internal sealed class BackupForm : UserControl
             if (File.Exists(networkDump))
             {
                 var networkChoice = MessageBox.Show(this,
-                    "El respaldo contiene configuración de red IPv4 exportada con netsh.\\n\\n¿Deseas aplicar esa configuración a este computador?\\n\\nATENCIÓN: puede cambiar IP, gateway, DNS y afectar la conexión. Solo continúa si esta configuración corresponde a la red y adaptador actuales. Se requiere ejecutar ONKOS como administrador.",
+                    "El respaldo contiene configuración de red IPv4 exportada con netsh.\n\n¿Deseas aplicar esa configuración a este computador?\n\nATENCIÓN: puede cambiar IP, gateway, DNS y afectar la conexión. Solo continúa si esta configuración corresponde a la red y adaptador actuales. Se requiere ejecutar ONKOS como administrador.",
                     "Restaurar configuración IPv4", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                 if (networkChoice == DialogResult.Yes)
                 {
                     try
                     {
-                        string networkOutput = await RunProcessAsync("netsh.exe", $"exec \\"{networkDump}\\"", false);
+                        string networkOutput = await RunProcessAsync("netsh.exe", $"exec \"{networkDump}\"", false);
                         report.Add("=== RESTAURACIÓN IPv4 ===");
                         report.Add(networkOutput);
                         WriteLog("Comando de restauración IPv4 ejecutado.");
@@ -773,7 +773,7 @@ internal sealed class BackupForm : UserControl
         try
         {
             string full = Path.GetFullPath(path);
-            string usersRoot = Path.Combine(Path.GetPathRoot(full) ?? "C:\\", "Users");
+            string usersRoot = Path.Combine(Path.GetPathRoot(full) ?? "C:\", "Users");
             if (!full.StartsWith(usersRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return null;
             string remainder = full.Substring(usersRoot.Length + 1);
             int separator = remainder.IndexOf(Path.DirectorySeparatorChar);
