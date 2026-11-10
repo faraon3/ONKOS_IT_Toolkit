@@ -113,11 +113,26 @@ internal sealed class PrinterManagerForm : UserControl
 
     private async Task AddDriverAsync()
     {
-        using var folder = new FolderBrowserDialog { Description = "Selecciona la carpeta del controlador de la impresora (debe contener EXE, MSI o INF)." };
-        if (folder.ShowDialog(this) != DialogResult.OK) return;
-        var candidates = Directory.GetFiles(folder.SelectedPath, "*", SearchOption.AllDirectories)
-            .Where(f => new[] { ".exe", ".msi", ".inf" }.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase)).ToList();
-        if (candidates.Count == 0) { MessageBox.Show(this, "No se encontraron archivos EXE, MSI o INF en esa carpeta.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        using var picker = new OpenFileDialog
+        {
+            Title = "Selecciona todos los archivos del controlador de la impresora",
+            Filter = "Todos los archivos (*.*)|*.*",
+            Multiselect = true,
+            CheckFileExists = true
+        };
+        if (picker.ShowDialog(this) != DialogResult.OK || picker.FileNames.Length == 0) return;
+
+        // Se permite seleccionar en una sola operación archivos de distintas extensiones:
+        // EXE, MSI, INF y también archivos de soporte como CAT, DLL y SYS.
+        string[] selectedFiles = picker.FileNames.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var candidates = selectedFiles
+            .Where(f => new[] { ".exe", ".msi", ".inf" }.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase))
+            .ToList();
+        if (candidates.Count == 0)
+        {
+            MessageBox.Show(this, "Selecciona al menos un archivo instalador EXE, MSI o INF. También puedes incluir archivos CAT, DLL y SYS del mismo controlador.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
 
         string selectedInstaller;
         using (var choose = new SelectInstallerForm(candidates))
@@ -125,20 +140,53 @@ internal sealed class PrinterManagerForm : UserControl
             if (choose.ShowDialog(this) != DialogResult.OK || choose.SelectedPath == null) return;
             selectedInstaller = choose.SelectedPath;
         }
-        string display = Path.GetFileName(folder.SelectedPath.TrimEnd(Path.DirectorySeparatorChar));
+
+        string sourceFolder = Path.GetDirectoryName(selectedFiles[0])!;
+        string display = Path.GetFileName(sourceFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(display)) display = Path.GetFileNameWithoutExtension(selectedInstaller);
         string safe = SafeName(display);
-        string destination = Path.Combine(_library, safe + "_" + Guid.NewGuid().ToString("N")[..8]);
-        long total = Math.Max(1, candidates.Sum(f => new FileInfo(f).Length));
+        string key = safe + "_" + Guid.NewGuid().ToString("N")[..8];
+        string destination = Path.Combine(_library, key);
+        long total = Math.Max(1, selectedFiles.Sum(f => new FileInfo(f).Length));
         long copied = 0;
-        SetBusy(true, "Copiando controlador...");
+
+        SetBusy(true, "Copiando archivos seleccionados...");
         try
         {
-            await CopyFolderWithProgressAsync(folder.SelectedPath, destination, total, value => { copied = value; SetProgress((int)Math.Min(99, copied * 100.0 / total), "Cargando " + display); });
-            string relative = Path.GetRelativePath(folder.SelectedPath, selectedInstaller);
-            var meta = new PrinterMeta { DisplayName = display, Model = display, InstallerRelativePath = relative, InstallType = Path.GetExtension(selectedInstaller).TrimStart('.').ToLowerInvariant() };
-            _metadata[Path.GetFileName(destination)] = meta;
-            SaveMetadata(); RefreshList(); SetProgress(100, "Controlador cargado: " + display);
-            MessageBox.Show(this, "Controlador agregado correctamente.\n\nImpresora: " + display + "\nInstalador: " + relative, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Directory.CreateDirectory(destination);
+            foreach (string file in selectedFiles)
+            {
+                string target = Path.Combine(destination, Path.GetFileName(file));
+                using var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, true);
+                using var output = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None, 1024 * 1024, true);
+                byte[] buffer = new byte[1024 * 1024];
+                int read;
+                while ((read = await input.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                {
+                    await output.WriteAsync(buffer, 0, read);
+                    copied += read;
+                    SetProgress((int)Math.Min(99, copied * 100.0 / total), "Cargando " + display);
+                }
+            }
+
+            string relative = Path.GetFileName(selectedInstaller);
+            var meta = new PrinterMeta
+            {
+                DisplayName = display,
+                Model = display,
+                InstallerRelativePath = relative,
+                InstallType = Path.GetExtension(selectedInstaller).TrimStart('.').ToLowerInvariant()
+            };
+            _metadata[key] = meta;
+            SaveMetadata();
+            RefreshList();
+            SetProgress(100, "Controlador cargado: " + display);
+            MessageBox.Show(this,
+                "Controlador agregado correctamente.\n\nImpresora: " + display +
+                "\nArchivos copiados: " + selectedFiles.Length +
+                "\nInstalador principal: " + relative +
+                "\n\nNota: selecciona también los archivos de soporte del controlador (por ejemplo CAT, DLL y SYS).",
+                "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
