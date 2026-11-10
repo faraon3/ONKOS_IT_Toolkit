@@ -59,7 +59,7 @@ internal sealed class MainForm : Form
 
         AddModule(grid, 0, 0, "01", "Backup y migración", "Copia documentos y configuraciones antes de formatear o cambiar de equipo.", true, () => OpenBackup());
         AddModule(grid, 1, 0, "02", "Programas", "Organiza instaladores portables y prepara instalaciones para los equipos.", true, () => OpenPrograms());
-        AddModule(grid, 0, 1, "03", "Impresoras", "Centraliza controladores, modelos y herramientas de instalación.", false);
+        AddModule(grid, 0, 1, "03", "Impresoras", "Guarda controladores, personaliza logos y ejecuta instalaciones.", true, () => OpenPrinters());
         AddModule(grid, 1, 1, "04", "Inventario", "Consulta y registra información técnica de los computadores.", false);
 
         home.Controls.Add(grid);
@@ -91,6 +91,20 @@ internal sealed class MainForm : Form
         };
         _mainContent.Controls.Clear();
         _mainContent.Controls.Add(programs);
+        _header.Visible = false;
+    }
+
+    private void OpenPrinters()
+    {
+        var printers = new PrinterManagerForm();
+        printers.BackRequested += () =>
+        {
+            _mainContent.Controls.Clear();
+            if (_homeBody != null) _mainContent.Controls.Add(_homeBody);
+            _header.Visible = true;
+        };
+        _mainContent.Controls.Clear();
+        _mainContent.Controls.Add(printers);
         _header.Visible = false;
     }
 
