@@ -20,6 +20,10 @@ internal sealed class MainForm : Form
     private readonly Panel _mainContent = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(18, 16, 25) };
     private readonly Panel _header;
     private Control? _homeBody;
+    // Las vistas se conservan durante toda la sesión: los procesos async siguen activos al volver al inicio.
+    private ProgramManagerForm? _programs;
+    private PrinterManagerForm? _printers;
+    private BackupForm? _backup;
 
     private static readonly Color Bg = Color.FromArgb(18, 16, 25);
     private static readonly Color Card = Color.FromArgb(31, 27, 41);
@@ -80,46 +84,48 @@ internal sealed class MainForm : Form
         Shown += (_, _) => { foreach (var f in new[] { "Data", "Data/Config", "Data/Programs", "Data/Drivers", "Data/Templates", "Data/Reports" }) Directory.CreateDirectory(Path.Combine(_appRoot, f)); };
     }
 
+    private void ShowHome()
+    {
+        _mainContent.Controls.Clear();
+        if (_homeBody != null) _mainContent.Controls.Add(_homeBody);
+        _header.Visible = true;
+    }
+
+    private void ShowModule(Control module)
+    {
+        _mainContent.Controls.Clear();
+        _mainContent.Controls.Add(module);
+        _header.Visible = false;
+    }
+
     private void OpenPrograms()
     {
-        var programs = new ProgramManagerForm();
-        programs.BackRequested += () =>
+        if (_programs == null)
         {
-            _mainContent.Controls.Clear();
-            if (_homeBody != null) _mainContent.Controls.Add(_homeBody);
-            _header.Visible = true;
-        };
-        _mainContent.Controls.Clear();
-        _mainContent.Controls.Add(programs);
-        _header.Visible = false;
+            _programs = new ProgramManagerForm();
+            _programs.BackRequested += ShowHome;
+        }
+        ShowModule(_programs);
     }
 
     private void OpenPrinters()
     {
-        var printers = new PrinterManagerForm();
-        printers.BackRequested += () =>
+        if (_printers == null)
         {
-            _mainContent.Controls.Clear();
-            if (_homeBody != null) _mainContent.Controls.Add(_homeBody);
-            _header.Visible = true;
-        };
-        _mainContent.Controls.Clear();
-        _mainContent.Controls.Add(printers);
-        _header.Visible = false;
+            _printers = new PrinterManagerForm();
+            _printers.BackRequested += ShowHome;
+        }
+        ShowModule(_printers);
     }
 
     private void OpenBackup()
     {
-        var backup = new BackupForm();
-        backup.BackRequested += () =>
+        if (_backup == null)
         {
-            _mainContent.Controls.Clear();
-            if (_homeBody != null) _mainContent.Controls.Add(_homeBody);
-            _header.Visible = true;
-        };
-        _mainContent.Controls.Clear();
-        _mainContent.Controls.Add(backup);
-        _header.Visible = false;
+            _backup = new BackupForm();
+            _backup.BackRequested += ShowHome;
+        }
+        ShowModule(_backup);
     }
 
     private static void AddModule(TableLayoutPanel grid, int column, int row, string number, string title, string description, bool enabled, Action? action = null)
