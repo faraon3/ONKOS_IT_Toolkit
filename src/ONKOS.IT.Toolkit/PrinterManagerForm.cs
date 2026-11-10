@@ -84,7 +84,7 @@ internal sealed class PrinterManagerForm : UserControl
         var listHeader = new Panel { Dock = DockStyle.Top, Height = 32, BackColor = Purple };
         listHeader.Controls.Add(new Label { Text = "Impresora / Modelo", Dock = DockStyle.Fill, ForeColor = Color.White, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8, 0, 0, 0), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold) });
         _list.DrawItem += DrawPrinterRow;
-        _list.DoubleClick += (_, _) => RenameSelected();
+        _list.MouseDoubleClick += ListMouseDoubleClick;
         group.Controls.Add(_list); group.Controls.Add(listHeader); group.Controls.Add(toolbar);
 
         var progressPanel = new Panel { Dock = DockStyle.Bottom, Height = 58, BackColor = Surface, Padding = new Padding(10, 4, 10, 4) };
@@ -227,6 +227,24 @@ internal sealed class PrinterManagerForm : UserControl
         if (MessageBox.Show(this, "¿Eliminar " + item.Text + " y sus archivos de la biblioteca local? Esto no desinstala la impresora de Windows.", "Eliminar impresora", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         try { Directory.Delete(Path.Combine(_library, key), true); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
         _metadata.Remove(key); SaveMetadata(); RefreshList();
+    }
+
+    // Igual que en el módulo Programas: doble clic en el logo para cambiarlo
+    // y doble clic en el nombre para editar el nombre visible.
+    private void ListMouseDoubleClick(object? sender, MouseEventArgs e)
+    {
+        var item = _list.GetItemAt(e.X, e.Y);
+        if (item?.Tag is not string key) return;
+
+        int relativeX = e.X - item.Bounds.Left;
+        if (relativeX >= 12 && relativeX <= 64)
+        {
+            ChangeLogo(item);
+        }
+        else if (relativeX >= 72)
+        {
+            RenameSelected();
+        }
     }
 
     private void RenameSelected()
