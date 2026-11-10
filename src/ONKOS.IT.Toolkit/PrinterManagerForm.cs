@@ -26,8 +26,6 @@ internal sealed class PrinterManagerForm : UserControl
     private readonly Button _add = new() { Text = "+  AGREGAR DRIVER" };
     private readonly Button _install = new() { Text = "INSTALAR IMPRESORA" };
     private readonly Button _remove = new() { Text = "ELIMINAR IMPRESORA" };
-    private readonly Button _rename = new() { Text = "CAMBIAR NOMBRE" };
-    private readonly Button _logo = new() { Text = "CAMBIAR LOGO" };
     private readonly Button _back = new() { Text = "‹  VOLVER AL INICIO" };
     private readonly ModernProgressBar _progress = new();
     private readonly Label _progressText = new() { Text = "Listo para comenzar", ForeColor = TextMuted, Dock = DockStyle.Top, Height = 22 };
@@ -93,26 +91,22 @@ internal sealed class PrinterManagerForm : UserControl
         var statusPanel = new Panel { Dock = DockStyle.Bottom, Height = 28, BackColor = Surface, Padding = new Padding(8, 0, 0, 0) };
         statusPanel.Controls.Add(_status);
 
-        var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 104, BackColor = Bg, Padding = new Padding(3, 2, 3, 2) };
-        foreach (var b in new[] { _add, _install, _remove, _rename, _logo }) { b.Font = new Font("Segoe UI", 9F, FontStyle.Bold); b.Height = 46; }
-        StyleButton(_add, false); StyleButton(_install, false); StyleButton(_remove, true); StyleButton(_rename, true); StyleButton(_logo, true);
+        var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = Bg, Padding = new Padding(3, 2, 3, 2) };
+        foreach (var b in new[] { _add, _install, _remove }) { b.Font = new Font("Segoe UI", 9F, FontStyle.Bold); b.Height = 46; }
+        StyleButton(_add, false); StyleButton(_install, false); StyleButton(_remove, true);
         void LayoutButtons()
         {
-            int gap = 4, w = actionBar.ClientSize.Width, each = (w - gap * 2) / 3;
+            int gap = 6, w = actionBar.ClientSize.Width, each = (w - gap * 2) / 3;
             _add.SetBounds(0, 0, each, 46); _install.SetBounds(each + gap, 0, each, 46); _remove.SetBounds((each + gap) * 2, 0, w - (each + gap) * 2, 46);
-            int half = (w - gap) / 2;
-            _rename.SetBounds(0, 50, half, 46); _logo.SetBounds(half + gap, 50, w - half - gap, 46);
         }
         actionBar.Resize += (_, _) => LayoutButtons(); LayoutButtons();
-        actionBar.Controls.AddRange(new Control[] { _add, _install, _remove, _rename, _logo });
+        actionBar.Controls.AddRange(new Control[] { _add, _install, _remove });
         content.Controls.Add(group);
         Controls.Add(content); Controls.Add(progressPanel); Controls.Add(statusPanel); Controls.Add(actionBar); Controls.Add(header);
 
         _add.Click += async (_, _) => await AddDriverAsync();
         _install.Click += async (_, _) => await InstallSelectedAsync();
         _remove.Click += (_, _) => RemoveSelected();
-        _rename.Click += (_, _) => RenameSelected();
-        _logo.Click += (_, _) => ChangeLogo();
         _search.TextChanged += (_, _) => RefreshList();
         RefreshList();
     }
@@ -303,7 +297,7 @@ internal sealed class PrinterManagerForm : UserControl
 
     private void SetBusy(bool busy, string? caption = null)
     {
-        _add.Enabled = _install.Enabled = _remove.Enabled = _rename.Enabled = _logo.Enabled = !busy;
+        _add.Enabled = _install.Enabled = _remove.Enabled = !busy;
         if (caption != null) SetProgress(0, caption);
     }
     private void SetProgress(int value, string caption) { _progress.Value = Math.Clamp(value, 0, 100); _progressText.Text = caption + " · " + _progress.Value + "%"; }
