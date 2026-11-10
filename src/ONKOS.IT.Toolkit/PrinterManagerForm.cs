@@ -256,9 +256,9 @@ internal sealed class PrinterManagerForm : UserControl
         meta.DisplayName = value.Trim(); SaveMetadata(); RefreshList();
     }
 
-    private void ChangeLogo()
+    private void ChangeLogo(ListViewItem? selectedItem = null)
     {
-        var item = _list.SelectedItems.Count > 0 ? _list.SelectedItems[0] : null;
+        var item = selectedItem ?? (_list.SelectedItems.Count > 0 ? _list.SelectedItems[0] : null);
         if (item?.Tag is not string key || !_metadata.TryGetValue(key, out var meta)) { MessageBox.Show(this, "Selecciona una impresora."); return; }
         using var dialog = new OpenFileDialog { Title = "Selecciona el logo de la impresora", Filter = "Imágenes (*.png;*.jpg;*.jpeg;*.bmp;*.ico)|*.png;*.jpg;*.jpeg;*.bmp;*.ico" };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
