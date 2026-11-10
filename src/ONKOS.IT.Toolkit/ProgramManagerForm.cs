@@ -197,35 +197,65 @@ internal sealed class ProgramManagerForm : UserControl
 
     private async Task AddPortableFolderAsync()
     {
-        using var folderDialog = new FolderBrowserDialog { Description = "Selecciona la carpeta del programa portable o paquete (ej. Office con setup.exe)." };
+        using var folderDialog = new FolderBrowserDialog { Description = "Selecciona la carpeta donde está el ejecutable portable." };
         if (folderDialog.ShowDialog(this) != DialogResult.OK) return;
-        using var exeDialog = new OpenFileDialog { InitialDirectory = folderDialog.SelectedPath, Filter = "Ejecutable (*.exe)|*.exe", Title = "Selecciona el ejecutable principal" };
-        if (exeDialog.ShowDialog(this) != DialogResult.OK) return;
-        string root = Path.GetFullPath(folderDialog.SelectedPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!Path.GetFullPath(exeDialog.FileName).StartsWith(root, StringComparison.OrdinalIgnoreCase))
-        { MessageBox.Show(this, "El ejecutable debe estar dentro de la carpeta seleccionada."); return; }
 
-        string dest = Path.Combine(_library, "Portable_" + Guid.NewGuid().ToString("N"));
-        SetBusy(true, "Preparando archivos del programa portable...");
+        using var exeDialog = new OpenFileDialog
+        {
+            InitialDirectory = folderDialog.SelectedPath,
+            Filter = "Ejecutable (*.exe)|*.exe",
+            Title = "Selecciona el único ejecutable que deseas guardar"
+        };
+        if (exeDialog.ShowDialog(this) != DialogResult.OK) return;
+
+        string root = Path.GetFullPath(folderDialog.SelectedPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        string selectedExe = Path.GetFullPath(exeDialog.FileName);
+        if (!selectedExe.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        {
+            MessageBox.Show(this, "El ejecutable debe estar dentro de la carpeta seleccionada.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        string displayName = Path.GetFileNameWithoutExtension(selectedExe);
+        string safeName = string.Concat(displayName.Select(ch => Path.GetInvalidFileNameChars().Contains(ch) ? '_' : ch));
+        string dest = Path.Combine(_library, "Portable_" + safeName + "_" + Guid.NewGuid().ToString("N")[..8]);
+        string copiedExe = Path.Combine(dest, Path.GetFileName(selectedExe));
+        SetBusy(true, "Guardando el ejecutable seleccionado...");
         try
         {
-            await CopyDirectoryWithProgressAsync(folderDialog.SelectedPath, dest, "Copiando programa portable");
-            string relative = Path.GetRelativePath(folderDialog.SelectedPath, exeDialog.FileName);
-            string copiedExe = Path.Combine(dest, relative);
-            File.WriteAllText(Path.Combine(dest, ".onko-portable-main.txt"), relative);
+            Directory.CreateDirectory(dest);
+            long total = Math.Max(1, new FileInfo(selectedExe).Length);
+            long copied = 0;
+            using (var input = new FileStream(selectedExe, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, true))
+            using (var output = new FileStream(copiedExe, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024, true))
+            {
+                byte[] buffer = new byte[1024 * 1024];
+                int read;
+                while ((read = await input.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                {
+                    await output.WriteAsync(buffer, 0, read);
+                    copied += read;
+                    SetProgress((int)Math.Min(99, copied * 100.0 / total), "Copiando " + Path.GetFileName(selectedExe));
+                }
+            }
+
             var meta = Meta(copiedExe);
-            meta.DisplayName = Path.GetFileName(folderDialog.SelectedPath);
+            meta.DisplayName = displayName;
             meta.Architecture = "Any";
             SaveMetadata();
             RefreshList();
-            SetProgress(100, "Carga finalizada: " + meta.DisplayName);
-            MessageBox.Show(this, "Se copió la carpeta completa.\n\nPrograma agregado: " + meta.DisplayName + "\nEjecutable principal: " + relative + "\n\nLos demás ejecutables quedan guardados como archivos de apoyo y no aparecerán por separado.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            SetProgress(100, "Ejecutable guardado: " + displayName);
+            MessageBox.Show(this,
+                "Se agregó únicamente el ejecutable que seleccionaste.\n\nPrograma: " + displayName +
+                "\nArchivo guardado: " + Path.GetFileName(selectedExe) +
+                "\n\nNo se copiaron los demás EXE ni los archivos de la carpeta original. Si este programa necesita DLL, carpetas de datos u otros archivos externos, podría no funcionar como portable.",
+                "ONKOS · Programa portable", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
             try { if (Directory.Exists(dest)) Directory.Delete(dest, true); } catch { }
-            MessageBox.Show(this, ex.Message, "Error al copiar portable", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            SetProgress(0, "No se pudo cargar el programa portable");
+            MessageBox.Show(this, ex.Message, "Error al agregar portable", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            SetProgress(0, "No se pudo guardar el ejecutable");
         }
         finally { SetBusy(false); }
     }
