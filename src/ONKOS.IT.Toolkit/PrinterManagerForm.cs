@@ -115,84 +115,126 @@ internal sealed class PrinterManagerForm : UserControl
     {
         using var picker = new OpenFileDialog
         {
-            Title = "Selecciona todos los archivos del controlador de la impresora",
+            Title = "Selecciona los instaladores y archivos de los controladores que deseas agregar",
             Filter = "Todos los archivos (*.*)|*.*",
             Multiselect = true,
             CheckFileExists = true
         };
         if (picker.ShowDialog(this) != DialogResult.OK || picker.FileNames.Length == 0) return;
 
-        // Se permite seleccionar en una sola operación archivos de distintas extensiones:
-        // EXE, MSI, INF y también archivos de soporte como CAT, DLL y SYS.
-        string[] selectedFiles = picker.FileNames.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        var candidates = selectedFiles
-            .Where(f => new[] { ".exe", ".msi", ".inf" }.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase))
+        string[] selectedFiles = picker.FileNames
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        // Cada carpeta de origen se trata como un controlador independiente.
+        // Así se pueden seleccionar instaladores de varias impresoras a la vez.
+        var groups = selectedFiles
+            .GroupBy(f => Path.GetDirectoryName(f)!, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new
+            {
+                SourceFolder = g.Key,
+                Files = g.ToArray(),
+                Candidates = g.Where(f => new[] { ".exe", ".msi", ".inf" }
+                    .Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase)).ToArray()
+            })
             .ToList();
-        if (candidates.Count == 0)
+
+        var validGroups = groups.Where(g => g.Candidates.Length > 0).ToList();
+        if (validGroups.Count == 0)
         {
-            MessageBox.Show(this, "Selecciona al menos un archivo instalador EXE, MSI o INF. También puedes incluir archivos CAT, DLL y SYS del mismo controlador.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this,
+                "No se encontró ningún instalador EXE, MSI o INF en los archivos seleccionados.",
+                "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
-        string selectedInstaller;
-        using (var choose = new SelectInstallerForm(candidates))
-        {
-            if (choose.ShowDialog(this) != DialogResult.OK || choose.SelectedPath == null) return;
-            selectedInstaller = choose.SelectedPath;
-        }
-
-        string sourceFolder = Path.GetDirectoryName(selectedFiles[0])!;
-        string display = Path.GetFileName(sourceFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        if (string.IsNullOrWhiteSpace(display)) display = Path.GetFileNameWithoutExtension(selectedInstaller);
-        string safe = SafeName(display);
-        string key = safe + "_" + Guid.NewGuid().ToString("N")[..8];
-        string destination = Path.Combine(_library, key);
-        long total = Math.Max(1, selectedFiles.Sum(f => new FileInfo(f).Length));
+        int skipped = groups.Count - validGroups.Count;
+        long total = Math.Max(1, validGroups.Sum(g => g.Files.Sum(f => new FileInfo(f).Length)));
         long copied = 0;
+        int added = 0;
+        var addedNames = new List<string>();
+        var createdFolders = new List<string>();
 
-        SetBusy(true, "Copiando archivos seleccionados...");
+        SetBusy(true, "Preparando carga de controladores...");
         try
         {
-            Directory.CreateDirectory(destination);
-            foreach (string file in selectedFiles)
+            foreach (var group in validGroups)
             {
-                string target = Path.Combine(destination, Path.GetFileName(file));
-                using var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, true);
-                using var output = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None, 1024 * 1024, true);
-                byte[] buffer = new byte[1024 * 1024];
-                int read;
-                while ((read = await input.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                string display = Path.GetFileName(group.SourceFolder.TrimEnd(
+                    Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                if (string.IsNullOrWhiteSpace(display))
+                    display = Path.GetFileNameWithoutExtension(group.Candidates[0]);
+
+                // Selección automática del instalador principal: primero busca
+                // coincidencia con el nombre de la carpeta y luego nombres típicos.
+                string installer = group.Candidates
+                    .OrderByDescending(f => Path.GetFileNameWithoutExtension(f).Contains(display, StringComparison.OrdinalIgnoreCase))
+                    .ThenByDescending(f => new[] { "setup", "install", "driver" }
+                        .Any(k => Path.GetFileNameWithoutExtension(f).Contains(k, StringComparison.OrdinalIgnoreCase)))
+                    .ThenBy(f => Path.GetExtension(f).ToLowerInvariant() switch
+                    {
+                        ".exe" => 0,
+                        ".msi" => 1,
+                        ".inf" => 2,
+                        _ => 3
+                    })
+                    .ThenBy(f => Path.GetFileName(f).Length)
+                    .First();
+
+                string safe = SafeName(display);
+                string key = safe + "_" + Guid.NewGuid().ToString("N")[..8];
+                string destination = Path.Combine(_library, key);
+                Directory.CreateDirectory(destination);
+                createdFolders.Add(destination);
+
+                foreach (string file in group.Files)
                 {
-                    await output.WriteAsync(buffer, 0, read);
-                    copied += read;
-                    SetProgress((int)Math.Min(99, copied * 100.0 / total), "Cargando " + display);
+                    string target = Path.Combine(destination, Path.GetFileName(file));
+                    using var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, true);
+                    using var output = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None, 1024 * 1024, true);
+                    byte[] buffer = new byte[1024 * 1024];
+                    int read;
+                    while ((read = await input.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                    {
+                        await output.WriteAsync(buffer, 0, read);
+                        copied += read;
+                        SetProgress((int)Math.Min(99, copied * 100.0 / total), "Cargando " + display);
+                    }
                 }
+
+                _metadata[key] = new PrinterMeta
+                {
+                    DisplayName = display,
+                    Model = display,
+                    InstallerRelativePath = Path.GetFileName(installer),
+                    InstallType = Path.GetExtension(installer).TrimStart('.').ToLowerInvariant()
+                };
+                added++;
+                addedNames.Add(display);
             }
 
-            string relative = Path.GetFileName(selectedInstaller);
-            var meta = new PrinterMeta
-            {
-                DisplayName = display,
-                Model = display,
-                InstallerRelativePath = relative,
-                InstallType = Path.GetExtension(selectedInstaller).TrimStart('.').ToLowerInvariant()
-            };
-            _metadata[key] = meta;
             SaveMetadata();
             RefreshList();
-            SetProgress(100, "Controlador cargado: " + display);
-            MessageBox.Show(this,
-                "Controlador agregado correctamente.\n\nImpresora: " + display +
-                "\nArchivos copiados: " + selectedFiles.Length +
-                "\nInstalador principal: " + relative +
-                "\n\nNota: selecciona también los archivos de soporte del controlador (por ejemplo CAT, DLL y SYS).",
-                "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            SetProgress(100, added + " controlador(es) agregado(s)");
+            string summary = "Se agregaron " + added + " controlador(es) a la biblioteca.";
+            if (skipped > 0)
+                summary += "\n\nSe omitieron " + skipped + " carpeta(s) porque no contenían archivos EXE, MSI o INF.";
+            summary += "\n\n" + string.Join("\n", addedNames);
+            MessageBox.Show(this, summary, "ONKOS · Controladores agregados",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
-            try { if (Directory.Exists(destination)) Directory.Delete(destination, true); } catch { }
-            MessageBox.Show(this, ex.Message, "Error al agregar controlador", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            SetProgress(0, "No se pudo cargar el controlador");
+            foreach (string folder in createdFolders)
+            {
+                try { if (Directory.Exists(folder)) Directory.Delete(folder, true); } catch { }
+            }
+            foreach (string key in _metadata.Keys.Where(k => createdFolders.Contains(Path.Combine(_library, k), StringComparer.OrdinalIgnoreCase)).ToList())
+                _metadata.Remove(key);
+            try { SaveMetadata(); } catch { }
+            MessageBox.Show(this, ex.Message, "Error al agregar controladores",
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+            SetProgress(0, "No se pudieron cargar todos los controladores");
         }
         finally { SetBusy(false); }
     }
