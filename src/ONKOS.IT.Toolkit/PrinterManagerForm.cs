@@ -239,26 +239,6 @@ internal sealed class PrinterManagerForm : UserControl
         finally { SetBusy(false); }
     }
 
-    private static async Task CopyFolderWithProgressAsync(string source, string destination, long total, Action<long> report)
-    {
-        Directory.CreateDirectory(destination);
-        foreach (string dir in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
-            Directory.CreateDirectory(Path.Combine(destination, Path.GetRelativePath(source, dir)));
-        long copied = 0;
-        foreach (string file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
-        {
-            string target = Path.Combine(destination, Path.GetRelativePath(source, file));
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            using var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, true);
-            using var output = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None, 1024 * 1024, true);
-            byte[] buffer = new byte[1024 * 1024]; int read;
-            while ((read = await input.ReadAsync(buffer, 0, buffer.Length)) > 0)
-            {
-                await output.WriteAsync(buffer, 0, read); copied += read; report(copied);
-            }
-        }
-    }
-
     private async Task InstallSelectedAsync()
     {
         var item = _list.SelectedItems.Count > 0 ? _list.SelectedItems[0] : null;
@@ -425,23 +405,5 @@ internal sealed class PrinterManagerForm : UserControl
         var cancel = new Button { Text = "Cancelar", DialogResult = DialogResult.Cancel, Location = new Point(326, 82), Size = new Size(88, 30) };
         StyleButton(ok, false); StyleButton(cancel, true); form.Controls.AddRange(new Control[] { label, box, ok, cancel }); form.AcceptButton = ok; form.CancelButton = cancel;
         return form.ShowDialog() == DialogResult.OK ? box.Text : null;
-    }
-
-    private sealed class SelectInstallerForm : Form
-    {
-        public string? SelectedPath { get; private set; }
-        public SelectInstallerForm(List<string> candidates)
-        {
-            Text = "Seleccionar instalador principal"; StartPosition = FormStartPosition.CenterParent; FormBorderStyle = FormBorderStyle.FixedDialog;
-            ClientSize = new Size(620, 390); BackColor = Bg; ForeColor = TextMain; Font = new Font("Segoe UI", 9F);
-            var list = new ListBox { Dock = DockStyle.Fill, BackColor = Surface2, ForeColor = TextMain, BorderStyle = BorderStyle.None };
-            foreach (string path in candidates) list.Items.Add(path);
-            list.SelectedIndex = 0;
-            var bottom = new Panel { Dock = DockStyle.Bottom, Height = 48, BackColor = Surface };
-            var ok = new Button { Text = "Seleccionar", DialogResult = DialogResult.OK, Dock = DockStyle.Right, Width = 130 };
-            StyleButton(ok, false); bottom.Controls.Add(ok); Controls.Add(list); Controls.Add(bottom);
-            list.DoubleClick += (_, _) => { if (list.SelectedItem != null) { SelectedPath = list.SelectedItem.ToString(); DialogResult = DialogResult.OK; Close(); } };
-            FormClosing += (_, _) => { if (DialogResult == DialogResult.OK && list.SelectedItem != null) SelectedPath = list.SelectedItem.ToString(); };
-        }
     }
 }
