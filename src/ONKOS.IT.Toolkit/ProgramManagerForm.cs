@@ -181,6 +181,7 @@ internal sealed class ProgramManagerForm : UserControl
 
     private void ListMouseDown(object? sender, MouseEventArgs e)
     {
+        if (e.Button != MouseButtons.Left) return;
         var item = _list.GetItemAt(e.X, e.Y); if (item?.Tag is not string path) return;
         if (e.X <= item.Bounds.Left + 38) { if (_checkedPaths.Contains(path)) _checkedPaths.Remove(path); else _checkedPaths.Add(path); _list.Invalidate(item.Bounds); }
     }
@@ -239,6 +240,12 @@ internal sealed class ProgramManagerForm : UserControl
                 }
             }
 
+            // Manifiesto: indica cuál es el ejecutable principal del paquete portable.
+            // Necesario para que IsVisibleLibraryInstaller filtre correctamente.
+            File.WriteAllText(
+                Path.Combine(dest, ".onko-portable-main.txt"),
+                Path.GetFileName(copiedExe));
+
             var meta = Meta(copiedExe);
             meta.DisplayName = displayName;
             meta.Architecture = "Any";
@@ -258,32 +265,6 @@ internal sealed class ProgramManagerForm : UserControl
             SetProgress(0, "No se pudo guardar el ejecutable");
         }
         finally { SetBusy(false); }
-    }
-
-    private async Task CopyDirectoryWithProgressAsync(string source, string destination, string caption)
-    {
-        var files = Directory.GetFiles(source, "*", SearchOption.AllDirectories);
-        long total = Math.Max(1, files.Sum(f => new FileInfo(f).Length));
-        long copied = 0;
-        Directory.CreateDirectory(destination);
-        foreach (string dir in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
-            Directory.CreateDirectory(Path.Combine(destination, Path.GetRelativePath(source, dir)));
-        foreach (string file in files)
-        {
-            string target = Path.Combine(destination, Path.GetRelativePath(source, file));
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            using var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, true);
-            using var output = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None, 1024 * 1024, true);
-            byte[] buffer = new byte[1024 * 1024];
-            int read;
-            while ((read = await input.ReadAsync(buffer, 0, buffer.Length)) > 0)
-            {
-                await output.WriteAsync(buffer, 0, read);
-                copied += read;
-                int percent = (int)Math.Min(99, copied * 100.0 / total);
-                SetProgress(percent, caption + ": " + Path.GetFileName(file));
-            }
-        }
     }
 
     private void SetProgress(int value, string caption)
@@ -498,8 +479,9 @@ internal sealed class ProgramManagerForm : UserControl
                     }
                     else if (mode == "silent" && string.IsNullOrWhiteSpace(args))
                     {
-                        // EXE no tiene un parámetro silencioso universal: se evita asumir uno.
+                        // EXE no tiene un parámetro silencioso universal.
                         mode = "normal";
+                        failureDetails.Add(DisplayName(path) + ": modo silencioso solicitado sin argumentos; se ejecutó en modo normal.");
                     }
 
                     var psi = new ProcessStartInfo { FileName = executable, Arguments = args, UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(path)! };
