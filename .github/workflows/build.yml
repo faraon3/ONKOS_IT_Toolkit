@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 # Evita acumular varias compilaciones simultáneas del mismo proyecto.
 concurrency:
@@ -28,10 +28,18 @@ jobs:
       - name: Publicar aplicación portable
         run: dotnet publish src/ONKOS.IT.Toolkit/ONKOS.IT.Toolkit.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/win-x64
 
-      - name: Guardar ejecutable
-        uses: actions/upload-artifact@v6
+      - name: Comprimir versión portable
+        shell: pwsh
+        run: Compress-Archive -Path "publish/win-x64/*" -DestinationPath "ONKOS-IT-Toolkit-win-x64.zip" -CompressionLevel Optimal
+
+      - name: Publicar en GitHub Releases
+        uses: softprops/action-gh-release@v2
         with:
-          name: ONKOS-IT-Toolkit-win-x64
-          path: publish/win-x64/
-          if-no-files-found: error
-          retention-days: 3
+          tag_name: latest
+          name: ONKOS IT Toolkit - Última versión
+          body: |
+            Última versión portable de ONKOS IT Toolkit para Windows x64.
+            Descarga el ZIP, extráelo y ejecuta ONKOS.IT.Toolkit.exe.
+          files: ONKOS-IT-Toolkit-win-x64.zip
+          overwrite_files: true
+          make_latest: true
