@@ -24,6 +24,7 @@ internal sealed class MainForm : Form
     private ProgramManagerForm? _programs;
     private PrinterManagerForm? _printers;
     private BackupForm? _backup;
+    private InventoryForm? _inventory;
 
     private static readonly Color Bg = Color.FromArgb(18, 16, 25);
     private static readonly Color Card = Color.FromArgb(31, 27, 41);
@@ -64,7 +65,7 @@ internal sealed class MainForm : Form
         AddModule(grid, 0, 0, "01", "Backup y migración", "Copia documentos y configuraciones antes de formatear o cambiar de equipo.", true, () => OpenBackup());
         AddModule(grid, 1, 0, "02", "Programas", "Organiza instaladores portables y prepara instalaciones para los equipos.", true, () => OpenPrograms());
         AddModule(grid, 0, 1, "03", "Impresoras", "Guarda controladores, personaliza logos y ejecuta instalaciones.", true, () => OpenPrinters());
-        AddModule(grid, 1, 1, "04", "Inventario", "Consulta y registra información técnica de los computadores.", false);
+        AddModule(grid, 1, 1, "04", "Inventario", "Consulta y exporta información técnica del computador.", true, () => OpenInventory());
 
         home.Controls.Add(grid);
         home.Controls.Add(intro);
@@ -126,6 +127,16 @@ internal sealed class MainForm : Form
             _backup.BackRequested += ShowHome;
         }
         ShowModule(_backup);
+    }
+
+    private void OpenInventory()
+    {
+        if (_inventory == null)
+        {
+            _inventory = new InventoryForm();
+            _inventory.BackRequested += ShowHome;
+        }
+        ShowModule(_inventory);
     }
 
     private static void AddModule(TableLayoutPanel grid, int column, int row, string number, string title, string description, bool enabled, Action? action = null)
