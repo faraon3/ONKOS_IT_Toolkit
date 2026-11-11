@@ -9,9 +9,18 @@
     <AssemblyName>ONKOS_IT_Toolkit</AssemblyName>
     <RootNamespace>ONKOS.IT.Toolkit</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>1.1.0</Version>
+    <FileVersion>1.1.0.0</FileVersion>
+    <AssemblyVersion>1.1.0.0</AssemblyVersion>
+    <Company>Clínica Onkos</Company>
+    <Product>ONKOS IT Toolkit</Product>
+    <Description>Herramienta portable de soporte técnico</Description>
   </PropertyGroup>
   <ItemGroup>
-    <Content Include="Assets\\**\\*.png" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="Assets\\**\\*.ico" CopyToOutputDirectory="PreserveNewest" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\**\*.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\**\*.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
