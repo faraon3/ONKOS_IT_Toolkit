@@ -6,7 +6,6 @@ using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -15,17 +14,16 @@ namespace ONKOS.IT.Toolkit;
 internal sealed class ProgramManagerForm : UserControl
 {
     public event Action? BackRequested;
-    private readonly string _library = Path.Combine(AppContext.BaseDirectory, "Data", "Programs");
-    private readonly string _logos = Path.Combine(AppContext.BaseDirectory, "Data", "Programs", ".logos");
-    private readonly string _metadataPath = Path.Combine(AppContext.BaseDirectory, "Data", "Programs", "programs.json");
-    private readonly bool _isWindows64 = Environment.Is64BitOperatingSystem;
+    private readonly string _library = Path.Combine(AppPaths.ProgramsDir);
+    private readonly string _logos = Path.Combine(AppPaths.ProgramsDir, ".logos");
+    private readonly string _metadataPath = Path.Combine(AppPaths.ProgramsDir, "programs.json");
     private readonly string _architectureLabel = Environment.Is64BitOperatingSystem ? "Windows 64 bits (x64)" : "Windows 32 bits (x86)";
     private readonly ListView _list = new() { Dock = DockStyle.Fill, View = View.Tile, FullRowSelect = true, MultiSelect = true, GridLines = false, CheckBoxes = false, BorderStyle = BorderStyle.None, OwnerDraw = true, HideSelection = false, TileSize = new Size(360, 76) };
     private readonly ImageList _images = new() { ImageSize = new Size(44, 44), ColorDepth = ColorDepth.Depth32Bit };
     private readonly Label _status = new() { Dock = DockStyle.Bottom, Height = 25, TextAlign = ContentAlignment.MiddleLeft };
     private readonly ModernProgressBar _progressBar = new() { Dock = DockStyle.Top, Height = 28, Value = 0 };
     private readonly Label _progressCaption = new() { Dock = DockStyle.Top, Height = 22, Text = "Listo para comenzar", TextAlign = ContentAlignment.MiddleLeft };
-    private readonly Button _install = new() { Text = "INSTALAR SELECCIONADOS" };
+    private readonly Button _install = new() { Text = "EJECUTAR INSTALADORES" };
     private readonly Button _add = new() { Text = "+  AGREGAR PORTABLE" };
     private readonly Button _addProgram = new() { Text = "+  AGREGAR PROGRAMA" };
     private readonly Button _remove = new() { Text = "ELIMINAR PROGRAMA" };
@@ -35,40 +33,38 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly Dictionary<string, ProgramMeta> _metadata = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _checkedPaths = new(StringComparer.OrdinalIgnoreCase);
 
-    private static readonly Color Bg = Color.FromArgb(18, 16, 25);
-    private static readonly Color Surface = Color.FromArgb(31, 27, 41);
-    private static readonly Color Surface2 = Color.FromArgb(39, 34, 51);
-    private static readonly Color Purple = Color.FromArgb(105, 73, 164);
-    private static readonly Color PurpleHover = Color.FromArgb(126, 91, 190);
-    private static readonly Color TextMain = Color.FromArgb(244, 241, 250);
-    private static readonly Color TextMuted = Color.FromArgb(183, 174, 199);
-    private static readonly Color Border = Color.FromArgb(65, 57, 82);
-
-    private sealed class ProgramMeta { public string? DisplayName { get; set; } public string? LogoPath { get; set; } public string? Architecture { get; set; } public string? GroupId { get; set; } public string? WingetId { get; set; } public string? InstallMode { get; set; } public string? InstallArguments { get; set; } public bool RunAsAdmin { get; set; } = true; }
+    private sealed class ProgramMeta
+    {
+        public string? DisplayName { get; set; }
+        public string? LogoPath { get; set; }
+        public string? Architecture { get; set; }
+        public string? WingetId { get; set; }
+        public string? InstallMode { get; set; }
+        public string? InstallArguments { get; set; }
+        public bool RunAsAdmin { get; set; } = true;
+    }
 
     public ProgramManagerForm()
     {
-        Dock = DockStyle.Fill; BackColor = Bg; ForeColor = TextMain; Font = new Font("Segoe UI", 9.5F);
+        Dock = DockStyle.Fill; BackColor = UiColors.Bg; ForeColor = UiColors.TextMain; Font = new Font("Segoe UI", 9.5F);
         Directory.CreateDirectory(_library); Directory.CreateDirectory(_logos); LoadMetadata();
 
-        var header = new Panel { Dock = DockStyle.Top, Height = 88, BackColor = Purple };
-        _back.SetBounds(22, 5, 170, 25); StyleButton(_back, true);
+        var header = new Panel { Dock = DockStyle.Top, Height = 88, BackColor = UiColors.Purple };
+        _back.SetBounds(22, 5, 170, 25); UiHelpers.StyleButton(_back, true);
         _back.Click += (_, _) => BackRequested?.Invoke(); header.Controls.Add(_back);
         header.Controls.Add(new Label { Text = "PROGRAMAS  /  INSTALADORES", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 30) });
         header.Controls.Add(new Label { Text = "Biblioteca local · " + _library, ForeColor = Color.FromArgb(235, 225, 250), AutoSize = true, Location = new Point(25, 66), MaximumSize = new Size(1500, 22) });
 
-        var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), BackColor = Bg };
-        var group = MakeGroup("01  ·  Biblioteca de programas  |  " + _architectureLabel); group.Dock = DockStyle.Fill;
+        var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), BackColor = UiColors.Bg };
+        var group = UiHelpers.MakeGroup("01  ·  Biblioteca de programas  |  " + _architectureLabel); group.Dock = DockStyle.Fill;
 
-        var toolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = Surface };
-
-        // Buscador integrado en un único contenedor visual.
-        var searchBox = new Panel { Bounds = new Rectangle(10, 6, 390, 36), BackColor = Surface2 };
+        var toolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = UiColors.Surface };
+        var searchBox = new Panel { Bounds = new Rectangle(10, 6, 390, 36), BackColor = UiColors.Surface2 };
         searchBox.Paint += (_, e) =>
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using var pen = new Pen(_search.Focused ? PurpleHover : Border, _search.Focused ? 1.8F : 1.2F);
-            using var outline = RoundedRect(new Rectangle(1, 1, searchBox.Width - 3, searchBox.Height - 3), 8);
+            using var pen = new Pen(_search.Focused ? UiColors.PurpleHover : UiColors.Border, _search.Focused ? 1.8F : 1.2F);
+            using var outline = UiHelpers.RoundedRect(new Rectangle(1, 1, searchBox.Width - 3, searchBox.Height - 3), 8);
             e.Graphics.DrawPath(pen, outline);
         };
         searchBox.Resize += (_, _) => searchBox.Invalidate();
@@ -76,13 +72,13 @@ internal sealed class ProgramManagerForm : UserControl
         searchIcon.Paint += (_, e) =>
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using var pen = new Pen(PurpleHover, 2.2F);
+            using var pen = new Pen(UiColors.PurpleHover, 2.2F);
             e.Graphics.DrawEllipse(pen, 9, 8, 12, 12);
             e.Graphics.DrawLine(pen, 20, 20, 26, 26);
         };
-        _search.BorderStyle = BorderStyle.None; _search.BackColor = Surface2; _search.ForeColor = TextMain; _search.Font = new Font("Segoe UI", 10F);
+        _search.BorderStyle = BorderStyle.None; _search.BackColor = UiColors.Surface2; _search.ForeColor = UiColors.TextMain; _search.Font = new Font("Segoe UI", 10F);
         _search.SetBounds(43, 8, 300, 20);
-        _clearSearch.FlatStyle = FlatStyle.Flat; _clearSearch.FlatAppearance.BorderSize = 0; _clearSearch.BackColor = Surface2; _clearSearch.ForeColor = TextMuted; _clearSearch.Cursor = Cursors.Hand;
+        _clearSearch.FlatStyle = FlatStyle.Flat; _clearSearch.FlatAppearance.BorderSize = 0; _clearSearch.BackColor = UiColors.Surface2; _clearSearch.ForeColor = UiColors.TextMuted; _clearSearch.Cursor = Cursors.Hand;
         _clearSearch.FlatAppearance.MouseOverBackColor = Color.FromArgb(58, 48, 72);
         _clearSearch.SetBounds(347, 2, 36, 30);
         _clearSearch.Click += (_, _) => { _search.Clear(); _search.Focus(); };
@@ -91,30 +87,27 @@ internal sealed class ProgramManagerForm : UserControl
         searchBox.Controls.Add(searchIcon); searchBox.Controls.Add(_search); searchBox.Controls.Add(_clearSearch);
         toolbar.Controls.Add(searchBox);
 
-        _list.BackColor = Surface; _list.ForeColor = TextMain; _list.Font = new Font("Segoe UI", 10F); _list.SmallImageList = _images;
-        // Cuadrícula de tres columnas como en la referencia enviada.
+        _list.BackColor = UiColors.Surface; _list.ForeColor = UiColors.TextMain; _list.Font = new Font("Segoe UI", 10F); _list.SmallImageList = _images;
         _list.TileSize = new Size(Math.Max(280, (_list.ClientSize.Width - 36) / 3), 60);
         _list.Resize += (_, _) => _list.TileSize = new Size(Math.Max(280, (_list.ClientSize.Width - 36) / 3), 60);
-        var listHeader = new Panel { Dock = DockStyle.Top, Height = 32, BackColor = Purple };
+        var listHeader = new Panel { Dock = DockStyle.Top, Height = 32, BackColor = UiColors.Purple };
         listHeader.Controls.Add(new Label { Text = "Selecciona / Programa", Dock = DockStyle.Fill, ForeColor = Color.White, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8, 0, 0, 0), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold) });
         _list.DrawItem += DrawProgramRow;
-        _list.DrawSubItem += (_, _) => { };
         _list.MouseDown += ListMouseDown;
         _list.MouseDoubleClick += ListMouseDoubleClick;
-        _list.ItemChecked += (_, _) => { };
         group.Controls.Add(_list); group.Controls.Add(listHeader); group.Controls.Add(toolbar);
 
-        var progressPanel = new Panel { Dock = DockStyle.Bottom, Height = 58, BackColor = Surface, Padding = new Padding(10, 4, 10, 4) };
-        _progressCaption.Dock = DockStyle.Top; _progressCaption.Height = 20; _progressCaption.ForeColor = TextMuted;
+        var progressPanel = new Panel { Dock = DockStyle.Bottom, Height = 58, BackColor = UiColors.Surface, Padding = new Padding(10, 4, 10, 4) };
+        _progressCaption.Dock = DockStyle.Top; _progressCaption.Height = 20; _progressCaption.ForeColor = UiColors.TextMuted;
         _progressBar.Dock = DockStyle.Bottom; _progressBar.Height = 25; _progressBar.Value = 0;
         progressPanel.Controls.Add(_progressBar); progressPanel.Controls.Add(_progressCaption);
 
-        var statusPanel = new Panel { Dock = DockStyle.Bottom, Height = 30, BackColor = Surface };
-        _status.ForeColor = TextMuted; _status.Padding = new Padding(8, 0, 0, 0); statusPanel.Controls.Add(_status);
+        var statusPanel = new Panel { Dock = DockStyle.Bottom, Height = 30, BackColor = UiColors.Surface };
+        _status.ForeColor = UiColors.TextMuted; _status.Padding = new Padding(8, 0, 0, 0); statusPanel.Controls.Add(_status);
 
-        var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = Bg, Padding = new Padding(3, 2, 3, 2) };
+        var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiColors.Bg, Padding = new Padding(3, 2, 3, 2) };
         foreach (var button in new[] { _add, _addProgram, _remove, _install }) { button.Height = 46; button.Font = new Font("Segoe UI", 9.2F, FontStyle.Bold); }
-        StyleButton(_add, false); StyleButton(_remove, true); StyleButton(_install, false);
+        UiHelpers.StyleButton(_add, false); UiHelpers.StyleButton(_remove, true); UiHelpers.StyleButton(_install, false);
         void LayoutActions()
         {
             int w = actionBar.ClientSize.Width; int gap = 4; int each = (w - gap * 3) / 4;
@@ -144,30 +137,22 @@ internal sealed class ProgramManagerForm : UserControl
         bool selected = e.Item.Selected;
         bool checkedItem = _checkedPaths.Contains(path);
         var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var bg = new SolidBrush(selected ? Color.FromArgb(54, 45, 72) : Surface);
+        using var bg = new SolidBrush(selected ? Color.FromArgb(54, 45, 72) : UiColors.Surface);
         g.FillRectangle(bg, e.Bounds);
-        using var separator = new Pen(Border); g.DrawLine(separator, e.Bounds.Left + 10, e.Bounds.Bottom - 1, e.Bounds.Right - 10, e.Bounds.Bottom - 1);
+        using var separator = new Pen(UiColors.Border); g.DrawLine(separator, e.Bounds.Left + 10, e.Bounds.Bottom - 1, e.Bounds.Right - 10, e.Bounds.Bottom - 1);
         var cb = new Rectangle(e.Bounds.Left + 12, e.Bounds.Top + (e.Bounds.Height - 18) / 2, 18, 18);
-        using var cbFill = new SolidBrush(checkedItem ? Purple : Color.FromArgb(46, 40, 59));
-        using var cbPen = new Pen(checkedItem ? PurpleHover : Border, 1.2F);
-        using var pathCb = RoundedRect(cb, 4); g.FillPath(cbFill, pathCb); g.DrawPath(cbPen, pathCb);
+        using var cbFill = new SolidBrush(checkedItem ? UiColors.Purple : Color.FromArgb(46, 40, 59));
+        using var cbPen = new Pen(checkedItem ? UiColors.PurpleHover : UiColors.Border, 1.2F);
+        using var pathCb = UiHelpers.RoundedRect(cb, 4); g.FillPath(cbFill, pathCb); g.DrawPath(cbPen, pathCb);
         if (checkedItem) { using var tick = new Pen(Color.White, 2F); g.DrawLines(tick, new[] { new Point(cb.X + 3, cb.Y + 9), new Point(cb.X + 7, cb.Y + 13), new Point(cb.X + 14, cb.Y + 4) }); }
         int imageIndex = e.Item.ImageIndex;
         if (imageIndex >= 0 && imageIndex < _images.Images.Count)
         {
-            // Icono centrado verticalmente y separado de la línea divisoria de cada fila.
             const int logoSize = 36;
             int logoY = e.Bounds.Top + (e.Bounds.Height - logoSize) / 2;
             g.DrawImage(_images.Images[imageIndex], e.Bounds.Left + 44, logoY, logoSize, logoSize);
         }
-        TextRenderer.DrawText(g, e.Item.Text, new Font("Segoe UI", 10F, FontStyle.Bold), new Rectangle(e.Bounds.Left + 92, e.Bounds.Top + 2, e.Bounds.Width - 104, e.Bounds.Height - 4), TextMain, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-    }
-
-    private static GraphicsPath RoundedRect(Rectangle r, int radius)
-    {
-        var p = new GraphicsPath(); int d = radius * 2;
-        p.AddArc(r.X, r.Y, d, d, 180, 90); p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
-        p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90); p.AddArc(r.X, r.Bottom - d, d, d, 90, 90); p.CloseFigure(); return p;
+        TextRenderer.DrawText(g, e.Item.Text, new Font("Segoe UI", 10F, FontStyle.Bold), new Rectangle(e.Bounds.Left + 92, e.Bounds.Top + 2, e.Bounds.Width - 104, e.Bounds.Height - 4), UiColors.TextMain, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 
     private void ListMouseDoubleClick(object? sender, MouseEventArgs e)
@@ -193,7 +178,6 @@ internal sealed class ProgramManagerForm : UserControl
     private void SaveMetadata() { try { File.WriteAllText(_metadataPath, JsonSerializer.Serialize(_metadata, new JsonSerializerOptions { WriteIndented = true })); } catch (Exception ex) { MessageBox.Show(this, "No se pudo guardar la configuración: " + ex.Message); } }
     private string MetaKey(string file) => Path.GetRelativePath(_library, file).Replace('\\', '/');
     private ProgramMeta Meta(string file) { string key = MetaKey(file); if (!_metadata.TryGetValue(key, out var m)) { if (_metadata.TryGetValue(Path.GetFileName(file), out var legacy)) { m = legacy; _metadata.Remove(Path.GetFileName(file)); _metadata[key] = m; } else _metadata[key] = m = new ProgramMeta(); } return m; }
-    private static string ArchitectureFolder(string architecture) => architecture switch { "x64" => "x64", "x86" => "x86", "Both" => "Compatible_x86_x64", "Universal" => "Compatible_x86_x64", _ => "Unknown" };
     private string DisplayName(string file) => Meta(file).DisplayName ?? Path.GetFileNameWithoutExtension(file);
 
     private async Task AddPortableFolderAsync()
@@ -240,11 +224,7 @@ internal sealed class ProgramManagerForm : UserControl
                 }
             }
 
-            // Manifiesto: indica cuál es el ejecutable principal del paquete portable.
-            // Necesario para que IsVisibleLibraryInstaller filtre correctamente.
-            File.WriteAllText(
-                Path.Combine(dest, ".onko-portable-main.txt"),
-                Path.GetFileName(copiedExe));
+            File.WriteAllText(Path.Combine(dest, ".onko-portable-main.txt"), Path.GetFileName(copiedExe));
 
             var meta = Meta(copiedExe);
             meta.DisplayName = displayName;
@@ -254,8 +234,7 @@ internal sealed class ProgramManagerForm : UserControl
             SetProgress(100, "Ejecutable guardado: " + displayName);
             MessageBox.Show(this,
                 "Se agregó únicamente el ejecutable que seleccionaste.\n\nPrograma: " + displayName +
-                "\nArchivo guardado: " + Path.GetFileName(selectedExe) +
-                "\n\nNo se copiaron los demás EXE ni los archivos de la carpeta original. Si este programa necesita DLL, carpetas de datos u otros archivos externos, podría no funcionar como portable.",
+                "\nArchivo guardado: " + Path.GetFileName(selectedExe),
                 "ONKOS · Programa portable", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
@@ -267,44 +246,29 @@ internal sealed class ProgramManagerForm : UserControl
         finally { SetBusy(false); }
     }
 
-    private void SetProgress(int value, string caption)
-    {
-        _progressBar.Value = Math.Max(0, Math.Min(100, value));
-        _progressCaption.Text = caption + " · " + _progressBar.Value + "%";
-    }
-
-    private void SetBusy(bool busy, string? caption = null)
-    {
-        _add.Enabled = _addProgram.Enabled = _remove.Enabled = _install.Enabled = !busy;
-        if (caption != null) SetProgress(0, caption);
-        if (!busy) _status.Text = "Listo";
-    }
-
-    private static void CopyDirectory(string source, string destination)
-    {
-        Directory.CreateDirectory(destination);
-        foreach (string f in Directory.GetFiles(source)) File.Copy(f, Path.Combine(destination, Path.GetFileName(f)), true);
-        foreach (string d in Directory.GetDirectories(source)) CopyDirectory(d, Path.Combine(destination, Path.GetFileName(d)));
-    }
-
+    /// <summary>
+    /// Cada instalador seleccionado se agrega como una entrada independiente.
+    /// Ya no se agrupa por carpeta, así que seleccionar 5 .exe agrega 5 programas.
+    /// </summary>
     private async Task AddInstallersAsync()
     {
         using var ofd = new OpenFileDialog
         {
-            Title = "Selecciona uno o varios instaladores para agregar",
+            Title = "Selecciona uno o varios instaladores (.exe / .msi) para agregar",
             Filter = "Instaladores (*.exe;*.msi)|*.exe;*.msi",
             Multiselect = true
         };
         if (ofd.ShowDialog(this) != DialogResult.OK || ofd.FileNames.Length == 0) return;
 
-        int added = 0, failed = 0, completed = 0;
+        var unique = ofd.FileNames.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        int added = 0, failed = 0;
         var errors = new List<string>();
-        long total = Math.Max(1, ofd.FileNames.Sum(f => new FileInfo(f).Length));
+        long total = Math.Max(1, unique.Sum(f => new FileInfo(f).Length));
         long copied = 0;
         SetBusy(true, "Cargando programas a la biblioteca...");
         try
         {
-            foreach (string source in ofd.FileNames)
+            foreach (string source in unique)
             {
                 string name = Path.GetFileNameWithoutExtension(source);
                 string destination = Path.Combine(_library, Path.GetFileName(source));
@@ -317,7 +281,6 @@ internal sealed class ProgramManagerForm : UserControl
                         destination = Path.Combine(_library, baseName + "_" + DateTime.Now.ToString("yyyyMMdd_HHmmss_fff") + ext);
                     }
 
-                    long fileLength = new FileInfo(source).Length;
                     using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, true);
                     using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 1024, true);
                     byte[] buffer = new byte[1024 * 1024];
@@ -331,7 +294,6 @@ internal sealed class ProgramManagerForm : UserControl
                     var meta = Meta(destination);
                     meta.DisplayName = name;
                     meta.Architecture = "Any";
-                    meta.WingetId = "";
                     added++;
                 }
                 catch (Exception ex)
@@ -339,7 +301,6 @@ internal sealed class ProgramManagerForm : UserControl
                     failed++;
                     errors.Add(Path.GetFileName(source) + ": " + ex.Message);
                 }
-                completed++;
             }
             SaveMetadata();
             RefreshList();
@@ -353,63 +314,13 @@ internal sealed class ProgramManagerForm : UserControl
         finally { SetBusy(false); }
     }
 
-    private string? AskArchitecture(string fileName)
-    {
-        using var dialog = new Form { Text = "Seleccionar arquitectura", Size = new Size(520, 230), StartPosition = FormStartPosition.CenterParent, BackColor = Surface, ForeColor = TextMain, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
-        var title = new Label { Text = "¿Qué arquitectura tiene este programa?", Font = new Font("Segoe UI", 12F, FontStyle.Bold), ForeColor = TextMain, TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Top, Height = 48 };
-        var info = new Label { Text = fileName + "\\nSelecciona la arquitectura del programa (no necesariamente la del setup).", ForeColor = TextMuted, TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Top, Height = 48 };
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 75, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Padding = new Padding(10), BackColor = Surface };
-        string? selected = null;
-        Button MakeChoice(string text, string value, Color color) { var b = new Button { Text = text, Width = 145, Height = 48, BackColor = color, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 9F, FontStyle.Bold), Cursor = Cursors.Hand }; b.Click += (_, _) => { selected = value; dialog.DialogResult = DialogResult.OK; dialog.Close(); }; return b; }
-        buttons.Controls.Add(MakeChoice("64 BITS (x64)", "x64", Color.FromArgb(72, 104, 174)));
-        buttons.Controls.Add(MakeChoice("32 BITS (x86)", "x86", Color.FromArgb(65, 125, 105)));
-        buttons.Controls.Add(MakeChoice("AMBOS (x86 + x64)", "Both", Purple));
-        dialog.Controls.Add(buttons); dialog.Controls.Add(info); dialog.Controls.Add(title);
-        return dialog.ShowDialog(this) == DialogResult.OK ? selected : null;
-    }
-
-    private static string DetectInstallerArchitecture(string file)
-    {
-        // Detecta arquitectura del EXE. La arquitectura del setup puede diferir del payload instalado.
-        try
-        {
-            if (Path.GetExtension(file).Equals(".exe", StringComparison.OrdinalIgnoreCase))
-            {
-                using var stream = File.OpenRead(file);
-                using var reader = new BinaryReader(stream);
-                if (stream.Length >= 64 && reader.ReadUInt16() == 0x5A4D)
-                {
-                    stream.Position = 0x3C;
-                    int peOffset = reader.ReadInt32();
-                    if (peOffset > 0 && peOffset + 6 <= stream.Length)
-                    {
-                        stream.Position = peOffset;
-                        if (reader.ReadUInt32() == 0x00004550)
-                        {
-                            ushort machine = reader.ReadUInt16();
-                            if (machine == 0x8664) return "x64";
-                            if (machine == 0xAA64) return "ARM64";
-                            if (machine == 0x014c) return "x86";
-                        }
-                    }
-                }
-            }
-        }
-        catch { }
-
-        string lower = Path.GetFileName(file).ToLowerInvariant();
-        if (lower.Contains("x64") || lower.Contains("amd64") || lower.Contains("64bit") || lower.Contains("64-bit")) return "x64";
-        if (lower.Contains("x86") || lower.Contains("32bit") || lower.Contains("32-bit") || lower.Contains("win32")) return "x86";
-        return "Unknown";
-    }
-
     private void RenameProgram(ListViewItem selectedItem)
     {
         string file = (string)selectedItem.Tag!;
         string current = DisplayName(file);
-        using var dialog = new Form { Text = "Cambiar nombre del programa", Size = new Size(420, 150), StartPosition = FormStartPosition.CenterParent, BackColor = Surface, ForeColor = TextMain, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
-        var text = new TextBox { Text = current, Bounds = new Rectangle(15, 15, 370, 30), BackColor = Surface2, ForeColor = TextMain };
-        var ok = new Button { Text = "Guardar", DialogResult = DialogResult.OK, Bounds = new Rectangle(270, 55, 115, 32) }; StyleButton(ok, false);
+        using var dialog = new Form { Text = "Cambiar nombre del programa", Size = new Size(420, 150), StartPosition = FormStartPosition.CenterParent, BackColor = UiColors.Surface, ForeColor = UiColors.TextMain, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
+        var text = new TextBox { Text = current, Bounds = new Rectangle(15, 15, 370, 30), BackColor = UiColors.Surface2, ForeColor = UiColors.TextMain };
+        var ok = new Button { Text = "Guardar", DialogResult = DialogResult.OK, Bounds = new Rectangle(270, 55, 115, 32) }; UiHelpers.StyleButton(ok, false);
         dialog.Controls.Add(text); dialog.Controls.Add(ok); dialog.AcceptButton = ok;
         if (dialog.ShowDialog(this) == DialogResult.OK && !string.IsNullOrWhiteSpace(text.Text)) { Meta(file).DisplayName = text.Text.Trim(); SaveMetadata(); RefreshList(); }
     }
@@ -441,16 +352,16 @@ internal sealed class ProgramManagerForm : UserControl
         var selected = _list.SelectedItems.Cast<ListViewItem>().ToList();
         if (selected.Count == 0) { MessageBox.Show("Selecciona un instalador de la lista."); return; }
         if (MessageBox.Show(this, $"¿Eliminar {selected.Count} instalador(es) de la biblioteca?", "Confirmar", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-        foreach (var item in selected) { try { string p = (string)item.Tag!; File.Delete(p); _checkedPaths.Remove(p); _metadata.Remove(Path.GetFileName(p)); } catch { } }
+        foreach (var item in selected) { try { string p = (string)item.Tag!; File.Delete(p); _checkedPaths.Remove(p); _metadata.Remove(MetaKey(p)); } catch { } }
         SaveMetadata(); RefreshList();
     }
 
     private async Task InstallSelectedAsync()
     {
         var selected = _list.Items.Cast<ListViewItem>().Where(i => i.Tag is string p && _checkedPaths.Contains(p)).ToList();
-        if (selected.Count == 0) { MessageBox.Show("Marca los programas que deseas instalar con la casilla morada."); return; }
-        string confirmText = $"Se ejecutarán {selected.Count} programa(s), uno a la vez.\n\nONKOS no bloqueará programas por ser de 32 o 64 bits: cada instalador se abrirá tal como fue guardado.\n\nSi el propio instalador detecta incompatibilidades, mostrará su mensaje y ONKOS te informará el resultado al finalizar.\n\n¿Continuar?";
-        if (MessageBox.Show(confirmText, "Ejecutar programas", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        if (selected.Count == 0) { MessageBox.Show("Marca los programas que deseas ejecutar con la casilla morada."); return; }
+        string confirmText = $"Se ejecutarán {selected.Count} instalador(es), uno a la vez.\n\nSi el instalador pide UAC, acepta para continuar. Cada instalador abrirá su propio asistente si es necesario.\n\n¿Continuar?";
+        if (MessageBox.Show(confirmText, "Ejecutar instaladores", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         SetBusy(true, "Preparando ejecución..."); int ok = 0, failed = 0, completed = 0;
         var failureDetails = new List<string>();
         SetProgress(0, $"Preparando instalación de {selected.Count} programa(s)");
@@ -460,28 +371,19 @@ internal sealed class ProgramManagerForm : UserControl
             foreach (var item in selected)
             {
                 string path = (string)item.Tag!;
-                SetProgress((int)Math.Round(completed * 100.0 / selected.Count), $"Instalando {completed + 1} de {selected.Count}: {DisplayName(path)}");
+                SetProgress((int)Math.Round(completed * 100.0 / selected.Count), $"Ejecutando {completed + 1} de {selected.Count}: {DisplayName(path)}");
                 _status.Text = "Ahora: " + DisplayName(path);
                 try
                 {
                     var meta = Meta(path);
-                    string mode = meta.InstallMode ?? "normal";
-                    string args = meta.InstallArguments ?? "";
                     string ext = Path.GetExtension(path);
                     string executable = path;
+                    string args = meta.InstallArguments ?? "";
 
                     if (ext.Equals(".msi", StringComparison.OrdinalIgnoreCase))
                     {
                         executable = "msiexec.exe";
-                        if (mode == "normal") args = "/i " + Quote(path);
-                        else if (mode == "silent") args = string.IsNullOrWhiteSpace(args) ? "/i " + Quote(path) + " /qn /norestart" : "/i " + Quote(path) + " " + args;
-                        else args = "/i " + Quote(path) + " " + args;
-                    }
-                    else if (mode == "silent" && string.IsNullOrWhiteSpace(args))
-                    {
-                        // EXE no tiene un parámetro silencioso universal.
-                        mode = "normal";
-                        failureDetails.Add(DisplayName(path) + ": modo silencioso solicitado sin argumentos; se ejecutó en modo normal.");
+                        args = string.IsNullOrWhiteSpace(args) ? "/i " + Quote(path) : "/i " + Quote(path) + " " + args;
                     }
 
                     var psi = new ProcessStartInfo { FileName = executable, Arguments = args, UseShellExecute = true, WorkingDirectory = Path.GetDirectoryName(path)! };
@@ -499,7 +401,7 @@ internal sealed class ProgramManagerForm : UserControl
                         else
                         {
                             failed++;
-                            failureDetails.Add(DisplayName(path) + ": el instalador terminó con código " + proc.ExitCode + ". Revisa el mensaje mostrado por el propio instalador; puede ser incompatibilidad de arquitectura, requisitos previos o una instalación anterior.");
+                            failureDetails.Add(DisplayName(path) + ": el instalador terminó con código " + proc.ExitCode + ".");
                         }
                     }
                 }
@@ -509,16 +411,17 @@ internal sealed class ProgramManagerForm : UserControl
                     failureDetails.Add(DisplayName(path) + ": " + ex.Message);
                 }
                 completed++;
-                SetProgress((int)Math.Round(completed * 100.0 / selected.Count), $"Instalación: {completed} de {selected.Count}");
+                SetProgress((int)Math.Round(completed * 100.0 / selected.Count), $"Ejecución: {completed} de {selected.Count}");
             }
         }
         finally { SetBusy(false); }
         SetProgress(100, $"Proceso finalizado · {ok} correcto(s), {failed} error(es)");
-        string resultMessage = $"Proceso terminado.\\n\\nEjecutados correctamente: {ok}\\nCon error: {failed}";
+        string resultMessage = $"Proceso terminado.\n\nEjecutados correctamente: {ok}\nCon error: {failed}";
         if (failureDetails.Count > 0)
-            resultMessage += "\\n\\nDETALLE DE LOS ERRORES:\\n" + string.Join("\\n\\n", failureDetails.Take(10));
+            resultMessage += "\n\nDETALLE DE LOS ERRORES:\n" + string.Join("\n\n", failureDetails.Take(10));
         MessageBox.Show(this, resultMessage, "ONKOS · Resultado", MessageBoxButtons.OK,
             failed == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+        ActivityLog.Write("PROGRAMS", "Ejecutados", failed == 0 ? "OK" : "CON ERRORES", $"OK: {ok} | Errores: {failed}");
     }
 
     private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
@@ -542,8 +445,6 @@ internal sealed class ProgramManagerForm : UserControl
             }
         }
         catch { return false; }
-
-        // Los instaladores individuales y los paquetes antiguos sin manifiesto conservan su comportamiento.
         return true;
     }
 
@@ -554,7 +455,6 @@ internal sealed class ProgramManagerForm : UserControl
         _images.Images.Clear();
         string query = _search.Text.Trim();
 
-        // En paquetes portables solo se muestra el ejecutable principal elegido al agregarlos.
         var installers = Directory.GetFiles(_library, "*", SearchOption.AllDirectories)
             .Where(f => (Path.GetExtension(f).Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
                          Path.GetExtension(f).Equals(".msi", StringComparison.OrdinalIgnoreCase)) &&
@@ -573,15 +473,19 @@ internal sealed class ProgramManagerForm : UserControl
 
         _list.EndUpdate();
         _list.Invalidate();
-        _status.Text = $"Windows detectado: {_architectureLabel}. Se muestran todos los programas, sin filtro de arquitectura.";
+        _status.Text = $"Windows detectado: {_architectureLabel}.";
     }
 
-    private GroupBox MakeGroup(string title) => new() { Text = title, ForeColor = Color.FromArgb(210, 197, 235), BackColor = Surface, Padding = new Padding(10), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), Margin = new Padding(0, 0, 0, 10), FlatStyle = FlatStyle.Flat };
-    private static void StyleButton(Button b, bool secondary)
+    private void SetProgress(int value, string caption)
     {
-        b.FlatStyle = FlatStyle.Flat; b.FlatAppearance.BorderColor = Border; b.FlatAppearance.BorderSize = secondary ? 1 : 0;
-        b.BackColor = secondary ? Surface2 : Purple; b.ForeColor = TextMain; b.Cursor = Cursors.Hand;
-        b.FlatAppearance.MouseOverBackColor = secondary ? Color.FromArgb(52, 45, 67) : PurpleHover;
+        _progressBar.Value = Math.Max(0, Math.Min(100, value));
+        _progressCaption.Text = caption + " · " + _progressBar.Value + "%";
     }
-    private static void StyleTextBox(TextBox t) { t.BackColor = Surface2; t.ForeColor = TextMain; t.BorderStyle = BorderStyle.FixedSingle; t.Font = new Font("Segoe UI", 10F); }
+
+    private void SetBusy(bool busy, string? caption = null)
+    {
+        _add.Enabled = _addProgram.Enabled = _remove.Enabled = _install.Enabled = !busy;
+        if (caption != null) SetProgress(0, caption);
+        if (!busy) _status.Text = "Listo";
+    }
 }
