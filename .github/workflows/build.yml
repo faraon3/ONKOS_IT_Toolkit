@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+# La acción de Releases aún declara Node 20; se permite su ejecución en Node 24.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 # Evita acumular varias compilaciones simultáneas del mismo proyecto.
 concurrency:
   group: onkos-it-toolkit-build
