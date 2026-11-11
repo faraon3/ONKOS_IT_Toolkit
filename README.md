@@ -41,3 +41,40 @@ Ejecutarse desde una memoria USB, sin depender de una página web ni de una cone
 - Útil para diagnóstico rápido y para adjuntar al ticket de soporte.
 
 ## Estructura prevista de la USB
+USB_ONKOS/
+ONKOS_IT_Toolkit.exe
+Data/
+Config/
+Programs/
+Drivers/
+Templates/
+Reports/
+
+La aplicación detecta su propia ubicación y utiliza carpetas relativas a ella. Las copias de seguridad pueden guardarse en otra unidad o carpeta elegida por el técnico.
+
+## Compatibilidad
+- **Windows 10 y 11 (x64):** compatibilidad completa.
+- **Windows 8.1:** funciona con .NET 8 Desktop Runtime instalado, o con la versión `self-contained` incluida en el artefacto.
+- **Windows 7:** **no soportado** por .NET 8. Si se requiere, se debe recompilar como multi-target `net48` con mantenimiento adicional.
+
+La publicación oficial es `self-contained win-x64` single-file (`PublishReadyToRun` habilitado para acelerar el arranque desde USB). **No requiere instalar .NET** en el equipo destino en Windows 10/11.
+
+## Seguridad
+- No formatear ni eliminar particiones.
+- Confirmar cambios de red y operaciones administrativas.
+- No almacenar contraseñas, tokens ni credenciales de usuarios.
+- Tratar los respaldos como información sensible y usar únicamente destinos autorizados.
+- La restauración de IPv4 requiere ejecutar ONKOS como administrador.
+
+## Desarrollo
+El código se compila en GitHub Actions sobre Windows. No se requiere Visual Studio en el equipo del usuario.
+
+### Versión
+La versión se define en `ONKOS.IT.Toolkit.csproj` (`<Version>`, `<FileVersion>`, `<AssemblyVersion>`).
+
+### Publicar una nueva versión
+1. Subir cambios a `main` (o mergear PR).
+2. GitHub Actions ejecuta `build.yml` y produce el artefacto `ONKOS-IT-Toolkit-win-x64`.
+3. Descargar el artefacto desde la pestaña **Actions** del repositorio.
+4. Copiar el contenido de `publish/win-x64/` a la raíz de la USB.
+5. Copiar la carpeta `Data/` existente (si se quiere conservar la biblioteca local de drivers/programas).
