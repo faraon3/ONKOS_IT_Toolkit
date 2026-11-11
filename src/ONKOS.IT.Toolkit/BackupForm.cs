@@ -30,6 +30,7 @@ internal sealed class BackupForm : UserControl
     private readonly Button _restore = new();
     private readonly Button _addFolder = new();
     private readonly Button _cancel = new() { Text = "CANCELAR", Visible = false };
+    private readonly Panel _actionBar = new() { Dock = DockStyle.Bottom, Height = 54, BackColor = Color.FromArgb(18, 16, 25), Padding = new Padding(3, 2, 3, 2) };
     private CancellationTokenSource? _cts;
     private bool _busy;
 
@@ -90,7 +91,6 @@ internal sealed class BackupForm : UserControl
         destinationRow.Controls.Add(_drivePicker); destinationRow.Controls.Add(choose); destinationRow.Controls.Add(_destination);
         destinationGroup.Controls.Add(destinationRow); RefreshDrives();
 
-        // Opciones avanzadas plegables para mantener una pantalla simple.
         var optionsGroup = new Panel { Dock = DockStyle.Top, Height = 42, BackColor = Surface, Margin = new Padding(0, 0, 0, 8) };
         var optionsToggle = new Button { Text = "Opciones adicionales  ▸", Location = new Point(8, 5), Size = new Size(280, 32), TextAlign = ContentAlignment.MiddleLeft, ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(8, 0, 6, 0) };
         StyleButton(optionsToggle, true);
@@ -122,7 +122,6 @@ internal sealed class BackupForm : UserControl
         _currentFile.Dock = DockStyle.Top; _currentFile.Height = 25; _currentFile.Text = "Ahora: —"; _currentFile.ForeColor = TextMuted; _currentFile.AutoEllipsis = true;
         progressGroup.Controls.Add(_currentFile); progressGroup.Controls.Add(_status); progressGroup.Controls.Add(progressPanel);
 
-        // Detalles técnicos plegables, ocultos por defecto.
         var logGroup = new Panel { Dock = DockStyle.Top, Height = 42, BackColor = Surface, Margin = new Padding(0, 0, 0, 8) };
         var logToggle = new Button { Text = "☰  Ver detalles técnicos  ▸", Location = new Point(8, 5), Size = new Size(280, 32), TextAlign = ContentAlignment.MiddleLeft };
         StyleButton(logToggle, true);
@@ -138,39 +137,38 @@ internal sealed class BackupForm : UserControl
         };
         logGroup.Controls.Add(_log); logGroup.Controls.Add(logToggle);
 
-        // Barra inferior con dos acciones del mismo tamaño y alineadas, más cancelar cuando está en curso.
-        var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = Bg, Padding = new Padding(3, 2, 3, 2) };
         _run.Text = "INICIAR COPIA DE SEGURIDAD"; StyleButton(_run, false);
         _run.Font = new Font("Segoe UI", 10.5F, FontStyle.Bold);
         _restore.Text = "RESTAURAR BACKUP"; StyleButton(_restore, true);
         _restore.Font = new Font("Segoe UI", 10.5F, FontStyle.Bold);
         StyleButton(_cancel, true);
         _cancel.Font = new Font("Segoe UI", 10.5F, FontStyle.Bold);
-        void LayoutActions()
-        {
-            int w = actionBar.ClientSize.Width;
-            if (_cancel.Visible)
-            {
-                int each = Math.Max(1, (w - 6) / 3);
-                _run.SetBounds(0, 0, each, actionBar.ClientSize.Height);
-                _cancel.SetBounds(each + 3, 0, each, actionBar.ClientSize.Height);
-                _restore.SetBounds((each + 3) * 2, 0, Math.Max(1, w - (each + 3) * 2), actionBar.ClientSize.Height);
-            }
-            else
-            {
-                int half = Math.Max(1, (w - 6) / 2);
-                _run.SetBounds(0, 0, half, actionBar.ClientSize.Height);
-                _restore.SetBounds(half + 3, 0, Math.Max(1, w - half - 3), actionBar.ClientSize.Height);
-            }
-        }
-        actionBar.Resize += (_, _) => LayoutActions();
+        _actionBar.Resize += (_, _) => LayoutActions();
         LayoutActions();
         _run.Click += async (_, _) => await StartBackupAsync();
         _restore.Click += async (_, _) => await RestoreBackupAsync();
         _cancel.Click += (_, _) => { try { _cts?.Cancel(); } catch { } };
-        actionBar.Controls.Add(_run); actionBar.Controls.Add(_cancel); actionBar.Controls.Add(_restore);
+        _actionBar.Controls.Add(_run); _actionBar.Controls.Add(_cancel); _actionBar.Controls.Add(_restore);
         content.Controls.Add(logGroup); content.Controls.Add(progressGroup); content.Controls.Add(destinationGroup); content.Controls.Add(optionsGroup); content.Controls.Add(sourcesGroup);
-        Controls.Add(content); Controls.Add(actionBar); Controls.Add(header);
+        Controls.Add(content); Controls.Add(_actionBar); Controls.Add(header);
+    }
+
+    private void LayoutActions()
+    {
+        int w = _actionBar.ClientSize.Width;
+        if (_cancel.Visible)
+        {
+            int each = Math.Max(1, (w - 6) / 3);
+            _run.SetBounds(0, 0, each, _actionBar.ClientSize.Height);
+            _cancel.SetBounds(each + 3, 0, each, _actionBar.ClientSize.Height);
+            _restore.SetBounds((each + 3) * 2, 0, Math.Max(1, w - (each + 3) * 2), _actionBar.ClientSize.Height);
+        }
+        else
+        {
+            int half = Math.Max(1, (w - 6) / 2);
+            _run.SetBounds(0, 0, half, _actionBar.ClientSize.Height);
+            _restore.SetBounds(half + 3, 0, Math.Max(1, w - half - 3), _actionBar.ClientSize.Height);
+        }
     }
 
     private GroupBox MakeGroup(string title) => new() { Text = title, ForeColor = Color.FromArgb(210, 197, 235), BackColor = Surface, Padding = new Padding(10), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), Margin = new Padding(0, 0, 0, 10), FlatStyle = FlatStyle.Flat };
@@ -395,8 +393,6 @@ internal sealed class BackupForm : UserControl
         if (_busy) return;
         var selected = _sources.Items.Cast<ListViewItem>().Where(x => x.Checked).Select(x => (FolderEntry)x.Tag!).ToList();
 
-        // Si una carpeta seleccionada está dentro de otra carpeta seleccionada,
-        // respaldamos solo la carpeta superior para evitar copiar archivos duplicados.
         selected = selected
             .Where(entry => !selected.Any(other =>
                 !string.Equals(entry.Path, other.Path, StringComparison.OrdinalIgnoreCase) &&
@@ -435,7 +431,6 @@ internal sealed class BackupForm : UserControl
             }
             WriteLog($"Archivos encontrados para copiar: {fileList.Count}");
 
-            // Validación previa de espacio libre. Si el destino no reporta espacio, se omite.
             long totalBytes = 0;
             try { totalBytes = fileList.Sum(f => new FileInfo(f.Source).Length); } catch { }
             try
@@ -454,14 +449,13 @@ internal sealed class BackupForm : UserControl
                     }
                 }
             }
-            catch { /* si no se puede determinar, no bloqueamos */ }
+            catch { }
 
             string filesRoot = Path.Combine(root, "Archivos");
             Directory.CreateDirectory(filesRoot);
 
             int errors = errorDetails.Count;
 
-            // Crear primero toda la estructura de carpetas, incluso las vacías.
             foreach (var dir in directoryList)
             {
                 string targetDir = Path.Combine(filesRoot, dir.FolderName, dir.Relative);
@@ -495,8 +489,6 @@ internal sealed class BackupForm : UserControl
                         var sourceInfo = new FileInfo(item.Source);
                         sourceBytes = sourceInfo.Length;
 
-                        // Si el archivo es un placeholder de OneDrive (Offline), no bloquearlo aquí.
-                        // File.Copy permite que el proveedor de nube intente hidratarlo durante la copia.
                         Directory.CreateDirectory(targetDir);
                         File.Copy(item.Source, targetFile, true);
                         copied++;
@@ -518,7 +510,6 @@ internal sealed class BackupForm : UserControl
                 }
             });
 
-            // Si el usuario canceló, no procesamos más trabajo pesado.
             bool canceled = token.IsCancellationRequested;
             if (!canceled && _ipv4.Checked)
             {
@@ -528,8 +519,6 @@ internal sealed class BackupForm : UserControl
                     progress.Report((done, total, "Exportando configuración de red…", "Configuración IPv4"));
                     Directory.CreateDirectory(Path.GetDirectoryName(networkFile)!);
 
-                    // Ejecutar netsh directamente (sin cmd.exe ni redirección de shell).
-                    // La redirección del shell podía dejar el proceso detenido al final del backup.
                     using var netsh = new Process();
                     netsh.StartInfo = new ProcessStartInfo
                     {
@@ -660,7 +649,6 @@ internal sealed class BackupForm : UserControl
             return;
         }
 
-        // Detectar los perfiles Windows de origen incluidos en las rutas del manifiesto.
         var oldProfiles = files.Select(x => GetWindowsProfileRoot(x.OriginalFile))
             .OfType<string>()
             .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -769,7 +757,6 @@ internal sealed class BackupForm : UserControl
                 }
             });
 
-            // Restauración de configuración IPv4 (si existe en el backup).
             string networkDump = Path.Combine(backupRoot, "Red", "IPv4_netsh_dump.txt");
             if (File.Exists(networkDump))
             {
@@ -844,8 +831,6 @@ internal sealed class BackupForm : UserControl
             string remainder = originalPath.Substring(oldRoot.Length + 1);
             if (knownFolder is not null)
             {
-                // La selección lógica (Documentos/Escritorio/etc.) manda sobre
-                // la ruta física original. Así no se conserva la redirección OneDrive.
                 string[] parts = remainder.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 int folderIndex = Array.FindIndex(parts, p => IsKnownFolderSegment(p, knownFolder));
                 if (folderIndex >= 0)
@@ -853,12 +838,8 @@ internal sealed class BackupForm : UserControl
                     string insideFolder = string.Join(Path.DirectorySeparatorChar, parts.Skip(folderIndex + 1));
                     return string.IsNullOrEmpty(insideFolder) ? Path.Combine(map.Value, knownFolder) : Path.Combine(map.Value, knownFolder, insideFolder);
                 }
-
-                // Respaldo de perfiles adicionales con nombres de carpeta personalizados:
-                // la carpeta lógica seleccionada se conserva como raíz del destino.
                 return Path.Combine(map.Value, knownFolder, remainder);
             }
-
             return Path.Combine(map.Value, remainder);
         }
         return originalPath;
@@ -867,7 +848,6 @@ internal sealed class BackupForm : UserControl
     private static string? GetKnownFolderName(string label)
     {
         string normalized = label.Replace("_", " ").Trim();
-        // OneDrive solo se usa cuando fue seleccionado explícitamente.
         if (normalized.Contains("OneDrive", StringComparison.OrdinalIgnoreCase) ||
             normalized.Contains("One Drive", StringComparison.OrdinalIgnoreCase))
             return "OneDrive";
@@ -932,8 +912,6 @@ internal sealed class BackupForm : UserControl
 
     private void CollectFilesSafe(string rootPath, string currentPath, string folderName, List<(string Source, string Relative, string FolderName)> files, List<(string Source, string Relative, string FolderName)> directories, List<string> errorDetails)
     {
-        // Registrar esta carpeta antes de recorrer su contenido. Esto permite conservar
-        // tanto las carpetas vacías como las carpetas que contienen otras carpetas vacías.
         try
         {
             string relativeDirectory = Path.GetRelativePath(rootPath, currentPath);
