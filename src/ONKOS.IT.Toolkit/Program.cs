@@ -41,6 +41,46 @@ internal sealed class MainForm : Form
         BackColor = Bg;
         Font = new Font("Segoe UI", 9F);
 
+        // Aviso de administrador ANTES de montar la UI.
+        if (!AdminHelper.IsAdmin())
+        {
+            var banner = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 44,
+                BackColor = Color.FromArgb(180, 130, 20),
+                Padding = new Padding(16, 8, 8, 8)
+            };
+            var bannerLabel = new Label
+            {
+                Text = "⚠  Modo limitado: red, drivers e instaladores requieren administrador.",
+                ForeColor = Color.White,
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Bold),
+                AutoSize = false,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            var elevate = new Button
+            {
+                Text = "REINICIAR COMO ADMIN",
+                Dock = DockStyle.Right,
+                Width = 200,
+                FlatStyle = FlatStyle.Flat,
+                BackColor = Color.White,
+                ForeColor = Color.FromArgb(120, 80, 0),
+                Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+                Cursor = Cursors.Hand
+            };
+            elevate.FlatAppearance.BorderSize = 0;
+            elevate.Click += (_, _) =>
+            {
+                if (AdminHelper.RelaunchAsAdmin()) Application.Exit();
+            };
+            banner.Controls.Add(bannerLabel);
+            banner.Controls.Add(elevate);
+            Controls.Add(banner);
+        }
+
         _header = new Panel { Dock = DockStyle.Top, Height = 112, BackColor = Purple };
         var brand = new Label { Text = "ONKOS IT TOOLKIT", ForeColor = Color.White, Font = new Font("Segoe UI", 23F, FontStyle.Bold), AutoSize = true, Location = new Point(28, 17) };
         var subtitle = new Label { Text = "Centro de herramientas de soporte técnico", ForeColor = Color.FromArgb(235, 225, 250), AutoSize = true, Location = new Point(32, 64), Font = new Font("Segoe UI", 10F) };
