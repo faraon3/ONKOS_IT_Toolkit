@@ -20,7 +20,6 @@ internal sealed class MainForm : Form
     private readonly Panel _mainContent = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(18, 16, 25) };
     private readonly Panel _header;
     private Control? _homeBody;
-    // Las vistas se conservan durante toda la sesión: los procesos async siguen activos al volver al inicio.
     private ProgramManagerForm? _programs;
     private PrinterManagerForm? _printers;
     private BackupForm? _backup;
@@ -101,41 +100,25 @@ internal sealed class MainForm : Form
 
     private void OpenPrograms()
     {
-        if (_programs == null)
-        {
-            _programs = new ProgramManagerForm();
-            _programs.BackRequested += ShowHome;
-        }
+        if (_programs == null) { _programs = new ProgramManagerForm(); _programs.BackRequested += ShowHome; }
         ShowModule(_programs);
     }
 
     private void OpenPrinters()
     {
-        if (_printers == null)
-        {
-            _printers = new PrinterManagerForm();
-            _printers.BackRequested += ShowHome;
-        }
+        if (_printers == null) { _printers = new PrinterManagerForm(); _printers.BackRequested += ShowHome; }
         ShowModule(_printers);
     }
 
     private void OpenBackup()
     {
-        if (_backup == null)
-        {
-            _backup = new BackupForm();
-            _backup.BackRequested += ShowHome;
-        }
+        if (_backup == null) { _backup = new BackupForm(); _backup.BackRequested += ShowHome; }
         ShowModule(_backup);
     }
 
     private void OpenInventory()
     {
-        if (_inventory == null)
-        {
-            _inventory = new InventoryForm();
-            _inventory.BackRequested += ShowHome;
-        }
+        if (_inventory == null) { _inventory = new InventoryForm(); _inventory.BackRequested += ShowHome; }
         ShowModule(_inventory);
     }
 
