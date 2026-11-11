@@ -6,6 +6,7 @@ using System.Linq;
 using System.Management;
 using System.Text;
 using System.Windows.Forms;
+using Microsoft.Win32;
 
 namespace ONKOS.IT.Toolkit;
 
@@ -18,9 +19,11 @@ internal sealed class InventoryForm : UserControl
     private readonly Button _back = new() { Text = "‹  VOLVER AL INICIO" };
     private readonly Button _refresh = new() { Text = "ACTUALIZAR" };
     private readonly Button _export = new() { Text = "EXPORTAR CSV" };
+    private readonly Button _copy = new() { Text = "COPIAR RESUMEN" };
     private readonly Label _status = new() { Dock = DockStyle.Bottom, Height = 24, TextAlign = ContentAlignment.MiddleLeft };
     private readonly List<Dictionary<string, string>> _rows = new();
     private readonly List<string> _columns = new();
+    private string _lastTextReport = "";
 
     private static readonly Color Bg = Color.FromArgb(18, 16, 25);
     private static readonly Color Surface = Color.FromArgb(31, 27, 41);
@@ -46,12 +49,14 @@ internal sealed class InventoryForm : UserControl
         group.Dock = DockStyle.Fill;
 
         var toolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = Surface };
-        StyleButton(_refresh, false); StyleButton(_export, true);
-        _refresh.SetBounds(10, 6, 160, 38);
-        _export.SetBounds(178, 6, 160, 38);
+        StyleButton(_refresh, false); StyleButton(_copy, true); StyleButton(_export, true);
+        _refresh.SetBounds(10, 6, 150, 38);
+        _copy.SetBounds(168, 6, 170, 38);
+        _export.SetBounds(346, 6, 170, 38);
         _refresh.Click += (_, _) => Collect();
+        _copy.Click += (_, _) => CopyToClipboard();
         _export.Click += (_, _) => ExportCsv();
-        toolbar.Controls.Add(_refresh); toolbar.Controls.Add(_export);
+        toolbar.Controls.Add(_refresh); toolbar.Controls.Add(_copy); toolbar.Controls.Add(_export);
         group.Controls.Add(toolbar);
 
         _output.Dock = DockStyle.Fill;
@@ -118,13 +123,74 @@ internal sealed class InventoryForm : UserControl
                 ("Puerto",  "SELECT PortName FROM Win32_Printer", "PortName"),
                 ("Default", "SELECT Default FROM Win32_Printer", "Default"),
             });
-
+            CollectSoftware();
+            BuildTextReport();
             _status.Text = $"Información recolectada · {DateTime.Now:HH:mm:ss} · {_rows.Count} registro(s)";
+            ActivityLog.Write("INVENTORY", "Recolectado", "OK", $"{_rows.Count} registros");
         }
         catch (Exception ex)
         {
             _output.AppendText("ERROR recolectando inventario: " + ex.Message + Environment.NewLine);
             _status.Text = "Error al recolectar inventario";
+        }
+    }
+
+    private void CollectSoftware()
+    {
+        _output.AppendText($"### Software instalado{Environment.NewLine}");
+        try
+        {
+            var programs = new List<(string Name, string Version, string Publisher)>();
+            void ReadKey(RegistryKey root, string subkey, RegistryView view)
+            {
+                try
+                {
+                    using var baseKey = RegistryKey.OpenBaseKey(root, view);
+                    using var uninstall = baseKey.OpenSubKey(subkey);
+                    if (uninstall == null) return;
+                    foreach (var name in uninstall.GetSubKeyNames())
+                    {
+                        try
+                        {
+                            using var app = uninstall.OpenSubKey(name);
+                            if (app == null) continue;
+                            var display = app.GetValue("DisplayName")?.ToString();
+                            if (string.IsNullOrWhiteSpace(display)) continue;
+                            var version = app.GetValue("DisplayVersion")?.ToString() ?? "";
+                            var publisher = app.GetValue("Publisher")?.ToString() ?? "";
+                            programs.Add((display!, version, publisher));
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
+            }
+            ReadKey(RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", RegistryView.Registry64);
+            ReadKey(RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", RegistryView.Registry32);
+            ReadKey(RegistryHive.CurrentUser, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", RegistryView.Default);
+
+            var unique = programs.GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase).Select(g => g.First())
+                .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
+
+            foreach (var p in unique)
+            {
+                var row = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Programa"] = p.Name,
+                    ["Version"] = p.Version,
+                    ["Fabricante"] = p.Publisher
+                };
+                _rows.Add(row);
+                foreach (var col in new[] { "Programa", "Version", "Fabricante" })
+                    if (!_columns.Contains(col)) _columns.Add(col);
+                _output.AppendText($"  {p.Name}  |  {p.Version}  |  {p.Publisher}{Environment.NewLine}");
+            }
+            if (unique.Count == 0) _output.AppendText("  [sin programas detectados]" + Environment.NewLine);
+            _output.AppendText(Environment.NewLine);
+        }
+        catch (Exception ex)
+        {
+            _output.AppendText("  [software no disponible: " + ex.Message + "]" + Environment.NewLine + Environment.NewLine);
         }
     }
 
@@ -182,6 +248,38 @@ internal sealed class InventoryForm : UserControl
         return val.ToString() ?? "";
     }
 
+    private void BuildTextReport()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"INVENTARIO ONKOS — {Environment.MachineName}");
+        sb.AppendLine($"Fecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine($"Usuario: {Environment.UserName}");
+        sb.AppendLine($"Equipo: {Environment.MachineName}");
+        sb.AppendLine($"Sistema: {Environment.OSVersion}");
+        sb.AppendLine();
+        sb.Append(_output.Text);
+        _lastTextReport = sb.ToString();
+    }
+
+    private void CopyToClipboard()
+    {
+        if (string.IsNullOrWhiteSpace(_lastTextReport))
+        {
+            MessageBox.Show(this, "No hay datos. Pulsa ACTUALIZAR primero.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        try
+        {
+            Clipboard.SetText(_lastTextReport);
+            _status.Text = "Resumen copiado al portapapeles.";
+            MessageBox.Show(this, "Resumen copiado al portapapeles. Puedes pegarlo en un correo, ticket o chat.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, "No se pudo copiar: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
     private void ExportCsv()
     {
         if (_rows.Count == 0) { MessageBox.Show(this, "No hay datos para exportar. Pulsa ACTUALIZAR primero."); return; }
@@ -193,6 +291,7 @@ internal sealed class InventoryForm : UserControl
             foreach (var row in _rows)
                 sb.AppendLine(string.Join(",", _columns.Select(c => "\"" + (row.TryGetValue(c, out var v) ? v : "").Replace("\"", "\"\"") + "\"")));
             File.WriteAllText(file, sb.ToString(), Encoding.UTF8);
+            ActivityLog.Write("INVENTORY", "Export CSV", "OK", file);
             MessageBox.Show(this, "Inventario exportado:\n" + file, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
