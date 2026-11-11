@@ -14,7 +14,7 @@ internal sealed class InventoryForm : UserControl
 {
     public event Action? BackRequested;
 
-    private readonly string _reports = Path.Combine(AppContext.BaseDirectory, "Data", "Reports");
+    private readonly string _reports = AppPaths.ReportsDir;
     private readonly TextBox _output = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both, WordWrap = false, Font = new Font("Consolas", 9F) };
     private readonly Button _back = new() { Text = "‹  VOLVER AL INICIO" };
     private readonly Button _refresh = new() { Text = "ACTUALIZAR" };
@@ -25,31 +25,22 @@ internal sealed class InventoryForm : UserControl
     private readonly List<string> _columns = new();
     private string _lastTextReport = "";
 
-    private static readonly Color Bg = Color.FromArgb(18, 16, 25);
-    private static readonly Color Surface = Color.FromArgb(31, 27, 41);
-    private static readonly Color Surface2 = Color.FromArgb(39, 34, 51);
-    private static readonly Color Purple = Color.FromArgb(105, 73, 164);
-    private static readonly Color PurpleHover = Color.FromArgb(126, 91, 190);
-    private static readonly Color TextMain = Color.FromArgb(244, 241, 250);
-    private static readonly Color TextMuted = Color.FromArgb(183, 174, 199);
-    private static readonly Color Border = Color.FromArgb(65, 57, 82);
-
     public InventoryForm()
     {
-        Dock = DockStyle.Fill; BackColor = Bg; ForeColor = TextMain; Font = new Font("Segoe UI", 9.5F);
+        Dock = DockStyle.Fill; BackColor = UiColors.Bg; ForeColor = UiColors.TextMain; Font = new Font("Segoe UI", 9.5F);
         Directory.CreateDirectory(_reports);
 
-        var header = new Panel { Dock = DockStyle.Top, Height = 88, BackColor = Purple };
-        _back.SetBounds(22, 5, 170, 25); StyleButton(_back, true);
+        var header = new Panel { Dock = DockStyle.Top, Height = 88, BackColor = UiColors.Purple };
+        _back.SetBounds(22, 5, 170, 25); UiHelpers.StyleButton(_back, true);
         _back.Click += (_, _) => BackRequested?.Invoke(); header.Controls.Add(_back);
         header.Controls.Add(new Label { Text = "INVENTARIO  /  DIAGNÓSTICO", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 30) });
 
-        var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), BackColor = Bg };
-        var group = MakeGroup("Información del equipo");
+        var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), BackColor = UiColors.Bg };
+        var group = UiHelpers.MakeGroup("Información del equipo");
         group.Dock = DockStyle.Fill;
 
-        var toolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = Surface };
-        StyleButton(_refresh, false); StyleButton(_copy, true); StyleButton(_export, true);
+        var toolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = UiColors.Surface };
+        UiHelpers.StyleButton(_refresh, false); UiHelpers.StyleButton(_copy, true); UiHelpers.StyleButton(_export, true);
         _refresh.SetBounds(10, 6, 150, 38);
         _copy.SetBounds(168, 6, 170, 38);
         _export.SetBounds(346, 6, 170, 38);
@@ -166,23 +157,18 @@ internal sealed class InventoryForm : UserControl
                 catch { }
             }
 
-            // 64 bits HKLM
             try
             {
                 using var hklm64 = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
                 ReadUninstallKey(hklm64, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall");
             }
             catch { }
-
-            // 32 bits HKLM
             try
             {
                 using var hklm32 = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
                 ReadUninstallKey(hklm32, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall");
             }
             catch { }
-
-            // HKCU (instalaciones por usuario)
             try
             {
                 using var hkcu = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default);
@@ -293,7 +279,7 @@ internal sealed class InventoryForm : UserControl
         {
             Clipboard.SetText(_lastTextReport);
             _status.Text = "Resumen copiado al portapapeles.";
-            MessageBox.Show(this, "Resumen copiado al portapapeles. Puedes pegarlo en un correo, ticket o chat.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, "Resumen copiado al portapapeles.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
@@ -319,13 +305,5 @@ internal sealed class InventoryForm : UserControl
         {
             MessageBox.Show(this, "No se pudo exportar: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
-    }
-
-    private static GroupBox MakeGroup(string title) => new() { Text = title, ForeColor = Color.FromArgb(210, 197, 235), BackColor = Surface, Padding = new Padding(10), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), FlatStyle = FlatStyle.Flat };
-    private static void StyleButton(Button b, bool secondary)
-    {
-        b.FlatStyle = FlatStyle.Flat; b.FlatAppearance.BorderColor = Border; b.FlatAppearance.BorderSize = secondary ? 1 : 0;
-        b.BackColor = secondary ? Surface2 : Purple; b.ForeColor = TextMain; b.Cursor = Cursors.Hand;
-        b.FlatAppearance.MouseOverBackColor = secondary ? Color.FromArgb(52, 45, 67) : PurpleHover;
     }
 }
