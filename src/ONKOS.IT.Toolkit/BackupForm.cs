@@ -415,18 +415,9 @@ internal sealed class BackupForm : UserControl
             ForeColor = TextMain,
             Font = Font
         };
-        var info = new Label
-        {
-            Text = "Marca uno o varios perfiles. Se agregarán sus carpetas personales comunes; después podrás elegir cuáles respaldar.",
-            Dock = DockStyle.Top, Height = 54, Padding = new Padding(12), ForeColor = TextMain
-        };
-        var list = new CheckedListBox
-        {
-            Dock = DockStyle.Fill, CheckOnClick = true, BackColor = Surface, ForeColor = TextMain,
-            BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 10F)
-        };
-        foreach (string profile in profiles)
-            list.Items.Add(new ProfileChoice(Path.GetFileName(profile), profile), false);
+        var info = new Label { Text = "Marca uno o varios perfiles. Se agregarán sus carpetas personales comunes; después podrás elegir cuáles respaldar.", Dock = DockStyle.Top, Height = 54, Padding = new Padding(12), ForeColor = TextMain };
+        var list = new CheckedListBox { Dock = DockStyle.Fill, CheckOnClick = true, BackColor = Surface, ForeColor = TextMain, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 10F) };
+        foreach (string profile in profiles) list.Items.Add(new ProfileChoice(Path.GetFileName(profile), profile), false);
 
         var buttons = new Panel { Dock = DockStyle.Bottom, Height = 48, BackColor = Surface };
         var selectAll = new Button { Text = "Seleccionar todos", Location = new Point(8, 8), Size = new Size(140, 30) };
@@ -453,15 +444,12 @@ internal sealed class BackupForm : UserControl
             {
                 string path = Path.Combine(profile.Path, folder.Item2);
                 if (!Directory.Exists(path)) continue;
-                if (_sources.Items.Cast<ListViewItem>().Any(x =>
-                    string.Equals(((FolderEntry)x.Tag!).Path, path, StringComparison.OrdinalIgnoreCase))) continue;
-
+                if (_sources.Items.Cast<ListViewItem>().Any(x => string.Equals(((FolderEntry)x.Tag!).Path, path, StringComparison.OrdinalIgnoreCase))) continue;
                 string label = $"{profile.Name} · {folder.Item1}";
                 AddListItem(label, path, true, folder.Item1);
                 added++;
             }
         }
-
         if (added == 0)
             MessageBox.Show(this, "No se agregaron carpetas. Los perfiles seleccionados pueden no tener carpetas personales disponibles o ya estaban agregados.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
         else
@@ -497,7 +485,6 @@ internal sealed class BackupForm : UserControl
         foreach (var f in selected)
             if (IsSameOrChild(dest, f.Path)) { MessageBox.Show(this, $"El destino está dentro de la carpeta origen ({f.Label}). Elige otra ubicación.", "Destino no válido", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
 
-        // Guardar sesión para la próxima vez.
         SaveSession(selected, dest);
 
         string customPrefix = SafeName(_backupLabel.Text.Trim());
@@ -506,6 +493,7 @@ internal sealed class BackupForm : UserControl
         _busy = true; _run.Enabled = false; _log.Clear(); SetProgress(0, 0, "Preparando respaldo…", "Revisando lo seleccionado");
         _cts = new CancellationTokenSource();
         _cancel.Visible = true; LayoutActions();
+        ActivityLog.Write("BACKUP", "Inicio backup", "OK", $"Destino: {dest} | Carpetas: {selected.Count}");
         try
         {
             Directory.CreateDirectory(root);
@@ -541,6 +529,7 @@ internal sealed class BackupForm : UserControl
                     {
                         WriteLog("Backup cancelado por falta de espacio.");
                         SetProgress(0, 0, "Backup cancelado por falta de espacio.", "Cancelado");
+                        ActivityLog.Write("BACKUP", "Cancelado", "Espacio insuficiente");
                         return;
                     }
                 }
@@ -549,6 +538,10 @@ internal sealed class BackupForm : UserControl
 
             string filesRoot = Path.Combine(root, "Archivos");
             Directory.CreateDirectory(filesRoot);
+
+            // Reanudación: cargar estado previo si existe.
+            var state = BackupState.Load(root);
+            int alreadyDone = 0;
 
             int errors = errorDetails.Count;
 
@@ -560,7 +553,7 @@ internal sealed class BackupForm : UserControl
             }
 
             int total = Math.Max(fileList.Count + (_ipv4.Checked ? 1 : 0), 1);
-            int done = 0, copied = 0, verified = 0;
+            int done = 0, copied = 0, verified = 0, skipped = 0;
             var manifestRows = new List<string> { CsvRow("Estado", "Verificación", "Origen", "Destino", "Bytes", "Fecha", "Detalle") };
             IProgress<(int done, int total, string message, string current)> progress = new Progress<(int done, int total, string message, string current)>(p => { SetProgress(p.done, p.total, $"Copiando… {p.done} de {p.total}", p.current); if (!string.IsNullOrWhiteSpace(p.message)) WriteLog(p.message); });
             var token = _cts.Token;
@@ -573,6 +566,24 @@ internal sealed class BackupForm : UserControl
                     string targetFile = Path.Combine(targetDir, Path.GetFileName(item.Source));
                     long sourceBytes = 0;
                     string copyStatus = "ERROR", verifyStatus = "No verificado", detail = "";
+
+                    // Reanudación: si ya está copiado y no cambió, se omite.
+                    try
+                    {
+                        var sInfo = new FileInfo(item.Source);
+                        sourceBytes = sInfo.Length;
+                        if (state.Files.TryGetValue(item.Source, out var prev) && prev.Size == sourceBytes && File.Exists(targetFile))
+                        {
+                            copyStatus = "YA COPIADO";
+                            verifyStatus = "Reanudado (sin cambios)";
+                            alreadyDone++;
+                            manifestRows.Add(CsvRow(copyStatus, verifyStatus, item.Source, targetFile, sourceBytes.ToString(), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), "Omitido por reanudación"));
+                            done++; progress.Report((done, total, "", Path.GetFileName(item.Source)));
+                            continue;
+                        }
+                    }
+                    catch { }
+
                     try
                     {
                         var sourceInfo = new FileInfo(item.Source);
@@ -584,8 +595,10 @@ internal sealed class BackupForm : UserControl
                         if (!targetInfo.Exists) throw new IOException("La copia no aparece en el destino.");
                         if (targetInfo.Length != sourceInfo.Length)
                             throw new IOException($"Tamaño diferente: origen {sourceInfo.Length} bytes, copia {targetInfo.Length} bytes.");
+                        string hash = BackupState.ComputeHash(targetFile);
+                        state.Files[item.Source] = new FileState { Size = targetInfo.Length, Hash = hash, CopiedAt = DateTime.Now };
                         copyStatus = "COPIADO";
-                        verifyStatus = "Verificado (existencia y tamaño)";
+                        verifyStatus = "Verificado (tamaño + SHA-256)";
                         verified++;
                     }
                     catch (Exception ex)
@@ -595,7 +608,14 @@ internal sealed class BackupForm : UserControl
                     }
                     manifestRows.Add(CsvRow(copyStatus, verifyStatus, item.Source, targetFile, sourceBytes.ToString(), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), detail));
                     done++; progress.Report((done, total, "", Path.GetFileName(item.Source)));
+
+                    // Guardar estado cada 50 archivos.
+                    if (done % 50 == 0)
+                    {
+                        try { state.Save(); } catch { }
+                    }
                 }
+                try { state.Save(); } catch { }
             });
 
             bool canceled = token.IsCancellationRequested;
@@ -651,6 +671,7 @@ internal sealed class BackupForm : UserControl
                 $"Fecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss}{Environment.NewLine}" +
                 $"Archivos copiados: {copied}{Environment.NewLine}" +
                 $"Archivos verificados: {verified}{Environment.NewLine}" +
+                $"Archivos ya existentes: {alreadyDone}{Environment.NewLine}" +
                 $"Errores: {errors}{Environment.NewLine}" +
                 $"Cancelado: {(canceled ? "Sí" : "No")}{Environment.NewLine}" +
                 $"Manifiesto: MANIFIESTO_BACKUP.csv{Environment.NewLine}" +
@@ -659,27 +680,83 @@ internal sealed class BackupForm : UserControl
             if (canceled)
             {
                 SetProgress(done, total, "Backup cancelado por el usuario.", "Cancelado");
-                WriteLog($"Backup cancelado. Copiados hasta el momento: {copied}. Errores: {errors}.{Environment.NewLine}Ruta: {root}");
+                WriteLog($"Backup cancelado. Copiados: {copied}. Reanudados: {alreadyDone}. Errores: {errors}.{Environment.NewLine}Ruta: {root}");
                 MessageBox.Show(this,
-                    $"Backup cancelado por el usuario.{Environment.NewLine}{Environment.NewLine}Copiados hasta el momento: {copied}{Environment.NewLine}Verificados: {verified}{Environment.NewLine}Pendientes: {errors}{Environment.NewLine}{Environment.NewLine}{root}",
+                    $"Backup cancelado por el usuario.{Environment.NewLine}{Environment.NewLine}Copiados ahora: {copied}{Environment.NewLine}Reanudados (ya existían): {alreadyDone}{Environment.NewLine}Verificados: {verified}{Environment.NewLine}Pendientes: {errors}{Environment.NewLine}{Environment.NewLine}{root}{Environment.NewLine}{Environment.NewLine}Puedes reanudar más tarde abriendo esta misma carpeta como destino.",
                     "ONKOS Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                ActivityLog.Write("BACKUP", "Cancelado por usuario", "OK", $"Copiados: {copied} | Reanudados: {alreadyDone} | Errores: {errors}");
             }
             else
             {
                 SetProgress(total, total, errors == 0 ? "¡Respaldo completado!" : "Respaldo completado con algunos problemas.", "Terminado");
-                WriteLog($"Finalizado. Copiados: {copied}. Errores: {errors}.{Environment.NewLine}Ruta: {root}");
-                MessageBox.Show(this,
-                    $"Respaldo terminado{Environment.NewLine}{Environment.NewLine}Copiados: {copied}{Environment.NewLine}Verificados: {verified}{Environment.NewLine}Pendientes: {errors}{Environment.NewLine}{Environment.NewLine}{(errors == 0 ? "Resultado: Correcto" : "Resultado: Revisar elementos")}{Environment.NewLine}{root}{Environment.NewLine}{Environment.NewLine}Informe: INFORME_ERRORES_BACKUP.txt",
-                    "ONKOS Backup", MessageBoxButtons.OK, errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+                WriteLog($"Finalizado. Copiados: {copied}. Reanudados: {alreadyDone}. Errores: {errors}.{Environment.NewLine}Ruta: {root}");
+                ActivityLog.Write("BACKUP", "Backup finalizado", errors == 0 ? "OK" : "CON ERRORES", $"Copiados: {copied} | Reanudados: {alreadyDone} | Errores: {errors} | Ruta: {root}");
+
+                // Modal bloqueante de errores si hay alguno.
+                if (errors > 0)
+                    ShowErrorsModal(errorDetails, root);
+                else
+                    MessageBox.Show(this,
+                        $"Respaldo completado correctamente.{Environment.NewLine}{Environment.NewLine}Copiados: {copied}{Environment.NewLine}Reanudados (ya existían): {alreadyDone}{Environment.NewLine}Verificados: {verified}{Environment.NewLine}{Environment.NewLine}{root}",
+                        "ONKOS Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
-        catch (Exception ex) { _status.Text = "El backup falló."; WriteLog("ERROR GENERAL: " + ex.Message); MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        catch (Exception ex) { _status.Text = "El backup falló."; WriteLog("ERROR GENERAL: " + ex.Message); ActivityLog.Write("BACKUP", "Error general", "ERROR", ex.Message); MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally
         {
             _busy = false; _run.Enabled = true;
             _cancel.Visible = false; LayoutActions();
             _cts?.Dispose(); _cts = null;
         }
+    }
+
+    private void ShowErrorsModal(List<string> errorDetails, string root)
+    {
+        using var dialog = new Form
+        {
+            Text = "⚠  Backup completado con errores",
+            StartPosition = FormStartPosition.CenterParent,
+            Size = new Size(760, 520),
+            MinimumSize = new Size(600, 400),
+            BackColor = Bg,
+            ForeColor = TextMain,
+            Font = new Font("Segoe UI", 9.5F)
+        };
+        var title = new Label
+        {
+            Text = $"Se copiaron los archivos, pero {errorDetails.Count} elemento(s) NO se pudieron copiar.{Environment.NewLine}" +
+                   "Revisa la lista antes de dar por bueno el respaldo. Los elementos listados no están en el destino.",
+            Dock = DockStyle.Top, Height = 60, Padding = new Padding(12, 8, 12, 8),
+            ForeColor = Color.FromArgb(255, 200, 100), Font = new Font("Segoe UI", 10F, FontStyle.Bold)
+        };
+        var list = new TextBox
+        {
+            Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both, WordWrap = false,
+            Dock = DockStyle.Fill,
+            Font = new Font("Consolas", 9F),
+            BackColor = Color.FromArgb(13, 12, 18),
+            ForeColor = Color.FromArgb(240, 200, 200),
+            BorderStyle = BorderStyle.None,
+            Text = string.Join(Environment.NewLine + Environment.NewLine, errorDetails)
+        };
+        var bottom = new Panel { Dock = DockStyle.Bottom, Height = 56, BackColor = Surface };
+        var understood = new CheckBox
+        {
+            Text = "Entiendo que estos elementos NO están en el backup.",
+            Location = new Point(12, 16), AutoSize = true, ForeColor = TextMain, Cursor = Cursors.Hand
+        };
+        var ok = new Button
+        {
+            Text = "CERRAR", DialogResult = DialogResult.OK, Location = new Point(640, 12), Size = new Size(100, 32),
+            BackColor = Purple, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Enabled = false
+        };
+        ok.FlatAppearance.BorderSize = 0;
+        understood.CheckedChanged += (_, _) => ok.Enabled = understood.Checked;
+        bottom.Controls.Add(understood); bottom.Controls.Add(ok);
+        dialog.Controls.Add(list); dialog.Controls.Add(bottom); dialog.Controls.Add(title);
+        dialog.AcceptButton = ok;
+        dialog.ShowDialog(this);
+        WriteLog($"Errores no bloqueantes: {errorDetails.Count}. Informe: {Path.Combine(root, "INFORME_ERRORES_BACKUP.txt")}");
     }
 
     private async Task RestoreBackupAsync()
@@ -701,7 +778,7 @@ internal sealed class BackupForm : UserControl
         catch (Exception ex) { MessageBox.Show(this, "No se pudo leer el manifiesto: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
 
         var files = rows.Skip(1)
-            .Where(r => r.Length >= 4 && string.Equals(r[0], "COPIADO", StringComparison.OrdinalIgnoreCase))
+            .Where(r => r.Length >= 4 && (string.Equals(r[0], "COPIADO", StringComparison.OrdinalIgnoreCase) || string.Equals(r[0], "YA COPIADO", StringComparison.OrdinalIgnoreCase)))
             .Select(r =>
             {
                 string manifestDestination = r[3];
@@ -781,6 +858,7 @@ internal sealed class BackupForm : UserControl
 
         _busy = true; _run.Enabled = false; _log.Clear();
         SetProgress(0, files.Count, "Preparando restauración…", "Leyendo manifiesto");
+        ActivityLog.Write("RESTORE", "Inicio restauración", "OK", $"Backup: {backupRoot} | Archivos: {files.Count}");
         int restored = 0, skipped = 0, errors = 0;
         var report = new List<string> { "INFORME DE RESTAURACIÓN ONKOS", $"Fecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss}", $"Backup: {backupRoot}", "MAPEO DE PERFILES:" };
         foreach (var map in profileMap) report.Add($"  {map.Key} => {map.Value}");
@@ -839,8 +917,9 @@ internal sealed class BackupForm : UserControl
                         report.Add("=== RESTAURACIÓN IPv4 ===");
                         report.Add(networkOutput);
                         WriteLog("Comando de restauración IPv4 ejecutado.");
+                        ActivityLog.Write("RESTORE", "IPv4 aplicado", "OK");
                     }
-                    catch (Exception ex) { errors++; report.Add("ERROR IPv4: " + ex.Message); WriteLog("ERROR IPv4: " + ex.Message); }
+                    catch (Exception ex) { errors++; report.Add("ERROR IPv4: " + ex.Message); WriteLog("ERROR IPv4: " + ex.Message); ActivityLog.Write("RESTORE", "IPv4 falló", "ERROR", ex.Message); }
                 }
                 else report.Add("IPv4: no aplicada por decisión del técnico.");
             }
@@ -849,12 +928,14 @@ internal sealed class BackupForm : UserControl
             File.WriteAllText(reportPath, string.Join(Environment.NewLine, report), Encoding.UTF8);
             SetProgress(files.Count, files.Count, errors == 0 ? "¡Restauración finalizada!" : "Restauración finalizada con errores.", "Terminado");
             WriteLog($"Restauración finalizada. Restaurados: {restored}; omitidos: {skipped}; errores: {errors}.");
+            ActivityLog.Write("RESTORE", "Restauración finalizada", errors == 0 ? "OK" : "CON ERRORES", $"Restaurados: {restored} | Omitidos: {skipped} | Errores: {errors}");
             MessageBox.Show(this, $"Restauración finalizada.\n\nRestaurados: {restored:N0}\nOmitidos (existentes): {skipped:N0}\nErrores: {errors:N0}\n\nInforme: {reportPath}",
                 "ONKOS Restauración", MessageBoxButtons.OK, errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         catch (Exception ex)
         {
             WriteLog("ERROR RESTAURACIÓN: " + ex.Message);
+            ActivityLog.Write("RESTORE", "Error general", "ERROR", ex.Message);
             MessageBox.Show(this, ex.Message, "Error restaurando", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { _busy = false; _run.Enabled = true; }
