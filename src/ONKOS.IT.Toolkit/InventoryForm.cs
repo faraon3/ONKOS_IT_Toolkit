@@ -141,12 +141,12 @@ internal sealed class InventoryForm : UserControl
         try
         {
             var programs = new List<(string Name, string Version, string Publisher)>();
-            void ReadKey(RegistryKey root, string subkey, RegistryView view)
+
+            void ReadUninstallKey(RegistryKey root, string subkey)
             {
                 try
                 {
-                    using var baseKey = RegistryKey.OpenBaseKey(root, view);
-                    using var uninstall = baseKey.OpenSubKey(subkey);
+                    using var uninstall = root.OpenSubKey(subkey);
                     if (uninstall == null) return;
                     foreach (var name in uninstall.GetSubKeyNames())
                     {
@@ -165,9 +165,30 @@ internal sealed class InventoryForm : UserControl
                 }
                 catch { }
             }
-            ReadKey(RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", RegistryView.Registry64);
-            ReadKey(RegistryHive.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", RegistryView.Registry32);
-            ReadKey(RegistryHive.CurrentUser, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", RegistryView.Default);
+
+            // 64 bits HKLM
+            try
+            {
+                using var hklm64 = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64);
+                ReadUninstallKey(hklm64, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall");
+            }
+            catch { }
+
+            // 32 bits HKLM
+            try
+            {
+                using var hklm32 = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32);
+                ReadUninstallKey(hklm32, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall");
+            }
+            catch { }
+
+            // HKCU (instalaciones por usuario)
+            try
+            {
+                using var hkcu = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, RegistryView.Default);
+                ReadUninstallKey(hkcu, @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall");
+            }
+            catch { }
 
             var unique = programs.GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase).Select(g => g.First())
                 .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase).ToList();
