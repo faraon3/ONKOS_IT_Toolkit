@@ -31,6 +31,7 @@ internal sealed class BackupForm : UserControl
     private readonly Button _addFolder = new();
     private readonly Button _cancel = new() { Text = "CANCELAR", Visible = false };
     private readonly Panel _actionBar = new() { Dock = DockStyle.Bottom, Height = 54, BackColor = Color.FromArgb(18, 16, 25), Padding = new Padding(3, 2, 3, 2) };
+    private readonly Dictionary<string, long> _sizeCache = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _cts;
     private bool _busy;
 
@@ -62,7 +63,7 @@ internal sealed class BackupForm : UserControl
         _sources.DrawItem += DrawSourceTile;
         _sources.DrawSubItem += DrawSourceSubItem;
         _sources.MouseDown += SourceMouseDown;
-        _sources.KeyDown += (_, e) => { if (e.KeyCode == Keys.Space && _sources.SelectedItems.Count > 0) { var item = _sources.SelectedItems[0]; item.Checked = !item.Checked; _sources.Invalidate(item.Bounds); e.Handled = true; } };
+        _sources.KeyDown += (_, e) => { if (e.KeyCode == Keys.Space && _sources.SelectedItems.Count > 0) { var item = _sources.SelectedItems[0]; ToggleItem(item); e.Handled = true; } };
         _sources.BackColor = Surface; _sources.ForeColor = TextMain; _sources.Font = new Font("Segoe UI", 9.5F);
         _sources.SmallImageList = _folderIcons;
         _sources.Columns.Add("Carpeta / ubicación", 220); _sources.Columns.Add("Ruta", 500);
@@ -151,6 +152,8 @@ internal sealed class BackupForm : UserControl
         _actionBar.Controls.Add(_run); _actionBar.Controls.Add(_cancel); _actionBar.Controls.Add(_restore);
         content.Controls.Add(logGroup); content.Controls.Add(progressGroup); content.Controls.Add(destinationGroup); content.Controls.Add(optionsGroup); content.Controls.Add(sourcesGroup);
         Controls.Add(content); Controls.Add(_actionBar); Controls.Add(header);
+
+        ApplyLastSession();
     }
 
     private void LayoutActions()
@@ -195,6 +198,95 @@ internal sealed class BackupForm : UserControl
         AddKnown("Biblioteca ONKOS (drivers + programas)", null, false, "ONKOS", Path.Combine(AppContext.BaseDirectory, "Data"));
     }
 
+    private void ApplyLastSession()
+    {
+        try
+        {
+            var s = SessionState.Load();
+            if (s.SelectedPaths.Count > 0)
+            {
+                foreach (ListViewItem item in _sources.Items)
+                    if (item.Tag is FolderEntry fe && s.SelectedPaths.Contains(fe.Path, StringComparer.OrdinalIgnoreCase))
+                        item.Checked = true;
+            }
+            if (!string.IsNullOrWhiteSpace(s.Destination)) _destination.Text = s.Destination;
+            if (!string.IsNullOrWhiteSpace(s.BackupLabel)) _backupLabel.Text = s.BackupLabel;
+            _ipv4.Checked = s.SaveIpv4;
+            if (s.SelectedPaths.Count > 0)
+                WriteLog($"Última sesión cargada: {s.SelectedPaths.Count} carpeta(s), destino {s.Destination}");
+        }
+        catch { }
+    }
+
+    private void SaveSession(IEnumerable<FolderEntry> selected, string dest)
+    {
+        new SessionState
+        {
+            SelectedPaths = selected.Select(x => x.Path).ToList(),
+            Destination = dest,
+            BackupLabel = _backupLabel.Text.Trim(),
+            SaveIpv4 = _ipv4.Checked
+        }.Save();
+    }
+
+    private void ToggleItem(ListViewItem item)
+    {
+        item.Checked = !item.Checked;
+        _sources.Invalidate(item.Bounds);
+        if (item.Checked && item.Tag is FolderEntry fe)
+            _ = UpdateFolderSizeAsync(item, fe);
+    }
+
+    private async Task UpdateFolderSizeAsync(ListViewItem item, FolderEntry entry)
+    {
+        try
+        {
+            if (_sizeCache.TryGetValue(entry.Path, out var cached))
+            {
+                ApplySizeToItem(item, entry.Path, cached);
+                return;
+            }
+            long size = await Task.Run(() => GetFolderSizeSafe(entry.Path));
+            _sizeCache[entry.Path] = size;
+            if (IsDisposed) return;
+            ApplySizeToItem(item, entry.Path, size);
+        }
+        catch { }
+    }
+
+    private void ApplySizeToItem(ListViewItem item, string path, long size)
+    {
+        try
+        {
+            if (item.SubItems.Count > 1)
+                item.SubItems[1].Text = path + "  ·  " + FormatSize(size);
+            _sources.Invalidate(item.Bounds);
+        }
+        catch { }
+    }
+
+    private static long GetFolderSizeSafe(string path)
+    {
+        try
+        {
+            long total = 0;
+            foreach (var f in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+            {
+                try { total += new FileInfo(f).Length; } catch { }
+            }
+            return total;
+        }
+        catch { return 0; }
+    }
+
+    private static string FormatSize(long bytes)
+    {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return (bytes / 1024.0).ToString("F1") + " KB";
+        if (bytes < 1024L * 1024 * 1024) return (bytes / 1024.0 / 1024).ToString("F1") + " MB";
+        return (bytes / 1024.0 / 1024 / 1024).ToString("F2") + " GB";
+    }
+
     private void AddKnown(string label, Environment.SpecialFolder? special, bool selected, string iconKey, string? customPath = null)
     {
         string path = customPath ?? Environment.GetFolderPath(special!.Value);
@@ -205,6 +297,7 @@ internal sealed class BackupForm : UserControl
         int icon = GetIconIndex(iconKey, path);
         var item = new ListViewItem(label, icon) { Checked = selected, Tag = new FolderEntry(label, path, !string.IsNullOrWhiteSpace(iconKey)) };
         item.SubItems.Add(path); _sources.Items.Add(item);
+        if (selected) _ = UpdateFolderSizeAsync(item, (FolderEntry)item.Tag!);
     }
     private int GetIconIndex(string key, string path)
     {
@@ -253,7 +346,7 @@ internal sealed class BackupForm : UserControl
         if (e.Button != MouseButtons.Left) return;
         var hit=_sources.HitTest(e.Location);
         if(hit.Item!=null && e.X < hit.Item.Bounds.X+42)
-        { hit.Item.Checked=!hit.Item.Checked; _sources.Invalidate(hit.Item.Bounds); }
+        { ToggleItem(hit.Item); }
     }
     private void DrawDriveItem(object? sender, DrawItemEventArgs e)
     {
@@ -404,6 +497,9 @@ internal sealed class BackupForm : UserControl
         foreach (var f in selected)
             if (IsSameOrChild(dest, f.Path)) { MessageBox.Show(this, $"El destino está dentro de la carpeta origen ({f.Label}). Elige otra ubicación.", "Destino no válido", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
 
+        // Guardar sesión para la próxima vez.
+        SaveSession(selected, dest);
+
         string customPrefix = SafeName(_backupLabel.Text.Trim());
         string folderPrefix = string.IsNullOrWhiteSpace(customPrefix) ? "" : customPrefix + "_";
         string root = Path.Combine(dest, $"{folderPrefix}{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}");
@@ -459,15 +555,8 @@ internal sealed class BackupForm : UserControl
             foreach (var dir in directoryList)
             {
                 string targetDir = Path.Combine(filesRoot, dir.FolderName, dir.Relative);
-                try
-                {
-                    Directory.CreateDirectory(targetDir);
-                }
-                catch (Exception ex)
-                {
-                    errors++;
-                    ReportError(errorDetails, dir.Source, targetDir, "No se pudo crear la carpeta en el respaldo: " + ex.Message);
-                }
+                try { Directory.CreateDirectory(targetDir); }
+                catch (Exception ex) { errors++; ReportError(errorDetails, dir.Source, targetDir, "No se pudo crear la carpeta en el respaldo: " + ex.Message); }
             }
 
             int total = Math.Max(fileList.Count + (_ipv4.Checked ? 1 : 0), 1);
@@ -488,7 +577,6 @@ internal sealed class BackupForm : UserControl
                     {
                         var sourceInfo = new FileInfo(item.Source);
                         sourceBytes = sourceInfo.Length;
-
                         Directory.CreateDirectory(targetDir);
                         File.Copy(item.Source, targetFile, true);
                         copied++;
@@ -518,17 +606,8 @@ internal sealed class BackupForm : UserControl
                 {
                     progress.Report((done, total, "Exportando configuración de red…", "Configuración IPv4"));
                     Directory.CreateDirectory(Path.GetDirectoryName(networkFile)!);
-
                     using var netsh = new Process();
-                    netsh.StartInfo = new ProcessStartInfo
-                    {
-                        FileName = "netsh.exe",
-                        Arguments = "interface dump",
-                        UseShellExecute = false,
-                        CreateNoWindow = true,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true
-                    };
+                    netsh.StartInfo = new ProcessStartInfo { FileName = "netsh.exe", Arguments = "interface dump", UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
                     netsh.Start();
                     Task<string> stdoutTask = netsh.StandardOutput.ReadToEndAsync();
                     Task<string> stderrTask = netsh.StandardError.ReadToEndAsync();
@@ -546,16 +625,8 @@ internal sealed class BackupForm : UserControl
                     if (netsh.ExitCode != 0) throw new IOException($"netsh finalizó con código {netsh.ExitCode}. {stderr}");
                     WriteLog("Configuración IPv4 exportada.");
                 }
-                catch (Exception ex)
-                {
-                    errors++;
-                    ReportError(errorDetails, "Configuración IPv4", networkFile, ex.Message);
-                }
-                finally
-                {
-                    done++;
-                    progress.Report((done, total, "Configuración de red procesada.", "Configuración IPv4"));
-                }
+                catch (Exception ex) { errors++; ReportError(errorDetails, "Configuración IPv4", networkFile, ex.Message); }
+                finally { done++; progress.Report((done, total, "Configuración de red procesada.", "Configuración IPv4")); }
             }
             File.WriteAllText(Path.Combine(root, "MANIFIESTO_BACKUP.csv"), string.Join(Environment.NewLine, manifestRows), Encoding.UTF8);
 
@@ -610,6 +681,7 @@ internal sealed class BackupForm : UserControl
             _cts?.Dispose(); _cts = null;
         }
     }
+
     private async Task RestoreBackupAsync()
     {
         if (_busy) return;
@@ -668,11 +740,7 @@ internal sealed class BackupForm : UserControl
                 ClientSize = new Size(700, Math.Min(180 + oldProfiles.Count * 76, 520)),
                 BackColor = Bg, ForeColor = TextMain, Font = new Font("Segoe UI", 9.5F)
             };
-            var intro = new Label
-            {
-                Text = "El backup contiene carpetas de otro usuario. Selecciona dónde restaurar cada perfil para evitar crear carpetas con el nombre del usuario antiguo.",
-                Location = new Point(14, 12), Size = new Size(670, 42), ForeColor = TextMain
-            };
+            var intro = new Label { Text = "El backup contiene carpetas de otro usuario. Selecciona dónde restaurar cada perfil.", Location = new Point(14, 12), Size = new Size(670, 42), ForeColor = TextMain };
             mapping.Controls.Add(intro);
             var rowsPanel = new Panel { Location = new Point(12, 58), Size = new Size(676, oldProfiles.Count * 76), AutoScroll = true, BackColor = Bg };
             mapping.Controls.Add(rowsPanel);
@@ -684,7 +752,7 @@ internal sealed class BackupForm : UserControl
                 var browse = new Button { Text = "Examinar…", Location = new Point(555, y + 23), Size = new Size(105, 30), BackColor = Surface2, ForeColor = TextMain, FlatStyle = FlatStyle.Flat };
                 browse.Click += (_, _) =>
                 {
-                    using var folder = new FolderBrowserDialog { Description = "Selecciona la carpeta del perfil de usuario destino (por ejemplo C:\\Users\\Paula Andrea).", SelectedPath = Directory.Exists(target.Text) ? target.Text : currentProfile };
+                    using var folder = new FolderBrowserDialog { Description = "Selecciona la carpeta del perfil de usuario destino.", SelectedPath = Directory.Exists(target.Text) ? target.Text : currentProfile };
                     if (folder.ShowDialog(mapping) == DialogResult.OK) target.Text = folder.SelectedPath;
                 };
                 rowsPanel.Controls.Add(label); rowsPanel.Controls.Add(target); rowsPanel.Controls.Add(browse);
@@ -692,7 +760,7 @@ internal sealed class BackupForm : UserControl
                 target.TextChanged += (_, _) => profileMap[oldProfile] = target.Text.Trim();
                 y += 76;
             }
-            var note = new Label { Text = "Se conservará la estructura interna (Documentos, Escritorio, OneDrive, etc.). Las rutas fuera de C:\\Users\\… no se modificarán.", Location = new Point(14, rowsPanel.Bottom + 4), Size = new Size(670, 34), ForeColor = TextMuted };
+            var note = new Label { Text = "Se conservará la estructura interna. Las rutas fuera de C:\\Users\\… no se modificarán.", Location = new Point(14, rowsPanel.Bottom + 4), Size = new Size(670, 34), ForeColor = TextMuted };
             mapping.Controls.Add(note);
             var ok = new Button { Text = "CONTINUAR", DialogResult = DialogResult.OK, Location = new Point(460, mapping.ClientSize.Height - 42), Size = new Size(105, 32), BackColor = Purple, ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
             var cancel = new Button { Text = "CANCELAR", DialogResult = DialogResult.Cancel, Location = new Point(575, mapping.ClientSize.Height - 42), Size = new Size(105, 32), BackColor = Surface2, ForeColor = TextMain, FlatStyle = FlatStyle.Flat };
@@ -761,7 +829,7 @@ internal sealed class BackupForm : UserControl
             if (File.Exists(networkDump))
             {
                 var networkChoice = MessageBox.Show(this,
-                    "El respaldo contiene configuración de red IPv4 exportada con netsh.\n\n¿Deseas aplicar esa configuración a este computador?\n\nATENCIÓN: puede cambiar IP, gateway, DNS y afectar la conexión. Solo continúa si esta configuración corresponde a la red y adaptador actuales. Se requiere ejecutar ONKOS como administrador.",
+                    "El respaldo contiene configuración de red IPv4.\n\n¿Deseas aplicarla a este computador?\n\nATENCIÓN: puede cambiar IP, gateway, DNS. Solo continúa si corresponde a la red actual. Requiere ejecutar ONKOS como administrador.",
                     "Restaurar configuración IPv4", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                 if (networkChoice == DialogResult.Yes)
                 {
@@ -813,8 +881,7 @@ internal sealed class BackupForm : UserControl
         {
             string filesRoot = Path.Combine(backupRoot, "Archivos");
             string relative = Path.GetRelativePath(filesRoot, backupFile);
-            string first = relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
-            return first;
+            return relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
         }
         catch { return string.Empty; }
     }
@@ -825,9 +892,7 @@ internal sealed class BackupForm : UserControl
         foreach (var map in profileMap)
         {
             string oldRoot = map.Key.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            if (!originalPath.StartsWith(oldRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-                continue;
-
+            if (!originalPath.StartsWith(oldRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
             string remainder = originalPath.Substring(oldRoot.Length + 1);
             if (knownFolder is not null)
             {
@@ -848,10 +913,7 @@ internal sealed class BackupForm : UserControl
     private static string? GetKnownFolderName(string label)
     {
         string normalized = label.Replace("_", " ").Trim();
-        if (normalized.Contains("OneDrive", StringComparison.OrdinalIgnoreCase) ||
-            normalized.Contains("One Drive", StringComparison.OrdinalIgnoreCase))
-            return "OneDrive";
-
+        if (normalized.Contains("OneDrive", StringComparison.OrdinalIgnoreCase) || normalized.Contains("One Drive", StringComparison.OrdinalIgnoreCase)) return "OneDrive";
         if (normalized.Contains("Documentos", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Documents", StringComparison.OrdinalIgnoreCase)) return "Documents";
         if (normalized.Contains("Escritorio", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Desktop", StringComparison.OrdinalIgnoreCase)) return "Desktop";
         if (normalized.Contains("Descargas", StringComparison.OrdinalIgnoreCase) || normalized.Contains("Downloads", StringComparison.OrdinalIgnoreCase)) return "Downloads";
@@ -923,7 +985,6 @@ internal sealed class BackupForm : UserControl
             errorDetails.Add(detail);
             WriteLog("ERROR: " + detail);
         }
-
         try
         {
             foreach (string file in Directory.EnumerateFiles(currentPath))
@@ -943,7 +1004,6 @@ internal sealed class BackupForm : UserControl
             errorDetails.Add(detail);
             WriteLog("ERROR: " + detail);
         }
-
         try
         {
             foreach (string directory in Directory.EnumerateDirectories(currentPath))
@@ -951,11 +1011,7 @@ internal sealed class BackupForm : UserControl
                 try
                 {
                     var attributes = File.GetAttributes(directory);
-                    if ((attributes & FileAttributes.ReparsePoint) != 0)
-                    {
-                        WriteLog($"Omitida carpeta de enlace (evita ciclos): {directory}");
-                        continue;
-                    }
+                    if ((attributes & FileAttributes.ReparsePoint) != 0) { WriteLog($"Omitida carpeta de enlace (evita ciclos): {directory}"); continue; }
                     CollectFilesSafe(rootPath, directory, folderName, files, directories, errorDetails);
                 }
                 catch (Exception ex)
@@ -1003,18 +1059,9 @@ internal sealed class BackupForm : UserControl
     }
     private static string SafeName(string s) => string.Join("_", s.Split(Path.GetInvalidFileNameChars()));
 
-    private static async Task<string> RunProcessAsync(string exe, string args, bool shellRedirect)
-    { var psi = new ProcessStartInfo(exe, args) { UseShellExecute = shellRedirect, CreateNoWindow = true, RedirectStandardOutput = !shellRedirect, RedirectStandardError = !shellRedirect }; using var p = Process.Start(psi) ?? throw new InvalidOperationException($"No se pudo iniciar {exe}"); if (shellRedirect) { await p.WaitForExitAsync(); return $"Proceso terminado con código {p.ExitCode}"; } string stdout = await p.StandardOutput.ReadToEndAsync(); string stderr = await p.StandardError.ReadToEndAsync(); await p.WaitForExitAsync(); return stdout + Environment.NewLine + stderr + Environment.NewLine + "ExitCode=" + p.ExitCode; }
-
     private static async Task<string> RunNetshWithTimeoutAsync(string args, int timeoutMs)
     {
-        var psi = new ProcessStartInfo("netsh.exe", args)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
+        var psi = new ProcessStartInfo("netsh.exe", args) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         using var p = Process.Start(psi) ?? throw new InvalidOperationException("No se pudo iniciar netsh.");
         var stdout = p.StandardOutput.ReadToEndAsync();
         var stderr = p.StandardError.ReadToEndAsync();
@@ -1059,28 +1106,23 @@ internal sealed class PurpleCheckBox : CheckBox
         var g = e.Graphics;
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(BackColor);
-
         int boxSize = 16;
         int x = 5;
         int y = (Height - boxSize) / 2;
         var rect = new Rectangle(x, y, boxSize, boxSize);
         Color purple = Color.FromArgb(105, 73, 164);
         Color border = Color.FromArgb(65, 57, 82);
-
         using var fill = new SolidBrush(Checked ? purple : Color.FromArgb(46, 40, 59));
         using var outline = new Pen(Checked ? Color.FromArgb(126, 91, 190) : border, 1.2F);
         using var shape = RoundedCheckRect(rect, 4);
         g.FillPath(fill, shape);
         g.DrawPath(outline, shape);
-
         if (Checked)
         {
             using var tick = new Pen(Color.White, 2.1F) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
             g.DrawLines(tick, new[] { new Point(x + 3, y + 8), new Point(x + 6, y + 11), new Point(x + 13, y + 4) });
         }
-
-        TextRenderer.DrawText(g, Text, Font, new Rectangle(29, 0, Math.Max(0, Width - 34), Height), ForeColor,
-            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(g, Text, Font, new Rectangle(29, 0, Math.Max(0, Width - 34), Height), ForeColor, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 
     private static GraphicsPath RoundedCheckRect(Rectangle r, int radius)
@@ -1099,11 +1141,7 @@ internal sealed class PurpleCheckBox : CheckBox
 internal sealed class ModernProgressBar : Control
 {
     private int _value;
-    public int Value
-    {
-        get => _value;
-        set { _value = Math.Clamp(value, 0, 100); Invalidate(); }
-    }
+    public int Value { get => _value; set { _value = Math.Clamp(value, 0, 100); Invalidate(); } }
 
     public ModernProgressBar()
     {
@@ -1122,7 +1160,6 @@ internal sealed class ModernProgressBar : Control
         using var trackBrush = new SolidBrush(Color.FromArgb(47, 41, 61));
         using var trackPath = Rounded(track, 7);
         g.FillPath(trackBrush, trackPath);
-
         int fillWidth = (int)((Width - 1) * (_value / 100.0));
         if (fillWidth > 0)
         {
@@ -1131,7 +1168,6 @@ internal sealed class ModernProgressBar : Control
             using var fillPath = Rounded(fill, 7);
             g.FillPath(fillBrush, fillPath);
         }
-
         string text = _value + "%";
         using var font = new Font("Segoe UI", 10F, FontStyle.Bold);
         var size = g.MeasureString(text, font);
