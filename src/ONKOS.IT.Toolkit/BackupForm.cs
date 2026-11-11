@@ -539,7 +539,9 @@ internal sealed class BackupForm : UserControl
             string filesRoot = Path.Combine(root, "Archivos");
             Directory.CreateDirectory(filesRoot);
 
-            // Reanudación: cargar estado previo si existe.
+            // Adjuntar el último inventario al backup (si existe).
+            AttachLatestInventory(filesRoot, errorDetails);
+
             var state = BackupState.Load(root);
             int alreadyDone = 0;
 
@@ -553,7 +555,7 @@ internal sealed class BackupForm : UserControl
             }
 
             int total = Math.Max(fileList.Count + (_ipv4.Checked ? 1 : 0), 1);
-            int done = 0, copied = 0, verified = 0, skipped = 0;
+            int done = 0, copied = 0, verified = 0;
             var manifestRows = new List<string> { CsvRow("Estado", "Verificación", "Origen", "Destino", "Bytes", "Fecha", "Detalle") };
             IProgress<(int done, int total, string message, string current)> progress = new Progress<(int done, int total, string message, string current)>(p => { SetProgress(p.done, p.total, $"Copiando… {p.done} de {p.total}", p.current); if (!string.IsNullOrWhiteSpace(p.message)) WriteLog(p.message); });
             var token = _cts.Token;
@@ -567,7 +569,6 @@ internal sealed class BackupForm : UserControl
                     long sourceBytes = 0;
                     string copyStatus = "ERROR", verifyStatus = "No verificado", detail = "";
 
-                    // Reanudación: si ya está copiado y no cambió, se omite.
                     try
                     {
                         var sInfo = new FileInfo(item.Source);
@@ -609,7 +610,6 @@ internal sealed class BackupForm : UserControl
                     manifestRows.Add(CsvRow(copyStatus, verifyStatus, item.Source, targetFile, sourceBytes.ToString(), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), detail));
                     done++; progress.Report((done, total, "", Path.GetFileName(item.Source)));
 
-                    // Guardar estado cada 50 archivos.
                     if (done % 50 == 0)
                     {
                         try { state.Save(); } catch { }
@@ -692,7 +692,6 @@ internal sealed class BackupForm : UserControl
                 WriteLog($"Finalizado. Copiados: {copied}. Reanudados: {alreadyDone}. Errores: {errors}.{Environment.NewLine}Ruta: {root}");
                 ActivityLog.Write("BACKUP", "Backup finalizado", errors == 0 ? "OK" : "CON ERRORES", $"Copiados: {copied} | Reanudados: {alreadyDone} | Errores: {errors} | Ruta: {root}");
 
-                // Modal bloqueante de errores si hay alguno.
                 if (errors > 0)
                     ShowErrorsModal(errorDetails, root);
                 else
@@ -707,6 +706,31 @@ internal sealed class BackupForm : UserControl
             _busy = false; _run.Enabled = true;
             _cancel.Visible = false; LayoutActions();
             _cts?.Dispose(); _cts = null;
+        }
+    }
+
+    // Copia el último inventario que haya en Data/Reports/Inventario_*.csv
+    // dentro de la carpeta Archivos/Inventario_ONKOS/ del backup.
+    private void AttachLatestInventory(string filesRoot, List<string> errorDetails)
+    {
+        try
+        {
+            string reportsDir = Path.Combine(AppContext.BaseDirectory, "Data", "Reports");
+            if (!Directory.Exists(reportsDir)) return;
+            var latest = Directory.GetFiles(reportsDir, "Inventario_*.csv")
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+            if (latest == null) return;
+
+            string targetDir = Path.Combine(filesRoot, "Inventario_ONKOS");
+            Directory.CreateDirectory(targetDir);
+            string targetFile = Path.Combine(targetDir, Path.GetFileName(latest));
+            File.Copy(latest, targetFile, true);
+            WriteLog($"Inventario adjuntado al backup: {Path.GetFileName(latest)}");
+        }
+        catch (Exception ex)
+        {
+            errorDetails.Add($"ORIGEN: {Path.Combine(AppContext.BaseDirectory, "Data", "Reports")} | DESTINO: Archivos/Inventario_ONKOS/ | MOTIVO: No se pudo adjuntar el inventario: {ex.Message}");
         }
     }
 
