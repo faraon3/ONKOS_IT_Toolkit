@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -28,6 +29,8 @@ internal sealed class BackupForm : UserControl
     private readonly Button _run = new();
     private readonly Button _restore = new();
     private readonly Button _addFolder = new();
+    private readonly Button _cancel = new() { Text = "CANCELAR", Visible = false };
+    private CancellationTokenSource? _cts;
     private bool _busy;
 
     private static readonly Color Bg = Color.FromArgb(18, 16, 25);
@@ -47,7 +50,6 @@ internal sealed class BackupForm : UserControl
         var back = new Button { Text = "‹  VOLVER AL INICIO", Location = new Point(22, 5), Size = new Size(170, 25) };
         StyleButton(back, true); back.Click += (_, _) => BackRequested?.Invoke(); header.Controls.Add(back);
         header.Controls.Add(new Label { Text = "BACKUP  /  MIGRACIÓN", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 30) });
-        // Se elimina el subtítulo para simplificar el encabezado.
 
         var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), AutoScroll = true, BackColor = Bg };
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
@@ -62,7 +64,7 @@ internal sealed class BackupForm : UserControl
         _sources.KeyDown += (_, e) => { if (e.KeyCode == Keys.Space && _sources.SelectedItems.Count > 0) { var item = _sources.SelectedItems[0]; item.Checked = !item.Checked; _sources.Invalidate(item.Bounds); e.Handled = true; } };
         _sources.BackColor = Surface; _sources.ForeColor = TextMain; _sources.Font = new Font("Segoe UI", 9.5F);
         _sources.SmallImageList = _folderIcons;
-        _sources.Columns.Add("Carpeta / ubicación", 220); _sources.Columns.Add("Ruta", 500); 
+        _sources.Columns.Add("Carpeta / ubicación", 220); _sources.Columns.Add("Ruta", 500);
         _sources.Resize += (_, _) => { if (_sources.Columns.Count > 1) { _sources.Columns[0].Width = Math.Min(230, Math.Max(170, _sources.ClientSize.Width / 3)); _sources.Columns[1].Width = Math.Max(120, _sources.ClientSize.Width - _sources.Columns[0].Width - 4); } };
         LoadKnownFolders();
         var sourceButtons = new Panel { Dock = DockStyle.Bottom, Height = 42, BackColor = Surface };
@@ -136,23 +138,37 @@ internal sealed class BackupForm : UserControl
         };
         logGroup.Controls.Add(_log); logGroup.Controls.Add(logToggle);
 
-        // Barra inferior con dos acciones del mismo tamaño y alineadas.
+        // Barra inferior con dos acciones del mismo tamaño y alineadas, más cancelar cuando está en curso.
         var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = Bg, Padding = new Padding(3, 2, 3, 2) };
         _run.Text = "INICIAR COPIA DE SEGURIDAD"; StyleButton(_run, false);
         _run.Font = new Font("Segoe UI", 10.5F, FontStyle.Bold);
         _restore.Text = "RESTAURAR BACKUP"; StyleButton(_restore, true);
         _restore.Font = new Font("Segoe UI", 10.5F, FontStyle.Bold);
+        StyleButton(_cancel, true);
+        _cancel.Font = new Font("Segoe UI", 10.5F, FontStyle.Bold);
         void LayoutActions()
         {
-            int half = Math.Max(1, (actionBar.ClientSize.Width - 6) / 2);
-            _run.SetBounds(0, 0, half, actionBar.ClientSize.Height);
-            _restore.SetBounds(half + 3, 0, Math.Max(1, actionBar.ClientSize.Width - half - 3), actionBar.ClientSize.Height);
+            int w = actionBar.ClientSize.Width;
+            if (_cancel.Visible)
+            {
+                int each = Math.Max(1, (w - 6) / 3);
+                _run.SetBounds(0, 0, each, actionBar.ClientSize.Height);
+                _cancel.SetBounds(each + 3, 0, each, actionBar.ClientSize.Height);
+                _restore.SetBounds((each + 3) * 2, 0, Math.Max(1, w - (each + 3) * 2), actionBar.ClientSize.Height);
+            }
+            else
+            {
+                int half = Math.Max(1, (w - 6) / 2);
+                _run.SetBounds(0, 0, half, actionBar.ClientSize.Height);
+                _restore.SetBounds(half + 3, 0, Math.Max(1, w - half - 3), actionBar.ClientSize.Height);
+            }
         }
         actionBar.Resize += (_, _) => LayoutActions();
         LayoutActions();
         _run.Click += async (_, _) => await StartBackupAsync();
         _restore.Click += async (_, _) => await RestoreBackupAsync();
-        actionBar.Controls.Add(_run); actionBar.Controls.Add(_restore);
+        _cancel.Click += (_, _) => { try { _cts?.Cancel(); } catch { } };
+        actionBar.Controls.Add(_run); actionBar.Controls.Add(_cancel); actionBar.Controls.Add(_restore);
         content.Controls.Add(logGroup); content.Controls.Add(progressGroup); content.Controls.Add(destinationGroup); content.Controls.Add(optionsGroup); content.Controls.Add(sourcesGroup);
         Controls.Add(content); Controls.Add(actionBar); Controls.Add(header);
     }
@@ -178,6 +194,7 @@ internal sealed class BackupForm : UserControl
         AddKnown("OneDrive", null, false, "One Drive", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "OneDrive"));
         AddKnown("Vínculos", null, false, "Vinculos", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Links"));
         AddKnown("Objetos 3D", null, false, "Objeto-3d", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "3D Objects"));
+        AddKnown("Biblioteca ONKOS (drivers + programas)", null, false, "ONKOS", Path.Combine(AppContext.BaseDirectory, "Data"));
     }
 
     private void AddKnown(string label, Environment.SpecialFolder? special, bool selected, string iconKey, string? customPath = null)
@@ -212,7 +229,7 @@ internal sealed class BackupForm : UserControl
 
     private void DrawSourceSubItem(object? sender, DrawListViewSubItemEventArgs e)
     {
-        if (e.Item is null || e.SubItem is null) return; 
+        if (e.Item is null || e.SubItem is null) return;
         using var bg = new SolidBrush(e.Item.Selected ? Color.FromArgb(58, 46, 78) : Surface);
         e.Graphics.FillRectangle(bg, e.Bounds);
         if (e.ColumnIndex == 0)
@@ -235,6 +252,7 @@ internal sealed class BackupForm : UserControl
     }
     private void SourceMouseDown(object? sender, MouseEventArgs e)
     {
+        if (e.Button != MouseButtons.Left) return;
         var hit=_sources.HitTest(e.Location);
         if(hit.Item!=null && e.X < hit.Item.Bounds.X+42)
         { hit.Item.Checked=!hit.Item.Checked; _sources.Invalidate(hit.Item.Bounds); }
@@ -394,6 +412,8 @@ internal sealed class BackupForm : UserControl
         string folderPrefix = string.IsNullOrWhiteSpace(customPrefix) ? "" : customPrefix + "_";
         string root = Path.Combine(dest, $"{folderPrefix}{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}");
         _busy = true; _run.Enabled = false; _log.Clear(); SetProgress(0, 0, "Preparando respaldo…", "Revisando lo seleccionado");
+        _cts = new CancellationTokenSource();
+        _cancel.Visible = true; LayoutActions();
         try
         {
             Directory.CreateDirectory(root);
@@ -414,6 +434,28 @@ internal sealed class BackupForm : UserControl
                 CollectFilesSafe(entry.Path, entry.Path, SafeName(entry.Label), fileList, directoryList, errorDetails);
             }
             WriteLog($"Archivos encontrados para copiar: {fileList.Count}");
+
+            // Validación previa de espacio libre. Si el destino no reporta espacio, se omite.
+            long totalBytes = 0;
+            try { totalBytes = fileList.Sum(f => new FileInfo(f.Source).Length); } catch { }
+            try
+            {
+                var drive = new DriveInfo(Path.GetPathRoot(root)!);
+                if (drive.IsReady && totalBytes > 0 && drive.AvailableFreeSpace < totalBytes * 1.1)
+                {
+                    var answer = MessageBox.Show(this,
+                        $"Espacio insuficiente en destino.\n\nRequerido aprox.: {totalBytes / 1024.0 / 1024 / 1024:F1} GB\nDisponible: {drive.AvailableFreeSpace / 1024.0 / 1024 / 1024:F1} GB\n\n¿Continuar de todas formas?",
+                        "Espacio en disco", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                    if (answer != DialogResult.Yes)
+                    {
+                        WriteLog("Backup cancelado por falta de espacio.");
+                        SetProgress(0, 0, "Backup cancelado por falta de espacio.", "Cancelado");
+                        return;
+                    }
+                }
+            }
+            catch { /* si no se puede determinar, no bloqueamos */ }
+
             string filesRoot = Path.Combine(root, "Archivos");
             Directory.CreateDirectory(filesRoot);
 
@@ -438,10 +480,12 @@ internal sealed class BackupForm : UserControl
             int done = 0, copied = 0, verified = 0;
             var manifestRows = new List<string> { CsvRow("Estado", "Verificación", "Origen", "Destino", "Bytes", "Fecha", "Detalle") };
             IProgress<(int done, int total, string message, string current)> progress = new Progress<(int done, int total, string message, string current)>(p => { SetProgress(p.done, p.total, $"Copiando… {p.done} de {p.total}", p.current); if (!string.IsNullOrWhiteSpace(p.message)) WriteLog(p.message); });
+            var token = _cts.Token;
             await Task.Run(() =>
             {
                 foreach (var item in fileList)
                 {
+                    if (token.IsCancellationRequested) break;
                     string targetDir = Path.Combine(root, "Archivos", item.FolderName, Path.GetDirectoryName(item.Relative) ?? "");
                     string targetFile = Path.Combine(targetDir, Path.GetFileName(item.Source));
                     long sourceBytes = 0;
@@ -473,7 +517,10 @@ internal sealed class BackupForm : UserControl
                     done++; progress.Report((done, total, "", Path.GetFileName(item.Source)));
                 }
             });
-            if (_ipv4.Checked)
+
+            // Si el usuario canceló, no procesamos más trabajo pesado.
+            bool canceled = token.IsCancellationRequested;
+            if (!canceled && _ipv4.Checked)
             {
                 string networkFile = Path.Combine(root, "Red", "IPv4_netsh_dump.txt");
                 try
@@ -530,7 +577,7 @@ internal sealed class BackupForm : UserControl
                 $"Equipo: {Environment.MachineName}{Environment.NewLine}" +
                 $"Usuario: {Environment.UserName}{Environment.NewLine}" +
                 $"Errores detectados: {errorDetails.Count}{Environment.NewLine}{Environment.NewLine}" +
-                (errorDetails.Count == 0 ? "Backup sin errores detectados." : 
+                (errorDetails.Count == 0 ? "Backup sin errores detectados." :
                     "Revisar o copiar manualmente los siguientes elementos:" + Environment.NewLine +
                     "ORIGEN | DESTINO | MOTIVO" + Environment.NewLine +
                     new string('-', 90) + Environment.NewLine +
@@ -545,17 +592,34 @@ internal sealed class BackupForm : UserControl
                 $"Archivos copiados: {copied}{Environment.NewLine}" +
                 $"Archivos verificados: {verified}{Environment.NewLine}" +
                 $"Errores: {errors}{Environment.NewLine}" +
+                $"Cancelado: {(canceled ? "Sí" : "No")}{Environment.NewLine}" +
                 $"Manifiesto: MANIFIESTO_BACKUP.csv{Environment.NewLine}" +
                 $"Informe detallado: INFORME_ERRORES_BACKUP.txt{Environment.NewLine}");
 
-            SetProgress(total, total, errors == 0 ? "¡Respaldo completado!" : "Respaldo completado con algunos problemas.", "Terminado");
-            WriteLog($"Finalizado. Copiados: {copied}. Errores: {errors}.{Environment.NewLine}Ruta: {root}");
-            MessageBox.Show(this,
-                $"Respaldo terminado{Environment.NewLine}{Environment.NewLine}Copiados: {copied}{Environment.NewLine}Verificados: {verified}{Environment.NewLine}Pendientes: {errors}{Environment.NewLine}{Environment.NewLine}{(errors == 0 ? "Resultado: Correcto" : "Resultado: Revisar elementos")}{Environment.NewLine}{root}{Environment.NewLine}{Environment.NewLine}Informe: INFORME_ERRORES_BACKUP.txt",
-                "ONKOS Backup", MessageBoxButtons.OK, errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            if (canceled)
+            {
+                SetProgress(done, total, "Backup cancelado por el usuario.", "Cancelado");
+                WriteLog($"Backup cancelado. Copiados hasta el momento: {copied}. Errores: {errors}.{Environment.NewLine}Ruta: {root}");
+                MessageBox.Show(this,
+                    $"Backup cancelado por el usuario.{Environment.NewLine}{Environment.NewLine}Copiados hasta el momento: {copied}{Environment.NewLine}Verificados: {verified}{Environment.NewLine}Pendientes: {errors}{Environment.NewLine}{Environment.NewLine}{root}",
+                    "ONKOS Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            else
+            {
+                SetProgress(total, total, errors == 0 ? "¡Respaldo completado!" : "Respaldo completado con algunos problemas.", "Terminado");
+                WriteLog($"Finalizado. Copiados: {copied}. Errores: {errors}.{Environment.NewLine}Ruta: {root}");
+                MessageBox.Show(this,
+                    $"Respaldo terminado{Environment.NewLine}{Environment.NewLine}Copiados: {copied}{Environment.NewLine}Verificados: {verified}{Environment.NewLine}Pendientes: {errors}{Environment.NewLine}{Environment.NewLine}{(errors == 0 ? "Resultado: Correcto" : "Resultado: Revisar elementos")}{Environment.NewLine}{root}{Environment.NewLine}{Environment.NewLine}Informe: INFORME_ERRORES_BACKUP.txt",
+                    "ONKOS Backup", MessageBoxButtons.OK, errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            }
         }
         catch (Exception ex) { _status.Text = "El backup falló."; WriteLog("ERROR GENERAL: " + ex.Message); MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
-        finally { _busy = false; _run.Enabled = true; }
+        finally
+        {
+            _busy = false; _run.Enabled = true;
+            _cancel.Visible = false; LayoutActions();
+            _cts?.Dispose(); _cts = null;
+        }
     }
     private async Task RestoreBackupAsync()
     {
@@ -716,7 +780,7 @@ internal sealed class BackupForm : UserControl
                 {
                     try
                     {
-                        string networkOutput = await RunProcessAsync("netsh.exe", $"exec \"{networkDump}\"", false);
+                        string networkOutput = await RunNetshWithTimeoutAsync($"exec \"{networkDump}\"", 60000);
                         report.Add("=== RESTAURACIÓN IPv4 ===");
                         report.Add(networkOutput);
                         WriteLog("Comando de restauración IPv4 ejecutado.");
@@ -960,8 +1024,30 @@ internal sealed class BackupForm : UserControl
         catch { return false; }
     }
     private static string SafeName(string s) => string.Join("_", s.Split(Path.GetInvalidFileNameChars()));
+
     private static async Task<string> RunProcessAsync(string exe, string args, bool shellRedirect)
     { var psi = new ProcessStartInfo(exe, args) { UseShellExecute = shellRedirect, CreateNoWindow = true, RedirectStandardOutput = !shellRedirect, RedirectStandardError = !shellRedirect }; using var p = Process.Start(psi) ?? throw new InvalidOperationException($"No se pudo iniciar {exe}"); if (shellRedirect) { await p.WaitForExitAsync(); return $"Proceso terminado con código {p.ExitCode}"; } string stdout = await p.StandardOutput.ReadToEndAsync(); string stderr = await p.StandardError.ReadToEndAsync(); await p.WaitForExitAsync(); return stdout + Environment.NewLine + stderr + Environment.NewLine + "ExitCode=" + p.ExitCode; }
+
+    private static async Task<string> RunNetshWithTimeoutAsync(string args, int timeoutMs)
+    {
+        var psi = new ProcessStartInfo("netsh.exe", args)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        using var p = Process.Start(psi) ?? throw new InvalidOperationException("No se pudo iniciar netsh.");
+        var stdout = p.StandardOutput.ReadToEndAsync();
+        var stderr = p.StandardError.ReadToEndAsync();
+        if (!p.WaitForExit(timeoutMs))
+        {
+            try { p.Kill(true); } catch { }
+            throw new TimeoutException($"netsh tardó más de {timeoutMs / 1000} s. Operación cancelada.");
+        }
+        return await stdout + Environment.NewLine + await stderr + Environment.NewLine + "ExitCode=" + p.ExitCode;
+    }
+
     private sealed record FolderEntry(string Label, string Path, bool Custom);
     private sealed record ProfileChoice(string Name, string Path) { public override string ToString() => $"{Name}    —    {Path}"; }
     private sealed record DriveChoice(string Label, string Root, DriveType Type) { public override string ToString() => Label; }
