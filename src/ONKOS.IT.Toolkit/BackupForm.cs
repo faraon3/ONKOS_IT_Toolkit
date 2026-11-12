@@ -489,7 +489,39 @@ internal sealed class BackupForm : UserControl
 
         string customPrefix = SafeName(_backupLabel.Text.Trim());
         string folderPrefix = string.IsNullOrWhiteSpace(customPrefix) ? "" : customPrefix + "_";
-        string root = Path.Combine(dest, $"{folderPrefix}{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}");
+        string backupPattern = $"{folderPrefix}{Environment.MachineName}_*";
+        string? previousBackup = null;
+
+        // Busca respaldos anteriores del mismo equipo para permitir reanudar una copia interrumpida.
+        try
+        {
+            previousBackup = Directory.GetDirectories(dest, backupPattern, SearchOption.TopDirectoryOnly)
+                .Where(path => File.Exists(Path.Combine(path, ".onkos-state.json"))
+                    && Directory.Exists(Path.Combine(path, "Archivos")))
+                .OrderByDescending(Directory.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+        }
+        catch (Exception ex)
+        {
+            WriteLog("No se pudieron revisar respaldos anteriores: " + ex.Message);
+        }
+
+        string root;
+        if (!string.IsNullOrWhiteSpace(previousBackup))
+        {
+            var choice = MessageBox.Show(this,
+                $"Se encontró un respaldo anterior de este equipo:\n\n{previousBackup}\n\n¿Deseas continuar ese respaldo?\n\nSí = reanudar el respaldo anterior\nNo = crear un respaldo nuevo\nCancelar = no iniciar",
+                "ONKOS — Reanudar respaldo", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+            if (choice == DialogResult.Cancel) return;
+            root = choice == DialogResult.Yes
+                ? previousBackup!
+                : Path.Combine(dest, $"{folderPrefix}{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}");
+        }
+        else
+        {
+            root = Path.Combine(dest, $"{folderPrefix}{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}");
+        }
+
         _busy = true; _run.Enabled = false; _log.Clear(); SetProgress(0, 0, "Preparando respaldo…", "Revisando lo seleccionado");
         _cts = new CancellationTokenSource();
         _cancel.Visible = true; LayoutActions();
