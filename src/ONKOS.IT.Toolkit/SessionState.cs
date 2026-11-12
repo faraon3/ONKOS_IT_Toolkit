@@ -12,7 +12,6 @@ internal sealed class SessionState
     public string? Destination { get; set; }
     public string? BackupLabel { get; set; }
     public bool SaveIpv4 { get; set; } = true;
-    public bool SaveDrivers { get; set; } = true;
 
     private static string FilePath => Path.Combine(AppContext.BaseDirectory, "Data", "Config", "last-session.json");
 
