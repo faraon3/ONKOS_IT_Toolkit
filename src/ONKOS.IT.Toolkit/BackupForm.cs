@@ -195,7 +195,7 @@ internal sealed class BackupForm : UserControl
         AddKnown("OneDrive", null, false, "One Drive", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "OneDrive"));
         AddKnown("Vínculos", null, false, "Vinculos", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Links"));
         AddKnown("Objetos 3D", null, false, "Objeto-3d", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "3D Objects"));
-        AddKnown("Biblioteca ONKOS (drivers + programas)", null, false, "ONKOS", Path.Combine(AppContext.BaseDirectory, "Data"));
+        AddKnown("Biblioteca ONKOS (drivers + programas)", null, false, "ONKOS", Path.Combine(AppPaths.DataRoot, "Data"));
     }
 
     private void ApplyLastSession()
@@ -715,7 +715,7 @@ internal sealed class BackupForm : UserControl
     {
         try
         {
-            string reportsDir = Path.Combine(AppContext.BaseDirectory, "Data", "Reports");
+            string reportsDir = AppPaths.ReportsDir;
             if (!Directory.Exists(reportsDir)) return;
             var latest = Directory.GetFiles(reportsDir, "Inventario_*.csv")
                 .OrderByDescending(File.GetLastWriteTimeUtc)
@@ -730,7 +730,7 @@ internal sealed class BackupForm : UserControl
         }
         catch (Exception ex)
         {
-            errorDetails.Add($"ORIGEN: {Path.Combine(AppContext.BaseDirectory, "Data", "Reports")} | DESTINO: Archivos/Inventario_ONKOS/ | MOTIVO: No se pudo adjuntar el inventario: {ex.Message}");
+            errorDetails.Add($"ORIGEN: {AppPaths.ReportsDir} | DESTINO: Archivos/Inventario_ONKOS/ | MOTIVO: No se pudo adjuntar el inventario: {ex.Message}");
         }
     }
 
