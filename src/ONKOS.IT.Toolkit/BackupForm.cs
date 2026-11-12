@@ -22,7 +22,6 @@ internal sealed class BackupForm : UserControl
     private readonly TextBox _destination = new();
     private readonly TextBox _backupLabel = new();
     private readonly PurpleCheckBox _ipv4 = new() { Text = "Guardar configuración de red", Checked = true, AutoSize = false };
-    private readonly PurpleCheckBox _drivers = new() { Text = "Exportar drivers instalados", Checked = true, AutoSize = false };
     private readonly ModernProgressBar _bar = new();
     private readonly Label _status = new();
     private readonly Label _currentFile = new();
@@ -113,13 +112,11 @@ internal sealed class BackupForm : UserControl
         var options = new Panel { Location = new Point(8, 42), Height = 94, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, BackColor = Surface };
         StyleCheck(_ipv4);
         _ipv4.SetBounds(8, 4, 270, 32);
-        StyleCheck(_drivers);
-        _drivers.SetBounds(290, 4, 270, 32);
         var nameLabel = new Label { Text = "Nombre de la copia (opcional)", ForeColor = TextMain, Font = new Font("Segoe UI", 9F, FontStyle.Bold), AutoSize = true, Location = new Point(8, 43) };
         _backupLabel.SetBounds(8, 65, 850, 30); _backupLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         _backupLabel.PlaceholderText = "Ejemplo: Recepcion_Principal";
         StyleTextBox(_backupLabel);
-        options.Controls.Add(_ipv4); options.Controls.Add(_drivers); options.Controls.Add(nameLabel); options.Controls.Add(_backupLabel);
+        options.Controls.Add(_ipv4); options.Controls.Add(nameLabel); options.Controls.Add(_backupLabel);
         options.Visible = false;
         optionsToggle.Click += (_, _) =>
         {
@@ -227,7 +224,6 @@ internal sealed class BackupForm : UserControl
             if (!string.IsNullOrWhiteSpace(s.Destination)) _destination.Text = s.Destination;
             if (!string.IsNullOrWhiteSpace(s.BackupLabel)) _backupLabel.Text = s.BackupLabel;
             _ipv4.Checked = s.SaveIpv4;
-            _drivers.Checked = s.SaveDrivers;
             if (s.SelectedPaths.Count > 0)
                 WriteLog($"Última sesión cargada: {s.SelectedPaths.Count} carpeta(s), destino {s.Destination}");
         }
@@ -242,7 +238,6 @@ internal sealed class BackupForm : UserControl
             Destination = dest,
             BackupLabel = _backupLabel.Text.Trim(),
             SaveIpv4 = _ipv4.Checked,
-            SaveDrivers = _drivers.Checked
         }.Save();
     }
 
@@ -520,7 +515,7 @@ internal sealed class BackupForm : UserControl
                 !string.Equals(entry.Path, other.Path, StringComparison.OrdinalIgnoreCase) &&
                 IsPathInside(entry.Path, other.Path)))
             .ToList();
-        if (selected.Count == 0 && !_ipv4.Checked && !_drivers.Checked) { MessageBox.Show(this, "Selecciona carpetas o alguna opción adicional (red o drivers).", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        if (selected.Count == 0 && !_ipv4.Checked) { MessageBox.Show(this, "Selecciona carpetas o activa la opción de guardar configuración de red.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         string dest = _destination.Text.Trim();
         if (string.IsNullOrWhiteSpace(dest) || !Directory.Exists(dest)) { MessageBox.Show(this, "Selecciona primero el destino del respaldo.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         foreach (var f in selected)
@@ -627,7 +622,7 @@ internal sealed class BackupForm : UserControl
                 catch (Exception ex) { errors++; ReportError(errorDetails, dir.Source, targetDir, "No se pudo crear la carpeta en el respaldo: " + ex.Message); }
             }
 
-            int total = Math.Max(fileList.Count + (_ipv4.Checked ? 1 : 0) + (_drivers.Checked ? 1 : 0), 1);
+            int total = Math.Max(fileList.Count + (_ipv4.Checked ? 1 : 0), 1);
             int done = 0, copied = 0, verified = 0;
             var manifestRows = new List<string> { CsvRow("Estado", "Verificación", "Origen", "Destino", "Bytes", "Fecha", "Detalle") };
             IProgress<(int done, int total, string message, string current)> progress = new Progress<(int done, int total, string message, string current)>(p => { SetProgress(p.done, p.total, $"Copiando… {p.done} de {p.total}", p.current); if (!string.IsNullOrWhiteSpace(p.message)) WriteLog(p.message); });
@@ -740,38 +735,8 @@ internal sealed class BackupForm : UserControl
                 catch (Exception ex) { errors++; ReportError(errorDetails, "Configuración IPv4", networkFile, ex.Message); }
                 finally { done++; progress.Report((done, total, "Configuración de red procesada.", "Configuración IPv4")); }
             }
-            if (!canceled && _drivers.Checked)
-            {
-                string driversDir = Path.Combine(root, "Drivers");
-                try
-                {
-                    progress.Report((done, total, "Exportando controladores de terceros…", "Drivers instalados"));
-                    Directory.CreateDirectory(driversDir);
-                    string driverOutput = await RunPnPUtilWithTimeoutAsync($"/export-driver * \"{driversDir}\"", 180000);
-                    int infCount = Directory.GetFiles(driversDir, "*.inf", SearchOption.AllDirectories).Length;
-                    if (infCount == 0)
-                        throw new IOException("PnPUtil terminó sin error, pero no se encontraron archivos .inf exportados. Revisa si Windows permite exportar los controladores en este equipo.");
-                    File.WriteAllText(Path.Combine(driversDir, "EXPORTACION_DRIVERS.txt"),
-                        $"Exportación de controladores de terceros con PnPUtil{Environment.NewLine}" +
-                        $"Equipo: {Environment.MachineName}{Environment.NewLine}" +
-                        $"Fecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss}{Environment.NewLine}" +
-                        $"Archivos INF encontrados: {infCount}{Environment.NewLine}{Environment.NewLine}" +
-                        driverOutput, Encoding.UTF8);
-                    WriteLog($"Drivers exportados: {infCount} archivos INF.");
-                }
-                catch (Exception ex)
-                {
-                    errors++;
-                    ReportError(errorDetails, "Controladores instalados", driversDir, ex.Message);
-                }
-                finally
-                {
-                    done++;
-                    progress.Report((done, total, "Exportación de drivers procesada.", "Drivers instalados"));
-                }
-            }
 
-            File.WriteAllText(Path.Combine(root, "MANIFIESTO_BACKUP.csv"), string.Join(Environment.NewLine, manifestRows), Encoding.UTF8);
+            File.WriteAllText(Path.Combine(root, "MANIFIESTO_BACKUP.csv", string.Join(Environment.NewLine, manifestRows), Encoding.UTF8);
 
             string errorReportPath = Path.Combine(root, "INFORME_ERRORES_BACKUP.txt");
             File.WriteAllText(errorReportPath,
@@ -1116,41 +1081,6 @@ internal sealed class BackupForm : UserControl
                 else report.Add("Configuración de red: no aplicada por decisión del técnico.");
             }
 
-            string driversDirToRestore = Path.Combine(backupRoot, "Drivers");
-            if (Directory.Exists(driversDirToRestore))
-            {
-                string[] driverInfFiles = Directory.GetFiles(driversDirToRestore, "*.inf", SearchOption.AllDirectories);
-                if (driverInfFiles.Length > 0)
-                {
-                    var driverChoice = MessageBox.Show(this,
-                        $"El respaldo contiene {driverInfFiles.Length:N0} archivo(s) INF de controladores.\n\n" +
-                        "ONKOS los agregará al almacén de controladores de Windows mediante PnPUtil. " +
-                        "Esta operación NO fuerza la instalación ni reemplaza automáticamente el controlador activo.\n\n" +
-                        "¿Deseas agregar estos controladores al almacén de Windows?",
-                        "Recuperar drivers", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                    if (driverChoice == DialogResult.Yes)
-                    {
-                        try
-                        {
-                            string driverRestoreOutput = await RunPnPUtilWithTimeoutAsync($"/add-driver \"{Path.Combine(driversDirToRestore, "*.inf")}\" /subdirs", 180000);
-                            report.Add("=== IMPORTACIÓN DE DRIVERS AL ALMACÉN DE WINDOWS (SIN INSTALACIÓN FORZADA) ===");
-                            report.Add(driverRestoreOutput);
-                            WriteLog($"PnPUtil procesó los drivers del respaldo ({driverInfFiles.Length} INF).");
-                            ActivityLog.Write("RESTORE", "Drivers agregados al almacén", "OK", $"INF: {driverInfFiles.Length}");
-                        }
-                        catch (Exception ex)
-                        {
-                            errors++;
-                            report.Add("ERROR IMPORTANDO DRIVERS: " + ex.Message);
-                            WriteLog("ERROR IMPORTANDO DRIVERS: " + ex.Message);
-                            ActivityLog.Write("RESTORE", "Importación de drivers falló", "ERROR", ex.Message);
-                        }
-                    }
-                    else report.Add("Drivers: no agregados al almacén por decisión del técnico.");
-                }
-                else report.Add("Drivers: se encontró la carpeta, pero no contiene archivos INF.");
-            }
-
             string reportPath = Path.Combine(backupRoot, "INFORME_RESTAURACION.txt");
             File.WriteAllText(reportPath, string.Join(Environment.NewLine, report), Encoding.UTF8);
             SetProgress(files.Count, files.Count, errors == 0 ? "¡Restauración finalizada!" : "Restauración finalizada con errores.", "Terminado");
@@ -1366,32 +1296,6 @@ internal sealed class BackupForm : UserControl
         catch { return false; }
     }
     private static string SafeName(string s) => string.Join("_", s.Split(Path.GetInvalidFileNameChars()));
-
-    private static async Task<string> RunPnPUtilWithTimeoutAsync(string args, int timeoutMs)
-    {
-        var psi = new ProcessStartInfo("pnputil.exe", args)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true
-        };
-        using var process = Process.Start(psi) ?? throw new InvalidOperationException("No se pudo iniciar pnputil.exe.");
-        var stdoutTask = process.StandardOutput.ReadToEndAsync();
-        var stderrTask = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(timeoutMs))
-        {
-            try { process.Kill(true); } catch { }
-            throw new TimeoutException($"PnPUtil tardó más de {timeoutMs / 1000} segundos. Operación cancelada.");
-        }
-
-        string stdout = await stdoutTask;
-        string stderr = await stderrTask;
-        if (process.ExitCode != 0)
-            throw new InvalidOperationException($"PnPUtil terminó con código {process.ExitCode}.\n{stderr}\n{stdout}".Trim());
-
-        return stdout + (string.IsNullOrWhiteSpace(stderr) ? "" : Environment.NewLine + stderr);
-    }
 
     private static async Task<string> RunNetshWithTimeoutAsync(string args, int timeoutMs)
     {
