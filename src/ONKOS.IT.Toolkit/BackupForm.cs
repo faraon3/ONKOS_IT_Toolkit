@@ -30,6 +30,7 @@ internal sealed class BackupForm : UserControl
     private readonly Button _run = new();
     private readonly Button _restore = new();
     private readonly Button _addFolder = new();
+    private readonly Button _selectAllFolders = new();
     private readonly Button _cancel = new() { Text = "CANCELAR", Visible = false };
     private readonly Panel _actionBar = new() { Dock = DockStyle.Bottom, Height = 54, BackColor = Color.FromArgb(18, 16, 25), Padding = new Padding(3, 2, 3, 2) };
     private readonly Dictionary<string, long> _sizeCache = new(StringComparer.OrdinalIgnoreCase);
@@ -78,7 +79,18 @@ internal sealed class BackupForm : UserControl
         string otherUserIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "OtroUsuario.png");
         if (File.Exists(otherUserIcon)) { using var icon = Image.FromFile(otherUserIcon); addUser.Image = new Bitmap(icon, new Size(20, 20)); }
         addUser.Click += (_, _) => AddOtherUserFolders();
-        sourceButtons.Controls.Add(_addFolder); sourceButtons.Controls.Add(addUser); sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons);
+        sourceButtons.Controls.Add(_addFolder); sourceButtons.Controls.Add(addUser);
+        var selectionBar = new Panel { Dock = DockStyle.Top, Height = 36, BackColor = Surface, Padding = new Padding(0, 2, 8, 2) };
+        _selectAllFolders.Text = "Seleccionar todo";
+        _selectAllFolders.Size = new Size(150, 29);
+        _selectAllFolders.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        _selectAllFolders.Location = new Point(Math.Max(8, sourcesGroup.ClientSize.Width - 166), 3);
+        StyleButton(_selectAllFolders, true);
+        _selectAllFolders.Click += (_, _) => SetAllFoldersSelected(_sources.Items.Cast<ListViewItem>().Any(item => !item.Checked));
+        selectionBar.Controls.Add(_selectAllFolders);
+        selectionBar.Resize += (_, _) => _selectAllFolders.Left = Math.Max(8, selectionBar.ClientSize.Width - _selectAllFolders.Width - 8);
+        sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons); sourcesGroup.Controls.Add(selectionBar);
+        UpdateSelectAllButtonText();
 
         var destinationGroup = MakeGroup("03  ·  Elige dónde guardar el respaldo");
         destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 118;
@@ -240,6 +252,29 @@ internal sealed class BackupForm : UserControl
         _sources.Invalidate(item.Bounds);
         if (item.Checked && item.Tag is FolderEntry fe)
             _ = UpdateFolderSizeAsync(item, fe);
+        UpdateSelectAllButtonText();
+    }
+
+    private void SetAllFoldersSelected(bool selected)
+    {
+        foreach (ListViewItem item in _sources.Items)
+        {
+            item.Checked = selected;
+            if (selected && item.Tag is FolderEntry folder)
+                _ = UpdateFolderSizeAsync(item, folder);
+        }
+        _sources.Invalidate();
+        UpdateSelectAllButtonText();
+        WriteLog(selected
+            ? $"Se seleccionaron todas las carpetas disponibles ({_sources.Items.Count})."
+            : "Se desmarcaron todas las carpetas.");
+    }
+
+    private void UpdateSelectAllButtonText()
+    {
+        if (_selectAllFolders.IsDisposed) return;
+        bool allSelected = _sources.Items.Count > 0 && _sources.Items.Cast<ListViewItem>().All(item => item.Checked);
+        _selectAllFolders.Text = allSelected ? "Deseleccionar todo" : "Seleccionar todo";
     }
 
     private async Task UpdateFolderSizeAsync(ListViewItem item, FolderEntry entry)
@@ -303,6 +338,7 @@ internal sealed class BackupForm : UserControl
         var item = new ListViewItem(label, icon) { Checked = selected, Tag = new FolderEntry(label, path, !string.IsNullOrWhiteSpace(iconKey)) };
         item.SubItems.Add(path); _sources.Items.Add(item);
         if (selected) _ = UpdateFolderSizeAsync(item, (FolderEntry)item.Tag!);
+        UpdateSelectAllButtonText();
     }
     private int GetIconIndex(string key, string path)
     {
