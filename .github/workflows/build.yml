@@ -32,18 +32,8 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path "publish/win-x64/*" -DestinationPath "ONKOS-IT-Toolkit-win-x64.zip" -CompressionLevel Optimal
 
-      # Permite descargar el ZIP directamente desde la ejecución de Actions.
-      - name: Guardar ZIP como artefacto de Actions
-        uses: actions/upload-artifact@v4
-        with:
-          name: ONKOS-IT-Toolkit-win-x64
-          path: ONKOS-IT-Toolkit-win-x64.zip
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 14
-
-      # Usa GitHub CLI en lugar de softprops/action-gh-release para evitar
-      # la advertencia de compatibilidad Node.js 20 de esa acción.
+      # Publica el ZIP directamente en GitHub Releases, sin consumir
+      # la cuota de almacenamiento de artefactos de Actions.
       - name: Publicar en GitHub Releases
         shell: pwsh
         env:
