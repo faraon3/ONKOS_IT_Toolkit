@@ -1125,13 +1125,13 @@ $log = New-Object System.Collections.Generic.List[string]
 foreach ($item in $items) {
     $alias = [string]$item.InterfaceAlias
     $adapter = Get-NetAdapter -Name $alias -ErrorAction SilentlyContinue
-    if (-not $adapter) { $log.Add(\"OMITIDO: no existe adaptador con nombre exacto '$alias'.\"); continue }
+    if (-not $adapter) { $log.Add(""OMITIDO: no existe adaptador con nombre exacto '$alias'.""); continue }
     $index = [int]$adapter.ifIndex
     try {
         if ([string]$item.Dhcp -eq 'Enabled') {
             Set-NetIPInterface -InterfaceIndex $index -AddressFamily IPv4 -Dhcp Enabled -ErrorAction Stop
             Set-DnsClientServerAddress -InterfaceIndex $index -ResetServerAddresses -ErrorAction Stop
-            $log.Add(\"OK: '$alias' configurado para DHCP.\")
+            $log.Add(""OK: '$alias' configurado para DHCP."")
             continue
         }
         Set-NetIPInterface -InterfaceIndex $index -AddressFamily IPv4 -Dhcp Disabled -ErrorAction Stop
@@ -1149,9 +1149,9 @@ foreach ($item in $items) {
         }
         $dns = @($item.DnsServers | Where-Object { $_ })
         if ($dns.Count -gt 0) { Set-DnsClientServerAddress -InterfaceIndex $index -ServerAddresses $dns -ErrorAction Stop }
-        else { $log.Add(\"AVISO: '$alias' no tenía DNS guardados; no se modificó DNS.\") }
-        $log.Add(\"OK: '$alias' restaurado. IPs=$($addresses.Count); Gateway=$($gateways -join ', '); DNS=$($dns -join ', ')\")
-    } catch { $log.Add(\"ERROR: '$alias' - $($_.Exception.Message)\") }
+        else { $log.Add(""AVISO: '$alias' no tenía DNS guardados; no se modificó DNS."") }
+        $log.Add(""OK: '$alias' restaurado. IPs=$($addresses.Count); Gateway=$($gateways -join ', '); DNS=$($dns -join ', ')"")
+    } catch { $log.Add(""ERROR: '$alias' - $($_.Exception.Message)"") }
 }
 $log | Set-Content -LiteralPath $env:ONKOS_IPV4_REPORT -Encoding UTF8
 ";
