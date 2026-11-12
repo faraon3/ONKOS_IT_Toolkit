@@ -736,7 +736,7 @@ internal sealed class BackupForm : UserControl
                 finally { done++; progress.Report((done, total, "Configuración de red procesada.", "Configuración IPv4")); }
             }
 
-            File.WriteAllText(Path.Combine(root, "MANIFIESTO_BACKUP.csv", string.Join(Environment.NewLine, manifestRows), Encoding.UTF8);
+            File.WriteAllText(Path.Combine(root, "MANIFIESTO_BACKUP.csv"), string.Join(Environment.NewLine, manifestRows), Encoding.UTF8);
 
             string errorReportPath = Path.Combine(root, "INFORME_ERRORES_BACKUP.txt");
             File.WriteAllText(errorReportPath,
