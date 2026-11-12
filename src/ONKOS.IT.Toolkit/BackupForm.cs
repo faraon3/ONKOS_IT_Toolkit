@@ -605,14 +605,26 @@ internal sealed class BackupForm : UserControl
                     {
                         var sInfo = new FileInfo(item.Source);
                         sourceBytes = sInfo.Length;
-                        if (state.Files.TryGetValue(item.Source, out var prev) && prev.Size == sourceBytes && File.Exists(targetFile))
+                        if (state.Files.TryGetValue(item.Source, out var prev)
+                            && prev.Size == sourceBytes
+                            && !string.IsNullOrWhiteSpace(prev.Hash)
+                            && File.Exists(targetFile))
                         {
-                            copyStatus = "YA COPIADO";
-                            verifyStatus = "Reanudado (sin cambios)";
-                            alreadyDone++;
-                            manifestRows.Add(CsvRow(copyStatus, verifyStatus, item.Source, targetFile, sourceBytes.ToString(), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), "Omitido por reanudación"));
-                            done++; progress.Report((done, total, "", Path.GetFileName(item.Source)));
-                            continue;
+                            string sourceHash = BackupState.ComputeHash(item.Source);
+                            string targetHash = BackupState.ComputeHash(targetFile);
+                            if (!string.IsNullOrWhiteSpace(sourceHash)
+                                && !string.IsNullOrWhiteSpace(targetHash)
+                                && string.Equals(sourceHash, prev.Hash, StringComparison.OrdinalIgnoreCase)
+                                && string.Equals(targetHash, prev.Hash, StringComparison.OrdinalIgnoreCase))
+                            {
+                                copyStatus = "YA COPIADO";
+                                verifyStatus = "Reanudado (SHA-256 correcto)";
+                                alreadyDone++;
+                                manifestRows.Add(CsvRow(copyStatus, verifyStatus, item.Source, targetFile, sourceBytes.ToString(), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), "Omitido: origen y destino coinciden con el hash registrado"));
+                                done++; progress.Report((done, total, "", Path.GetFileName(item.Source)));
+                                continue;
+                            }
+                            WriteLog($"Revalidación: se volverá a copiar porque cambió el origen o el respaldo no coincide: {item.Source}");
                         }
                     }
                     catch { }
@@ -621,6 +633,9 @@ internal sealed class BackupForm : UserControl
                     {
                         var sourceInfo = new FileInfo(item.Source);
                         sourceBytes = sourceInfo.Length;
+                        string sourceHashAfterCopyCheck = BackupState.ComputeHash(item.Source);
+                        if (string.IsNullOrWhiteSpace(sourceHashAfterCopyCheck))
+                            throw new IOException("No se pudo calcular SHA-256 del archivo de origen.");
                         Directory.CreateDirectory(targetDir);
                         File.Copy(item.Source, targetFile, true);
                         copied++;
@@ -629,6 +644,10 @@ internal sealed class BackupForm : UserControl
                         if (targetInfo.Length != sourceInfo.Length)
                             throw new IOException($"Tamaño diferente: origen {sourceInfo.Length} bytes, copia {targetInfo.Length} bytes.");
                         string hash = BackupState.ComputeHash(targetFile);
+                        if (string.IsNullOrWhiteSpace(hash))
+                            throw new IOException("No se pudo calcular SHA-256 del archivo copiado.");
+                        if (!string.Equals(sourceHashAfterCopyCheck, hash, StringComparison.OrdinalIgnoreCase))
+                            throw new IOException("La verificación SHA-256 falló: el origen y la copia no coinciden.");
                         state.Files[item.Source] = new FileState { Size = targetInfo.Length, Hash = hash, CopiedAt = DateTime.Now };
                         copyStatus = "COPIADO";
                         verifyStatus = "Verificado (tamaño + SHA-256)";
