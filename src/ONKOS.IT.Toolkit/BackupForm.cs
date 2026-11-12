@@ -862,7 +862,9 @@ internal sealed class BackupForm : UserControl
                 string backupFile = idx >= 0
                     ? Path.Combine(backupRoot, "Archivos", manifestDestination.Substring(idx + marker.Length))
                     : manifestDestination;
-                return (BackupFile: backupFile, OriginalFile: r[2]);
+                long expectedBytes = 0;
+                long.TryParse(r.Length > 4 ? r[4] : null, out expectedBytes);
+                return (BackupFile: backupFile, OriginalFile: r[2], ExpectedBytes: expectedBytes);
             })
             .Where(x => !string.IsNullOrWhiteSpace(x.BackupFile) && !string.IsNullOrWhiteSpace(x.OriginalFile))
             .ToList();
@@ -872,6 +874,8 @@ internal sealed class BackupForm : UserControl
             MessageBox.Show(this, "El manifiesto no contiene archivos respaldados correctamente.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
+
+        var backupState = BackupState.Load(backupRoot);
 
         var oldProfiles = files.Select(x => GetWindowsProfileRoot(x.OriginalFile))
             .OfType<string>()
@@ -951,6 +955,17 @@ internal sealed class BackupForm : UserControl
                     try
                     {
                         if (!File.Exists(source)) throw new FileNotFoundException("No se encuentra el archivo dentro del respaldo.", source);
+                        var backupInfo = new FileInfo(source);
+                        if (item.ExpectedBytes > 0 && backupInfo.Length != item.ExpectedBytes)
+                            throw new IOException($"El archivo del respaldo tiene tamaño incorrecto. Esperado: {item.ExpectedBytes}; encontrado: {backupInfo.Length}.");
+                        if (backupState.Files.TryGetValue(item.OriginalFile, out var savedState)
+                            && !string.IsNullOrWhiteSpace(savedState.Hash))
+                        {
+                            string actualHash = BackupState.ComputeHash(source);
+                            if (string.IsNullOrWhiteSpace(actualHash)
+                                || !string.Equals(actualHash, savedState.Hash, StringComparison.OrdinalIgnoreCase))
+                                throw new IOException("El archivo del respaldo no superó la verificación SHA-256. No se restauró para evitar copiar información dañada.");
+                        }
                         if (File.Exists(target) && !overwrite)
                         {
                             skipped++;
@@ -961,7 +976,7 @@ internal sealed class BackupForm : UserControl
                             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                             File.Copy(source, target, overwrite);
                             restored++;
-                            report.Add($"RESTAURADO: {target}");
+                            report.Add($"RESTAURADO Y VALIDADO: {target}");
                         }
                     }
                     catch (Exception ex)
