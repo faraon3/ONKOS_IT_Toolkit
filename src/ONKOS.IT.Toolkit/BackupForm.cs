@@ -713,24 +713,73 @@ internal sealed class BackupForm : UserControl
                 {
                     progress.Report((done, total, "Exportando configuración de red…", "Configuración IPv4"));
                     Directory.CreateDirectory(Path.GetDirectoryName(networkFile)!);
-                    using var netsh = new Process();
-                    netsh.StartInfo = new ProcessStartInfo { FileName = "netsh.exe", Arguments = "interface dump", UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
-                    netsh.Start();
-                    Task<string> stdoutTask = netsh.StandardOutput.ReadToEndAsync();
-                    Task<string> stderrTask = netsh.StandardError.ReadToEndAsync();
-                    if (!netsh.WaitForExit(30000))
+                    string netshOutput = await RunNetshWithTimeoutAsync("interface dump", 30000);
+                    File.WriteAllText(networkFile, netshOutput, Encoding.UTF8);
+
+                    string structuredFile = Path.Combine(root, "Red", "IPv4_config.json");
+                    string captureScript = @"
+$ErrorActionPreference = 'Stop'
+$result = @()
+$configs = Get-NetIPConfiguration -ErrorAction Stop
+foreach ($cfg in $configs) {
+    $ipif = Get-NetIPInterface -InterfaceIndex $cfg.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
+    if (-not $ipif) { continue }
+    $addresses = @($cfg.IPv4Address | Where-Object { $_.IPAddress -and $_.IPAddress -notlike '127.*' } | ForEach-Object {
+        [pscustomobject]@{ Address = $_.IPAddress; PrefixLength = [int]$_.PrefixLength }
+    })
+    $gateways = @($cfg.IPv4DefaultGateway | ForEach-Object { $_.NextHop } | Where-Object { $_ })
+    $dnsEntry = Get-DnsClientServerAddress -InterfaceIndex $cfg.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
+    $dns = @($dnsEntry.ServerAddresses | Where-Object { $_ })
+    if ($addresses.Count -gt 0 -or $gateways.Count -gt 0 -or $dns.Count -gt 0) {
+        $result += [pscustomobject]@{
+            InterfaceAlias = [string]$cfg.InterfaceAlias
+            InterfaceIndex = [int]$cfg.InterfaceIndex
+            Dhcp = [string]$ipif.Dhcp
+            Addresses = $addresses
+            Gateways = $gateways
+            DnsServers = $dns
+        }
+    }
+}
+ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:ONKOS_IPV4_OUTPUT -Encoding UTF8
+";
+                    string captureScriptPath = Path.Combine(Path.GetTempPath(), "ONKOS_Capturar_IPV4.ps1");
+                    Directory.CreateDirectory(Path.GetDirectoryName(structuredFile)!);
+                    File.WriteAllText(captureScriptPath, captureScript, new UTF8Encoding(true));
+                    try
                     {
-                        try { netsh.Kill(true); } catch { }
-                        throw new TimeoutException("netsh tardó más de 30 segundos. Se omitió la exportación de red para continuar.");
+                        var captureStart = new ProcessStartInfo("powershell.exe", $"-NoProfile -ExecutionPolicy Bypass -File \"{captureScriptPath}\"")
+                        {
+                            UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true
+                        };
+                        captureStart.Environment["ONKOS_IPV4_OUTPUT"] = structuredFile;
+                        using var captureProcess = Process.Start(captureStart) ?? throw new InvalidOperationException("No se pudo iniciar PowerShell para capturar IPv4.");
+                        Task<string> captureOut = captureProcess.StandardOutput.ReadToEndAsync();
+                        Task<string> captureErr = captureProcess.StandardError.ReadToEndAsync();
+                        if (!captureProcess.WaitForExit(30000))
+                        {
+                            try { captureProcess.Kill(true); } catch { }
+                            throw new TimeoutException("La captura estructurada de IPv4 superó 30 segundos.");
+                        }
+                        string captureError = await captureErr;
+                        _ = await captureOut;
+                        if (captureProcess.ExitCode != 0 || !File.Exists(structuredFile))
+                            throw new IOException("No se pudo generar IPv4_config.json. " + captureError);
+                        string jsonCheck = File.ReadAllText(structuredFile, Encoding.UTF8).TrimStart('\uFEFF', ' ', '\r', '\n');
+                        using var jsonDocument = System.Text.Json.JsonDocument.Parse(jsonCheck);
+                        int adapterCount = jsonDocument.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array
+                            ? jsonDocument.RootElement.GetArrayLength() : 0;
+                        if (adapterCount == 0) throw new IOException("No se detectaron adaptadores con configuración IPv4 para respaldar.");
+                        File.WriteAllText(Path.Combine(root, "Red", "LEEME.txt"),
+                            "Respaldo de red: IPv4_netsh_dump.txt (referencia) e IPv4_config.json (IP, prefijo/máscara, puerta de enlace, DHCP y DNS por adaptador). " +
+                            "La restauración estructurada solo aplicará configuraciones a adaptadores cuyo nombre coincida exactamente; revise el mapeo antes de confirmar." +
+                            Environment.NewLine + $"Adaptadores capturados: {adapterCount}", Encoding.UTF8);
+                        WriteLog($"Configuración IPv4 estructurada exportada. Adaptadores detectados: {adapterCount}.");
                     }
-                    string stdout = await stdoutTask;
-                    string stderr = await stderrTask;
-                    File.WriteAllText(networkFile, stdout, Encoding.UTF8);
-                    File.WriteAllText(Path.Combine(root, "Red", "LEEME.txt"),
-                        "Configuración exportada con netsh. No restaurar directamente sin revisar adaptador, IP y permisos administrativos." +
-                        Environment.NewLine + (string.IsNullOrWhiteSpace(stderr) ? "" : "Salida de error: " + stderr));
-                    if (netsh.ExitCode != 0) throw new IOException($"netsh finalizó con código {netsh.ExitCode}. {stderr}");
-                    WriteLog("Configuración IPv4 exportada.");
+                    finally
+                    {
+                        try { if (File.Exists(captureScriptPath)) File.Delete(captureScriptPath); } catch { }
+                    }
                 }
                 catch (Exception ex) { errors++; ReportError(errorDetails, "Configuración IPv4", networkFile, ex.Message); }
                 finally { done++; progress.Report((done, total, "Configuración de red procesada.", "Configuración IPv4")); }
@@ -1030,55 +1079,124 @@ internal sealed class BackupForm : UserControl
                 }
             });
 
-            string networkDump = Path.Combine(backupRoot, "Red", "IPv4_netsh_dump.txt");
-            if (File.Exists(networkDump))
+            string structuredNetworkFile = Path.Combine(backupRoot, "Red", "IPv4_config.json");
+            string legacyNetworkDump = Path.Combine(backupRoot, "Red", "IPv4_netsh_dump.txt");
+            if (File.Exists(structuredNetworkFile))
             {
                 var networkChoice = MessageBox.Show(this,
-                    "El respaldo contiene una exportación de configuración de red (netsh).\n\n" +
-                    "La restauración puede cambiar direcciones IP, gateway, DNS y otros parámetros de interfaces. " +
-                    "La configuración fue tomada de otro equipo y puede no coincidir con los adaptadores de este computador.\n\n" +
-                    "Primero se guardará una copia de la configuración de red ACTUAL. Después tendrás que confirmar nuevamente.\n\n" +
-                    "¿Deseas continuar con la revisión?",
-                    "Revisión previa de red", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                    "El respaldo contiene configuración IPv4 estructurada por adaptador, incluyendo IP, máscara/prefijo, puerta de enlace, DHCP y DNS cuando estaban configurados.\n\n" +
+                    "ONKOS identificará los adaptadores por nombre exacto. Si un nombre no coincide, ese adaptador se omitirá; no se asignará la configuración a otro adaptador automáticamente.\n\n" +
+                    "¿Deseas revisar la configuración antes de restaurarla?",
+                    "Revisión de configuración IPv4", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                 if (networkChoice == DialogResult.Yes)
                 {
                     try
                     {
                         string currentNetworkDump = await RunNetshWithTimeoutAsync("interface dump", 30000);
                         string currentNetworkFile = Path.Combine(backupRoot, "Red", "IPv4_antes_de_restaurar.txt");
-                        Directory.CreateDirectory(Path.GetDirectoryName(currentNetworkFile)!);
                         File.WriteAllText(currentNetworkFile, currentNetworkDump, Encoding.UTF8);
-                        report.Add("Configuración de red actual guardada en: " + currentNetworkFile);
+                        report.Add("Configuración actual guardada en: " + currentNetworkFile);
 
+                        string json = File.ReadAllText(structuredNetworkFile, Encoding.UTF8).TrimStart('\uFEFF');
+                        using var doc = System.Text.Json.JsonDocument.Parse(json);
+                        var preview = new StringBuilder("Adaptadores incluidos en el respaldo:\r\n\r\n");
+                        foreach (var adapter in doc.RootElement.EnumerateArray())
+                        {
+                            string alias = adapter.TryGetProperty("InterfaceAlias", out var a) ? a.GetString() ?? "(sin nombre)" : "(sin nombre)";
+                            preview.AppendLine("• " + alias);
+                            if (adapter.TryGetProperty("Addresses", out var addresses) && addresses.ValueKind == System.Text.Json.JsonValueKind.Array)
+                                foreach (var address in addresses.EnumerateArray())
+                                    preview.AppendLine("   IP: " + address.GetProperty("Address").GetString() + "/" + address.GetProperty("PrefixLength").GetInt32());
+                            if (adapter.TryGetProperty("Gateways", out var gateways) && gateways.ValueKind == System.Text.Json.JsonValueKind.Array)
+                                preview.AppendLine("   Puerta de enlace: " + string.Join(", ", gateways.EnumerateArray().Select(x => x.GetString())));
+                            if (adapter.TryGetProperty("DnsServers", out var dns) && dns.ValueKind == System.Text.Json.JsonValueKind.Array)
+                                preview.AppendLine("   DNS: " + string.Join(", ", dns.EnumerateArray().Select(x => x.GetString())));
+                            preview.AppendLine();
+                        }
                         var finalNetworkChoice = MessageBox.Show(this,
-                            "Se guardó la configuración de red actual en el respaldo.\n\n" +
-                            "¿CONFIRMAS aplicar ahora la configuración del equipo anterior?\n\n" +
-                            "ADVERTENCIA: podrías perder la conexión de red y necesitar acceso local para corregirla. " +
-                            "No continúes si no verificaste que los adaptadores y la configuración corresponden a este equipo.",
-                            "Confirmación final — aplicar red", MessageBoxButtons.YesNo, MessageBoxIcon.Stop);
+                            preview + "\r\nSe aplicará únicamente a interfaces con el mismo nombre. La operación puede interrumpir la conexión. ¿CONFIRMAS?",
+                            "Confirmación final — restaurar IPv4", MessageBoxButtons.YesNo, MessageBoxIcon.Stop);
                         if (finalNetworkChoice == DialogResult.Yes)
                         {
-                            string networkOutput = await RunNetshWithTimeoutAsync($"exec \"{networkDump}\"", 60000);
-                            report.Add("=== RESTAURACIÓN DE CONFIGURACIÓN DE RED ===");
-                            report.Add(networkOutput);
-                            WriteLog("Restauración de configuración de red finalizada sin errores reportados por netsh.");
-                            ActivityLog.Write("RESTORE", "Configuración de red aplicada", "OK");
+                            string restoreScript = @"
+$ErrorActionPreference = 'Stop'
+$items = @(Get-Content -LiteralPath $env:ONKOS_IPV4_INPUT -Raw | ConvertFrom-Json)
+$log = New-Object System.Collections.Generic.List[string]
+foreach ($item in $items) {
+    $alias = [string]$item.InterfaceAlias
+    $adapter = Get-NetAdapter -Name $alias -ErrorAction SilentlyContinue
+    if (-not $adapter) { $log.Add(\"OMITIDO: no existe adaptador con nombre exacto '$alias'.\"); continue }
+    $index = [int]$adapter.ifIndex
+    try {
+        if ([string]$item.Dhcp -eq 'Enabled') {
+            Set-NetIPInterface -InterfaceIndex $index -AddressFamily IPv4 -Dhcp Enabled -ErrorAction Stop
+            Set-DnsClientServerAddress -InterfaceIndex $index -ResetServerAddresses -ErrorAction Stop
+            $log.Add(\"OK: '$alias' configurado para DHCP.\")
+            continue
+        }
+        Set-NetIPInterface -InterfaceIndex $index -AddressFamily IPv4 -Dhcp Disabled -ErrorAction Stop
+        Get-NetIPAddress -InterfaceIndex $index -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Where-Object { $_.IPAddress -notlike '127.*' } |
+            Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+        $addresses = @($item.Addresses)
+        $gateways = @($item.Gateways)
+        $first = $true
+        foreach ($address in $addresses) {
+            $params = @{ InterfaceIndex=$index; IPAddress=[string]$address.Address; PrefixLength=[int]$address.PrefixLength; AddressFamily='IPv4'; ErrorAction='Stop' }
+            if ($first -and $gateways.Count -gt 0 -and $gateways[0]) { $params.DefaultGateway=[string]$gateways[0] }
+            New-NetIPAddress @params | Out-Null
+            $first = $false
+        }
+        $dns = @($item.DnsServers | Where-Object { $_ })
+        if ($dns.Count -gt 0) { Set-DnsClientServerAddress -InterfaceIndex $index -ServerAddresses $dns -ErrorAction Stop }
+        else { $log.Add(\"AVISO: '$alias' no tenía DNS guardados; no se modificó DNS.\") }
+        $log.Add(\"OK: '$alias' restaurado. IPs=$($addresses.Count); Gateway=$($gateways -join ', '); DNS=$($dns -join ', ')\")
+    } catch { $log.Add(\"ERROR: '$alias' - $($_.Exception.Message)\") }
+}
+$log | Set-Content -LiteralPath $env:ONKOS_IPV4_REPORT -Encoding UTF8
+";
+                            string restoreScriptPath = Path.Combine(Path.GetTempPath(), "ONKOS_Restaurar_IPV4.ps1");
+                            string networkRestoreReport = Path.Combine(backupRoot, "Red", "RESULTADO_RESTAURACION_IPV4.txt");
+                            File.WriteAllText(restoreScriptPath, restoreScript, new UTF8Encoding(true));
+                            try
+                            {
+                                var psi = new ProcessStartInfo("powershell.exe", $"-NoProfile -ExecutionPolicy Bypass -File \"{restoreScriptPath}\"")
+                                {
+                                    UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true
+                                };
+                                psi.Environment["ONKOS_IPV4_INPUT"] = structuredNetworkFile;
+                                psi.Environment["ONKOS_IPV4_REPORT"] = networkRestoreReport;
+                                using var process = Process.Start(psi) ?? throw new InvalidOperationException("No se pudo iniciar PowerShell para restaurar IPv4.");
+                                Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+                                Task<string> errorTask = process.StandardError.ReadToEndAsync();
+                                if (!process.WaitForExit(90000)) { try { process.Kill(true); } catch { } throw new TimeoutException("La restauración IPv4 superó 90 segundos."); }
+                                string stdOut = await outputTask;
+                                string stdErr = await errorTask;
+                                string restoreLog = File.Exists(networkRestoreReport) ? File.ReadAllText(networkRestoreReport, Encoding.UTF8) : stdOut + Environment.NewLine + stdErr;
+                                report.Add("=== RESULTADO DE RESTAURACIÓN IPv4 ===");
+                                report.Add(restoreLog);
+                                if (process.ExitCode != 0) throw new IOException("PowerShell terminó con código " + process.ExitCode + ". " + stdErr);
+                                WriteLog("Restauración IPv4 estructurada ejecutada. Revisa RESULTADO_RESTAURACION_IPV4.txt.");
+                                ActivityLog.Write("RESTORE", "Restauración IPv4 estructurada", "REVISAR", restoreLog);
+                            }
+                            finally { try { if (File.Exists(restoreScriptPath)) File.Delete(restoreScriptPath); } catch { } }
                         }
-                        else
-                        {
-                            report.Add("Configuración de red: no aplicada; el técnico canceló la confirmación final.");
-                            WriteLog("Restauración de red cancelada en la confirmación final.");
-                        }
+                        else report.Add("Configuración IPv4: no aplicada; el técnico canceló la confirmación final.");
                     }
                     catch (Exception ex)
                     {
                         errors++;
-                        report.Add("ERROR RESTAURACIÓN DE RED: " + ex.Message);
-                        WriteLog("ERROR RESTAURACIÓN DE RED: " + ex.Message);
-                        ActivityLog.Write("RESTORE", "Restauración de red falló", "ERROR", ex.Message);
+                        report.Add("ERROR RESTAURACIÓN IPv4: " + ex.Message);
+                        WriteLog("ERROR RESTAURACIÓN IPv4: " + ex.Message);
+                        ActivityLog.Write("RESTORE", "Restauración IPv4 falló", "ERROR", ex.Message);
                     }
                 }
-                else report.Add("Configuración de red: no aplicada por decisión del técnico.");
+                else report.Add("Configuración IPv4: no aplicada por decisión del técnico.");
+            }
+            else if (File.Exists(legacyNetworkDump))
+            {
+                report.Add("CONFIGURACIÓN IPv4 ANTIGUA NO APLICADA: el respaldo solo contiene netsh dump, que no incluye DNS de forma fiable y puede no corresponder a los adaptadores destino. Genere un nuevo respaldo con la versión actual para obtener IPv4_config.json.");
+                WriteLog("El backup es antiguo: se omitió aplicar netsh dump para evitar una configuración incompleta o asignada al adaptador equivocado.");
             }
 
             string reportPath = Path.Combine(backupRoot, "INFORME_RESTAURACION.txt");
