@@ -8,10 +8,6 @@ on:
 permissions:
   contents: write
 
-# La acción de Releases aún declara Node 20; se permite su ejecución en Node 24.
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 # Evita acumular varias compilaciones simultáneas del mismo proyecto.
 concurrency:
   group: onkos-it-toolkit-build
@@ -36,14 +32,31 @@ jobs:
         shell: pwsh
         run: Compress-Archive -Path "publish/win-x64/*" -DestinationPath "ONKOS-IT-Toolkit-win-x64.zip" -CompressionLevel Optimal
 
-      - name: Publicar en GitHub Releases
-        uses: softprops/action-gh-release@v2
+      # Permite descargar el ZIP directamente desde la ejecución de Actions.
+      - name: Guardar ZIP como artefacto de Actions
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: latest
-          name: ONKOS IT Toolkit - Última versión
-          body: |
-            Última versión portable de ONKOS IT Toolkit para Windows x64.
-            Descarga el ZIP, extráelo y ejecuta ONKOS.IT.Toolkit.exe.
-          files: ONKOS-IT-Toolkit-win-x64.zip
-          overwrite_files: true
-          make_latest: true
+          name: ONKOS-IT-Toolkit-win-x64
+          path: ONKOS-IT-Toolkit-win-x64.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      # Usa GitHub CLI en lugar de softprops/action-gh-release para evitar
+      # la advertencia de compatibilidad Node.js 20 de esa acción.
+      - name: Publicar en GitHub Releases
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view latest 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create latest ONKOS-IT-Toolkit-win-x64.zip --title "ONKOS IT Toolkit - Última versión" --notes "Última versión portable de ONKOS IT Toolkit para Windows x64. Descarga el ZIP, extráelo y ejecuta ONKOS.IT.Toolkit.exe." --latest
+          }
+          if ($LASTEXITCODE -ne 0) {
+            throw "No fue posible crear o consultar el GitHub Release."
+          }
+          gh release upload latest ONKOS-IT-Toolkit-win-x64.zip --clobber
+          if ($LASTEXITCODE -ne 0) {
+            throw "No fue posible cargar el ZIP en GitHub Releases."
+          }
