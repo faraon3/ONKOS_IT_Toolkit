@@ -997,21 +997,51 @@ internal sealed class BackupForm : UserControl
             if (File.Exists(networkDump))
             {
                 var networkChoice = MessageBox.Show(this,
-                    "El respaldo contiene configuración de red IPv4.\n\n¿Deseas aplicarla a este computador?\n\nATENCIÓN: puede cambiar IP, gateway, DNS. Solo continúa si corresponde a la red actual. Requiere ejecutar ONKOS como administrador.",
-                    "Restaurar configuración IPv4", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                    "El respaldo contiene una exportación de configuración de red (netsh).\n\n" +
+                    "La restauración puede cambiar direcciones IP, gateway, DNS y otros parámetros de interfaces. " +
+                    "La configuración fue tomada de otro equipo y puede no coincidir con los adaptadores de este computador.\n\n" +
+                    "Primero se guardará una copia de la configuración de red ACTUAL. Después tendrás que confirmar nuevamente.\n\n" +
+                    "¿Deseas continuar con la revisión?",
+                    "Revisión previa de red", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                 if (networkChoice == DialogResult.Yes)
                 {
                     try
                     {
-                        string networkOutput = await RunNetshWithTimeoutAsync($"exec \"{networkDump}\"", 60000);
-                        report.Add("=== RESTAURACIÓN IPv4 ===");
-                        report.Add(networkOutput);
-                        WriteLog("Comando de restauración IPv4 ejecutado.");
-                        ActivityLog.Write("RESTORE", "IPv4 aplicado", "OK");
+                        string currentNetworkDump = await RunNetshWithTimeoutAsync("interface dump", 30000);
+                        string currentNetworkFile = Path.Combine(backupRoot, "Red", "IPv4_antes_de_restaurar.txt");
+                        Directory.CreateDirectory(Path.GetDirectoryName(currentNetworkFile)!);
+                        File.WriteAllText(currentNetworkFile, currentNetworkDump, Encoding.UTF8);
+                        report.Add("Configuración de red actual guardada en: " + currentNetworkFile);
+
+                        var finalNetworkChoice = MessageBox.Show(this,
+                            "Se guardó la configuración de red actual en el respaldo.\n\n" +
+                            "¿CONFIRMAS aplicar ahora la configuración del equipo anterior?\n\n" +
+                            "ADVERTENCIA: podrías perder la conexión de red y necesitar acceso local para corregirla. " +
+                            "No continúes si no verificaste que los adaptadores y la configuración corresponden a este equipo.",
+                            "Confirmación final — aplicar red", MessageBoxButtons.YesNo, MessageBoxIcon.Stop);
+                        if (finalNetworkChoice == DialogResult.Yes)
+                        {
+                            string networkOutput = await RunNetshWithTimeoutAsync($"exec \"{networkDump}\"", 60000);
+                            report.Add("=== RESTAURACIÓN DE CONFIGURACIÓN DE RED ===");
+                            report.Add(networkOutput);
+                            WriteLog("Restauración de configuración de red finalizada sin errores reportados por netsh.");
+                            ActivityLog.Write("RESTORE", "Configuración de red aplicada", "OK");
+                        }
+                        else
+                        {
+                            report.Add("Configuración de red: no aplicada; el técnico canceló la confirmación final.");
+                            WriteLog("Restauración de red cancelada en la confirmación final.");
+                        }
                     }
-                    catch (Exception ex) { errors++; report.Add("ERROR IPv4: " + ex.Message); WriteLog("ERROR IPv4: " + ex.Message); ActivityLog.Write("RESTORE", "IPv4 falló", "ERROR", ex.Message); }
+                    catch (Exception ex)
+                    {
+                        errors++;
+                        report.Add("ERROR RESTAURACIÓN DE RED: " + ex.Message);
+                        WriteLog("ERROR RESTAURACIÓN DE RED: " + ex.Message);
+                        ActivityLog.Write("RESTORE", "Restauración de red falló", "ERROR", ex.Message);
+                    }
                 }
-                else report.Add("IPv4: no aplicada por decisión del técnico.");
+                else report.Add("Configuración de red: no aplicada por decisión del técnico.");
             }
 
             string reportPath = Path.Combine(backupRoot, "INFORME_RESTAURACION.txt");
@@ -1234,14 +1264,20 @@ internal sealed class BackupForm : UserControl
     {
         var psi = new ProcessStartInfo("netsh.exe", args) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         using var p = Process.Start(psi) ?? throw new InvalidOperationException("No se pudo iniciar netsh.");
-        var stdout = p.StandardOutput.ReadToEndAsync();
-        var stderr = p.StandardError.ReadToEndAsync();
+        var stdoutTask = p.StandardOutput.ReadToEndAsync();
+        var stderrTask = p.StandardError.ReadToEndAsync();
         if (!p.WaitForExit(timeoutMs))
         {
             try { p.Kill(true); } catch { }
             throw new TimeoutException($"netsh tardó más de {timeoutMs / 1000} s. Operación cancelada.");
         }
-        return await stdout + Environment.NewLine + await stderr + Environment.NewLine + "ExitCode=" + p.ExitCode;
+
+        string stdout = await stdoutTask;
+        string stderr = await stderrTask;
+        if (p.ExitCode != 0)
+            throw new InvalidOperationException($"netsh terminó con código {p.ExitCode}.\n{stderr}\n{stdout}".Trim());
+
+        return stdout;
     }
 
     private sealed record FolderEntry(string Label, string Path, bool Custom);
