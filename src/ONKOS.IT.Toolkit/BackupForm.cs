@@ -765,13 +765,13 @@ internal sealed class BackupForm : UserControl
                 string antecedent = Convert.ToString(link["Antecedent"]) ?? "";
                 // Comparar el identificador de partición extraído de la referencia WMI.
                 var partitionMatch = System.Text.RegularExpressions.Regex.Match(
-                    antecedent, "DeviceID=\\"([^\\"]+)\\"", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    antecedent, @"DeviceID=""([^""]+)""", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 if (!partitionMatch.Success ||
                     !usbPartitions.Contains(partitionMatch.Groups[1].Value)) continue;
 
                 string dependent = Convert.ToString(link["Dependent"]) ?? "";
                 var driveMatch = System.Text.RegularExpressions.Regex.Match(
-                    dependent, "DeviceID=\\"([A-Z]:)\\"", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    dependent, @"DeviceID=""([A-Z]:)""", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 if (driveMatch.Success) letters.Add(driveMatch.Groups[1].Value.TrimEnd(':'));
             }
         }
