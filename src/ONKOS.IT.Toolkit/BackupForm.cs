@@ -19,6 +19,7 @@ internal sealed class BackupForm : UserControl
     public event Action? BackRequested;
     private readonly ListView _sources = new();
     private readonly ImageList _folderIcons = new();
+    private readonly ImageList _sourceTileIcons = new() { ColorDepth = ColorDepth.Depth32Bit, ImageSize = new Size(44, 24), TransparentColor = Color.Transparent };
     private readonly ManualDriveComboBox _drivePicker = new();
     private readonly Label _destination = new();
     private readonly TextBox _backupLabel = new();
@@ -78,7 +79,7 @@ internal sealed class BackupForm : UserControl
         _sources.MouseDown += SourceMouseDown;
         _sources.KeyDown += (_, e) => { if (e.KeyCode == Keys.Space && _sources.SelectedItems.Count > 0) { var item = _sources.SelectedItems[0]; ToggleItem(item); e.Handled = true; } };
         _sources.BackColor = Surface; _sources.ForeColor = TextMain; _sources.Font = new Font("Segoe UI", 9.5F);
-        _sources.SmallImageList = _folderIcons;
+        _sources.SmallImageList = _sourceTileIcons;
         _sources.Columns.Add("Carpeta / ubicación", 220); _sources.Columns.Add("Ruta", 500);
         _sources.Resize += (_, _) => { if (_sources.Columns.Count > 1) { _sources.Columns[0].Width = Math.Min(230, Math.Max(170, _sources.ClientSize.Width / 3)); _sources.Columns[1].Width = Math.Max(120, _sources.ClientSize.Width - _sources.Columns[0].Width - 4); } };
         LoadKnownFolders();
@@ -519,10 +520,33 @@ internal sealed class BackupForm : UserControl
     private void AddListItem(string label, string path, bool selected, string iconKey)
     {
         int icon = GetIconIndex(iconKey, path);
-        var item = new ListViewItem(label, icon) { Tag = new FolderEntry(label, path, !string.IsNullOrWhiteSpace(iconKey), selected) };
+        var entry = new FolderEntry(label, path, !string.IsNullOrWhiteSpace(iconKey), selected, icon);
+        var item = new ListViewItem(label, CreateSourceTileIcon(icon, selected)) { Tag = entry };
         item.SubItems.Add(path); _sources.Items.Add(item);
         if (selected) _ = UpdateFolderSizeAsync(item, (FolderEntry)item.Tag!);
         UpdateSelectAllButtonText();
+    }
+    private int CreateSourceTileIcon(int folderIconIndex, bool selected)
+    {
+        using var bitmap = new Bitmap(44, 24);
+        using (var g = Graphics.FromImage(bitmap))
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            var box = new Rectangle(1, 4, 16, 16);
+            using var fill = new SolidBrush(selected ? Purple : Color.FromArgb(46, 40, 59));
+            using var outline = new Pen(selected ? PurpleHover : Border, 1.2f);
+            using var rounded = RoundedRect(box, 4);
+            g.FillPath(fill, rounded); g.DrawPath(outline, rounded);
+            if (selected)
+            {
+                using var check = new Pen(Color.White, 2.2f);
+                g.DrawLines(check, new[] { new Point(4, 12), new Point(7, 15), new Point(14, 8) });
+            }
+            if (folderIconIndex >= 0 && folderIconIndex < _folderIcons.Images.Count)
+                g.DrawImage(_folderIcons.Images[folderIconIndex], 21, 0, 24, 24);
+        }
+        _sourceTileIcons.Images.Add(bitmap);
+        return _sourceTileIcons.Images.Count - 1;
     }
     private int GetIconIndex(string key, string path)
     {
@@ -535,12 +559,13 @@ internal sealed class BackupForm : UserControl
     {
         var item = e.Item; if (item is null) return;
         var bounds = e.Bounds; using var bg = new SolidBrush(item.Selected ? Color.FromArgb(58, 46, 78) : Surface); e.Graphics.FillRectangle(bg, bounds);
-        int x=bounds.X+8, y=bounds.Y+(bounds.Height-16)/2; var box=new Rectangle(x,y,16,16);
-        using var cb=new SolidBrush(IsItemChecked(item) ? Purple : Color.FromArgb(46,40,59)); using var pen=new Pen(IsItemChecked(item) ? PurpleHover : Border,1.2f); using var path=RoundedRect(box,4); e.Graphics.FillPath(cb,path); e.Graphics.DrawPath(pen,path);
-        if(IsItemChecked(item)){using var check=new Pen(Color.White,2.2f); e.Graphics.DrawLines(check,new[]{new Point(x+3,y+8),new Point(x+6,y+11),new Point(x+13,y+4)});}
-        if(item.ImageIndex>=0 && _folderIcons.Images.Count>item.ImageIndex){var img=_folderIcons.Images[item.ImageIndex]; if(img!=null)e.Graphics.DrawImage(img,x+23,bounds.Y+(bounds.Height-24)/2,24,24);}
-        TextRenderer.DrawText(e.Graphics,item.Text,_sources.Font,new Rectangle(x+52,bounds.Y+2, bounds.Width-58,18),TextMain,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
-        string pathText=item.SubItems.Count>1?item.SubItems[1].Text:string.Empty; TextRenderer.DrawText(e.Graphics,pathText,new Font("Segoe UI",7.5F),new Rectangle(x+52,bounds.Y+19,bounds.Width-58,17),TextMuted,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
+        int x = bounds.X + 8;
+        // La casilla se integra en la imagen para que se vea en todas las columnas Tile.
+        if (item.ImageIndex >= 0 && _sourceTileIcons.Images.Count > item.ImageIndex)
+            e.Graphics.DrawImage(_sourceTileIcons.Images[item.ImageIndex], x, bounds.Y + (bounds.Height - 24) / 2, 44, 24);
+        TextRenderer.DrawText(e.Graphics, item.Text, _sources.Font, new Rectangle(x + 52, bounds.Y + 2, bounds.Width - 58, 18), TextMain, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        string pathText = item.SubItems.Count > 1 ? item.SubItems[1].Text : string.Empty;
+        TextRenderer.DrawText(e.Graphics, pathText, new Font("Segoe UI", 7.5F), new Rectangle(x + 52, bounds.Y + 19, bounds.Width - 58, 17), TextMuted, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 
     private void SourceMouseDown(object? sender, MouseEventArgs e)
@@ -1834,13 +1859,19 @@ $log | Set-Content -LiteralPath $env:ONKOS_IPV4_REPORT -Encoding UTF8
         public string Path { get; }
         public bool Custom { get; }
         public bool Selected { get; set; }
-        public FolderEntry(string label, string path, bool custom, bool selected = false)
-        { Label = label; Path = path; Custom = custom; Selected = selected; }
+        public int FolderIconIndex { get; }
+        public FolderEntry(string label, string path, bool custom, bool selected = false, int folderIconIndex = -1)
+        { Label = label; Path = path; Custom = custom; Selected = selected; FolderIconIndex = folderIconIndex; }
     }
     private static bool IsItemChecked(ListViewItem item) => item.Tag is FolderEntry entry && entry.Selected;
-    private static void SetItemChecked(ListViewItem item, bool selected)
+    private void SetItemChecked(ListViewItem item, bool selected)
     {
-        if (item.Tag is FolderEntry entry) entry.Selected = selected;
+        if (item.Tag is FolderEntry entry)
+        {
+            entry.Selected = selected;
+            item.ImageIndex = CreateSourceTileIcon(entry.FolderIconIndex, selected);
+            item.Invalidate();
+        }
     }
     private sealed record ProfileChoice(string Name, string Path) { public override string ToString() => $"{Name}    —    {Path}"; }
     private sealed record DriveChoice(string Label, string Root, DriveType Type) { public override string ToString() => Label; }
