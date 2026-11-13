@@ -121,7 +121,7 @@ internal sealed class BackupForm : UserControl
         UpdateSelectAllButtonText();
 
         var destinationGroup = MakeGroup("02  ·  Elige dónde guardar el respaldo");
-        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 72;
+        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 84;
         var destinationRow = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
         _drivePicker.DropDownStyle = ComboBoxStyle.DropDownList; StyleCombo(_drivePicker); _drivePicker.DrawMode = DrawMode.OwnerDrawFixed; _drivePicker.ItemHeight = 25; _drivePicker.DrawItem += DrawDriveItem;
         _drivePicker.SetBounds(10, 8, 300, 34);
@@ -157,10 +157,12 @@ internal sealed class BackupForm : UserControl
             int comboWidth = Math.Clamp((int)(width * 0.31), 190, 300);
             int browseWidth = Math.Clamp((int)(width * 0.19), 155, 180);
             int x = 10;
-            _drivePicker.SetBounds(x, 8, comboWidth, 34);
-            choose.SetBounds(x + comboWidth + 12, 8, browseWidth, 34);
+            int controlHeight = 34;
+            int y = Math.Max(4, (destinationRow.ClientSize.Height - controlHeight) / 2);
+            _drivePicker.SetBounds(x, y, comboWidth, controlHeight);
+            choose.SetBounds(x + comboWidth + 12, y, browseWidth, controlHeight);
             int pathX = x + comboWidth + 12 + browseWidth + 12;
-            _destination.SetBounds(pathX, 8, Math.Max(40, width - pathX - 12), 34);
+            _destination.SetBounds(pathX, y, Math.Max(40, width - pathX - 12), controlHeight);
         }
         destinationRow.Resize += (_, _) => LayoutDestinationRow();
         LayoutDestinationRow();
@@ -577,9 +579,11 @@ internal sealed class BackupForm : UserControl
     private void DrawDriveItem(object? sender, DrawItemEventArgs e)
     {
         if(e.Index<0)return;
-        var drive=(DriveChoice)_drivePicker.Items[e.Index]!;
         e.DrawBackground();
-        
+        string label = _drivePicker.Items[e.Index] is DriveChoice drive
+            ? drive.Label
+            : Convert.ToString(_drivePicker.Items[e.Index]) ?? "Unidad no disponible";
+
         var iconPath=Path.Combine(AppContext.BaseDirectory,"Assets","Unidad_USB.png");
         if(File.Exists(iconPath))
         {
@@ -587,7 +591,7 @@ internal sealed class BackupForm : UserControl
             catch { }
         }
         Color fore=(e.State&DrawItemState.Selected)!=0?Color.White:TextMain;
-        TextRenderer.DrawText(e.Graphics,drive.Label,_drivePicker.Font,new Rectangle(e.Bounds.X+28,e.Bounds.Y,e.Bounds.Width-30,e.Bounds.Height),fore,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(e.Graphics,label,_drivePicker.Font,new Rectangle(e.Bounds.X+28,e.Bounds.Y,e.Bounds.Width-30,e.Bounds.Height),fore,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
         e.DrawFocusRectangle();
     }
     private static GraphicsPath RoundedRect(Rectangle r,int radius)
