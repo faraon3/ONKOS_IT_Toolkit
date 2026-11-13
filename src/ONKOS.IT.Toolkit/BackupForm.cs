@@ -56,16 +56,16 @@ internal sealed class BackupForm : UserControl
 
         var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), AutoScroll = true, BackColor = Bg };
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
-        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 350;
+        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 310;
         _folderIcons.ColorDepth = ColorDepth.Depth32Bit; _folderIcons.ImageSize = new Size(24, 24);
-        _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(250, 42); _sources.CheckBoxes = false;
+        _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(250, 38); _sources.CheckBoxes = false;
         // Distribuye los elementos en cuatro columnas para que Chrome y las carpetas agregadas
         // aparezcan hacia la derecha y no queden ocultos debajo de la lista.
         void UpdateSourceTileWidth()
         {
             int available = Math.Max(840, _sources.ClientSize.Width - 16);
             int tileWidth = Math.Max(205, Math.Min(270, available / 4));
-            _sources.TileSize = new Size(tileWidth, 42);
+            _sources.TileSize = new Size(tileWidth, 38);
         }
         _sources.Resize += (_, _) => UpdateSourceTileWidth();
         _sources.FullRowSelect = true; _sources.HideSelection = false; _sources.BorderStyle = BorderStyle.None; _sources.CheckBoxes = false; _sources.OwnerDraw = true;
@@ -79,9 +79,9 @@ internal sealed class BackupForm : UserControl
         _sources.Columns.Add("Carpeta / ubicación", 220); _sources.Columns.Add("Ruta", 500);
         _sources.Resize += (_, _) => { if (_sources.Columns.Count > 1) { _sources.Columns[0].Width = Math.Min(230, Math.Max(170, _sources.ClientSize.Width / 3)); _sources.Columns[1].Width = Math.Max(120, _sources.ClientSize.Width - _sources.Columns[0].Width - 4); } };
         LoadKnownFolders();
-        var sourceButtons = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = Surface };
+        var sourceButtons = new Panel { Dock = DockStyle.Bottom, Height = 46, BackColor = Surface };
         _addFolder.Text = "Agregar carpeta"; StyleButton(_addFolder, true);
-        _addFolder.SetBounds(10, 8, 210, 38);
+        _addFolder.SetBounds(10, 4, 210, 36);
         _addFolder.ImageAlign = ContentAlignment.MiddleLeft;
         _addFolder.TextImageRelation = TextImageRelation.ImageBeforeText;
         _addFolder.Padding = new Padding(8, 0, 6, 0);
@@ -95,11 +95,11 @@ internal sealed class BackupForm : UserControl
         addUser.Click += (_, _) => AddOtherUserFolders();
         sourceButtons.Controls.Add(_addFolder);
         // Fila inferior según el diseño solicitado.
-        addUser.Location = new Point(238, 8);
-        addUser.Size = new Size(240, 38);
+        addUser.Location = new Point(238, 4);
+        addUser.Size = new Size(240, 36);
         sourceButtons.Controls.Add(addUser);
         StyleCheck(_ipv4);
-        _ipv4.SetBounds(510, 8, 330, 38);
+        _ipv4.SetBounds(510, 4, 330, 36);
         _ipv4.Text = "Guardar configuración de red";
         _ipv4.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
         string networkSaveIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "GuardarConfiguracionRed.png");
@@ -108,11 +108,11 @@ internal sealed class BackupForm : UserControl
             try { using var networkImage = Image.FromFile(networkSaveIcon); _ipv4.Image = new Bitmap(networkImage, new Size(24, 24)); _ipv4.ImageAlign = ContentAlignment.MiddleLeft; _ipv4.TextImageRelation = TextImageRelation.ImageBeforeText; _ipv4.Padding = new Padding(6, 0, 0, 0); } catch { }
         }
         sourceButtons.Controls.Add(_ipv4);
-        var selectionBar = new Panel { Dock = DockStyle.Top, Height = 48, BackColor = Surface, Padding = new Padding(0, 2, 8, 2) };
+        var selectionBar = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Surface, Padding = new Padding(0, 2, 8, 2) };
         _selectAllFolders.Text = "Seleccionar todo";
-        _selectAllFolders.Size = new Size(150, 29);
+        _selectAllFolders.Size = new Size(150, 28);
         _selectAllFolders.Anchor = AnchorStyles.Top | AnchorStyles.Left;
-        _selectAllFolders.Location = new Point(8, 3);
+        _selectAllFolders.Location = new Point(8, 2);
         StyleButton(_selectAllFolders, true);
         _selectAllFolders.Click += (_, _) => SetAllFoldersSelected(_sources.Items.Cast<ListViewItem>().Any(item => !IsItemChecked(item)));
         selectionBar.Controls.Add(_selectAllFolders);
@@ -526,23 +526,32 @@ internal sealed class BackupForm : UserControl
         if (e.Item is null || e.SubItem is null) return;
         using var bg = new SolidBrush(e.Item.Selected ? Color.FromArgb(58, 46, 78) : Surface);
         e.Graphics.FillRectangle(bg, e.Bounds);
-        if (e.ColumnIndex == 0)
+        // En vista Tile, WinForms puede invocar el dibujo por cada subelemento.
+        // Dibujamos la casilla en cada celda visible para que ninguna columna quede sin selector.
+        int x = e.Bounds.X + 8;
+        int y = e.Bounds.Y + (e.Bounds.Height - 16) / 2;
+        var box = new Rectangle(x, y, 16, 16);
+        bool selected = IsItemChecked(e.Item);
+        using (var cb = new SolidBrush(selected ? Purple : Color.FromArgb(46, 40, 59)))
+        using (var pen = new Pen(selected ? PurpleHover : Border, 1.2f))
+        using (var path = RoundedRect(box, 4))
         {
-            int x=e.Bounds.X+8, y=e.Bounds.Y+(e.Bounds.Height-16)/2;
-            var box=new Rectangle(x,y,16,16);
-            using var cb=new SolidBrush(IsItemChecked(e.Item) ? Purple : Color.FromArgb(46,40,59));
-            using var pen=new Pen(IsItemChecked(e.Item) ? PurpleHover : Border,1.2f);
-            using var path=RoundedRect(box,4);
-            e.Graphics.FillPath(cb,path); e.Graphics.DrawPath(pen,path);
-            if(IsItemChecked(e.Item)){using var check=new Pen(Color.White,2.2f); e.Graphics.DrawLines(check,new[]{new Point(x+3,y+8),new Point(x+6,y+11),new Point(x+13,y+4)});}
-            if (e.Item.ImageIndex >= 0 && _sources.SmallImageList?.Images is not null && e.Item.ImageIndex < _sources.SmallImageList.Images.Count)
-            {
-                var icon = _sources.SmallImageList.Images[e.Item.ImageIndex];
-                if (icon is not null) e.Graphics.DrawImage(icon, x+23, e.Bounds.Y+(e.Bounds.Height-22)/2, 22, 22);
-            }
-            TextRenderer.DrawText(e.Graphics,e.SubItem.Text ?? string.Empty,_sources.Font,new Rectangle(x+50,e.Bounds.Y,e.Bounds.Width-52,e.Bounds.Height),TextMain,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
+            e.Graphics.FillPath(cb, path);
+            e.Graphics.DrawPath(pen, path);
         }
-        else TextRenderer.DrawText(e.Graphics,e.SubItem.Text,_sources.Font,e.Bounds,TextMuted,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
+        if (selected)
+        {
+            using var check = new Pen(Color.White, 2.2f);
+            e.Graphics.DrawLines(check, new[] { new Point(x + 3, y + 8), new Point(x + 6, y + 11), new Point(x + 13, y + 4) });
+        }
+        if (e.Item.ImageIndex >= 0 && _sources.SmallImageList?.Images is not null && e.Item.ImageIndex < _sources.SmallImageList.Images.Count)
+        {
+            var icon = _sources.SmallImageList.Images[e.Item.ImageIndex];
+            if (icon is not null) e.Graphics.DrawImage(icon, x + 23, e.Bounds.Y + (e.Bounds.Height - 22) / 2, 22, 22);
+        }
+        TextRenderer.DrawText(e.Graphics, e.SubItem.Text ?? string.Empty, _sources.Font,
+            new Rectangle(x + 50, e.Bounds.Y, Math.Max(0, e.Bounds.Width - 52), e.Bounds.Height),
+            TextMain, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
     private void SourceMouseDown(object? sender, MouseEventArgs e)
     {
