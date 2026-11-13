@@ -58,7 +58,7 @@ internal sealed class BackupForm : UserControl
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
         sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 285;
         _folderIcons.ColorDepth = ColorDepth.Depth32Bit; _folderIcons.ImageSize = new Size(24, 24);
-        _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(250, 42); _sources.CheckBoxes = false;
+        _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(250, 42); _sources.CheckBoxes = true;
         // Distribuye los elementos en cuatro columnas para que Chrome y las carpetas agregadas
         // aparezcan hacia la derecha y no queden ocultos debajo de la lista.
         void UpdateSourceTileWidth()
@@ -68,11 +68,10 @@ internal sealed class BackupForm : UserControl
             _sources.TileSize = new Size(tileWidth, 42);
         }
         _sources.Resize += (_, _) => UpdateSourceTileWidth();
-        _sources.FullRowSelect = true; _sources.HideSelection = false; _sources.BorderStyle = BorderStyle.None; _sources.CheckBoxes = false; _sources.OwnerDraw = true;
+        _sources.FullRowSelect = true; _sources.HideSelection = false; _sources.BorderStyle = BorderStyle.None; _sources.CheckBoxes = true; _sources.OwnerDraw = true;
         _sources.DrawColumnHeader += (_, e) => { if (e.Header is null) return; using var brush = new SolidBrush(Purple); using var font = new Font("Segoe UI", 9.5F, FontStyle.Bold); e.Graphics.FillRectangle(brush, e.Bounds); TextRenderer.DrawText(e.Graphics, e.Header.Text ?? string.Empty, font, e.Bounds, Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter); };
         _sources.DrawItem += DrawSourceTile;
         _sources.DrawSubItem += DrawSourceSubItem;
-        _sources.MouseDown += SourceMouseDown;
         _sources.KeyDown += (_, e) => { if (e.KeyCode == Keys.Space && _sources.SelectedItems.Count > 0) { var item = _sources.SelectedItems[0]; ToggleItem(item); e.Handled = true; } };
         _sources.BackColor = Surface; _sources.ForeColor = TextMain; _sources.Font = new Font("Segoe UI", 9.5F);
         _sources.SmallImageList = _folderIcons;
