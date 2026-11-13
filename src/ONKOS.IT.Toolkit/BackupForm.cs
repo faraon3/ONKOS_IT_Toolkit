@@ -707,7 +707,7 @@ internal sealed class BackupForm : UserControl
                     _selectedDriveRoot = ((_drivePicker.Items[0] as DriveChoice)?.Root) ?? string.Empty;
                     if (!string.IsNullOrWhiteSpace(previousSelectedRoot))
                     {
-                        _destination.Clear();
+                        _destination.Text = string.Empty;
                         OnkosMessageBox.ShowWarning(this, "Destino desconectado", $"La unidad {previousSelectedRoot} ya no está disponible. Selecciona otra unidad para continuar.");
                     }
                     else
@@ -722,7 +722,7 @@ internal sealed class BackupForm : UserControl
                     _selectedDriveRoot = string.Empty;
                     if (!string.IsNullOrWhiteSpace(previousSelectedRoot))
                     {
-                        _destination.Clear();
+                        _destination.Text = string.Empty;
                         OnkosMessageBox.ShowWarning(this, "Destino desconectado", $"La unidad {previousSelectedRoot} ya no está disponible. Conecta otra memoria USB o disco duro externo.");
                     }
                     else if (string.IsNullOrWhiteSpace(previousDestination)) _destination.Text = "Conecta una memoria USB o disco duro externo";
