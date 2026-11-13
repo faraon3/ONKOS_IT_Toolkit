@@ -206,6 +206,44 @@ internal sealed class BackupForm : UserControl
         AddKnown("OneDrive", null, false, "One Drive", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "OneDrive"));
         AddKnown("Vínculos", null, false, "Vinculos", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Links"));
         AddKnown("Objetos 3D", null, false, "Objeto-3d", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "3D Objects"));
+        AddChromeProfiles();
+    }
+
+    private void AddChromeProfiles()
+    {
+        // Cada carpeta User Data contiene los perfiles locales de Chrome:
+        // Default, Profile 1, Profile 2, etc.
+        string usersRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "..", "Users");
+        try
+        {
+            usersRoot = Path.GetFullPath(usersRoot);
+            if (!Directory.Exists(usersRoot)) return;
+
+            var excluded = new HashSet<string>(new[]
+            {
+                "Public", "Default", "Default User", "All Users", "defaultuser0"
+            }, StringComparer.OrdinalIgnoreCase);
+
+            foreach (string profilePath in Directory.GetDirectories(usersRoot))
+            {
+                string userName = Path.GetFileName(profilePath);
+                if (excluded.Contains(userName)) continue;
+
+                string chromeUserData = Path.Combine(profilePath, "AppData", "Local", "Google", "Chrome", "User Data");
+                if (!Directory.Exists(chromeUserData)) continue;
+
+                if (_sources.Items.Cast<ListViewItem>().Any(item =>
+                    item.Tag is FolderEntry existing &&
+                    string.Equals(existing.Path, chromeUserData, StringComparison.OrdinalIgnoreCase)))
+                    continue;
+
+                AddListItem($"Google Chrome – {userName}", chromeUserData, false, "GoogleChrome");
+            }
+        }
+        catch (Exception ex)
+        {
+            WriteLog("No se pudieron detectar todos los perfiles de Chrome: " + ex.Message);
+        }
     }
 
     private void ApplyLastSession()
@@ -513,6 +551,17 @@ internal sealed class BackupForm : UserControl
                 !string.Equals(entry.Path, other.Path, StringComparison.OrdinalIgnoreCase) &&
                 IsPathInside(entry.Path, other.Path)))
             .ToList();
+
+        bool chromeSelected = selected.Any(entry =>
+            entry.Label.StartsWith("Google Chrome", StringComparison.OrdinalIgnoreCase));
+        if (chromeSelected && Process.GetProcessesByName("chrome").Length > 0)
+        {
+            OnkosMessageBox.Show(this,
+                "Google Chrome está abierto. Cierra todas las ventanas de Chrome antes de respaldar sus perfiles para evitar archivos bloqueados o datos incompletos.",
+                "Cierra Google Chrome", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
         if (selected.Count == 0 && !_ipv4.Checked) { OnkosMessageBox.Show(this, "Selecciona carpetas o activa la opción de guardar configuración de red.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         string dest = _destination.Text.Trim();
         if (string.IsNullOrWhiteSpace(dest) || !Directory.Exists(dest)) { OnkosMessageBox.Show(this, "Selecciona primero el destino del respaldo.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
