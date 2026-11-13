@@ -97,7 +97,7 @@ internal sealed class BackupForm : UserControl
         UpdateSelectAllButtonText();
 
         var destinationGroup = MakeGroup("03  ·  Elige dónde guardar el respaldo");
-        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 118;
+        destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 72;
         var destinationRow = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
         _drivePicker.DropDownStyle = ComboBoxStyle.DropDownList; StyleCombo(_drivePicker); _drivePicker.DrawMode = DrawMode.OwnerDrawFixed; _drivePicker.ItemHeight = 25; _drivePicker.DrawItem += DrawDriveItem;
         _drivePicker.SetBounds(10, 8, 330, 34);
@@ -108,7 +108,10 @@ internal sealed class BackupForm : UserControl
         if (File.Exists(browseIconPath)) { try { using var img = Image.FromFile(browseIconPath); choose.Image = new Bitmap(img, new Size(20, 20)); } catch { } }
         StyleButton(choose, true); choose.Click += (_, _) => ChooseDestination();
         _destination.ReadOnly = true; StyleTextBox(_destination);
-        _destination.SetBounds(10, 52, 850, 32); _destination.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        _destination.BorderStyle = BorderStyle.None;
+        _destination.BackColor = Surface;
+        _destination.Font = new Font("Segoe UI", 9F);
+        _destination.SetBounds(552, 8, 480, 34); _destination.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         destinationRow.Controls.Add(_drivePicker); destinationRow.Controls.Add(choose); destinationRow.Controls.Add(_destination);
         destinationGroup.Controls.Add(destinationRow); RefreshDrives();
 
