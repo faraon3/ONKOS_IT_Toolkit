@@ -19,7 +19,7 @@ internal sealed class BackupForm : UserControl
     public event Action? BackRequested;
     private readonly ListView _sources = new();
     private readonly FlowLayoutPanel _sourceGrid = new() { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(8, 6, 8, 6), BackColor = Surface };
-    private readonly Dictionary<string, CheckBox> _sourceChecks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Panel> _sourceCards = new(StringComparer.OrdinalIgnoreCase);
     private readonly ImageList _folderIcons = new();
     private readonly ManualDriveComboBox _drivePicker = new();
     private readonly Label _destination = new();
@@ -534,42 +534,86 @@ internal sealed class BackupForm : UserControl
     private void AddSourceCard(FolderEntry entry)
     {
         int cardWidth = GetSourceCardWidth();
-        var card = new Panel { Width = cardWidth, Height = 56, Margin = new Padding(3, 3, 3, 3), BackColor = Surface2, Padding = new Padding(5, 3, 5, 2) };
-        var check = new CheckBox
+        var card = new Panel
         {
-            AutoSize = false, Dock = DockStyle.Top, Height = 24,
-            Text = entry.Label, Checked = entry.Selected,
-            ForeColor = TextMain, BackColor = Surface2,
-            Font = new Font("Segoe UI", 9.1F, FontStyle.Bold),
-            FlatStyle = FlatStyle.Flat, UseVisualStyleBackColor = false,
-            CheckAlign = ContentAlignment.MiddleLeft, TextAlign = ContentAlignment.MiddleLeft,
-            Padding = new Padding(3, 0, 0, 0), Cursor = Cursors.Hand
+            Width = cardWidth, Height = 42, Margin = new Padding(2, 2, 2, 2),
+            BackColor = Surface, Cursor = Cursors.Hand
         };
-        check.FlatAppearance.BorderColor = Border;
-        check.FlatAppearance.CheckedBackColor = Purple;
-        check.FlatAppearance.MouseOverBackColor = Color.FromArgb(54, 46, 70);
-        var path = new Label { Dock = DockStyle.Fill, Text = ShortenFolderPath(entry.Path), ForeColor = TextMuted, BackColor = Surface2, Font = new Font("Segoe UI", 7.3F), AutoEllipsis = true, Padding = new Padding(25, 0, 0, 0) };
-        check.CheckedChanged += (_, _) => {
-            entry.Selected = check.Checked;
-            var listItem = _sources.Items.Cast<ListViewItem>().FirstOrDefault(x => x.Tag is FolderEntry fe && ReferenceEquals(fe, entry));
-            if (check.Checked && listItem != null) _ = UpdateFolderSizeAsync(listItem, entry);
-            UpdateSelectAllButtonText();
+        card.Tag = entry;
+
+        var icon = new PictureBox
+        {
+            Location = new Point(26, 8), Size = new Size(22, 22),
+            SizeMode = PictureBoxSizeMode.StretchImage, BackColor = Color.Transparent,
+            Image = entry.FolderIconIndex >= 0 && entry.FolderIconIndex < _folderIcons.Images.Count
+                ? _folderIcons.Images[entry.FolderIconIndex] : SystemIcons.WinLogo.ToBitmap(),
+            Cursor = Cursors.Hand
         };
-        card.Controls.Add(path); card.Controls.Add(check); _sourceGrid.Controls.Add(card); _sourceChecks[entry.Path] = check;
-        _sourceGrid.Resize -= SourceGridResize; _sourceGrid.Resize += SourceGridResize;
+        var name = new Label
+        {
+            Location = new Point(52, 1), Size = new Size(cardWidth - 56, 19),
+            Text = $"{entry.Label} ({FormatSize(0)})", ForeColor = TextMain,
+            BackColor = Color.Transparent, Font = new Font("Segoe UI", 9.2F),
+            AutoEllipsis = true, Cursor = Cursors.Hand
+        };
+        var path = new Label
+        {
+            Location = new Point(52, 19), Size = new Size(cardWidth - 56, 17),
+            Text = ShortenFolderPath(entry.Path), ForeColor = TextMuted,
+            BackColor = Color.Transparent, Font = new Font("Segoe UI", 7.5F),
+            AutoEllipsis = true, Cursor = Cursors.Hand
+        };
+        card.Controls.Add(icon);
+        card.Controls.Add(name);
+        card.Controls.Add(path);
+        card.Paint += (_, e) =>
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var box = new Rectangle(2, 10, 18, 18);
+            using var fill = new SolidBrush(entry.Selected ? Purple : Color.FromArgb(46, 40, 59));
+            using var pen = new Pen(entry.Selected ? PurpleHover : Border, 1.2f);
+            using var shape = RoundedRect(box, 5);
+            e.Graphics.FillPath(fill, shape);
+            e.Graphics.DrawPath(pen, shape);
+            if (entry.Selected)
+            {
+                using var mark = new Pen(Color.White, 2.1f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+                e.Graphics.DrawLines(mark, new[] { new Point(6, 19), new Point(10, 23), new Point(17, 14) });
+            }
+        };
+
+        void ToggleCard(object? sender, EventArgs e)
+        {
+            var item = _sources.Items.Cast<ListViewItem>()
+                .FirstOrDefault(x => x.Tag is FolderEntry fe && ReferenceEquals(fe, entry));
+            if (item != null) ToggleItem(item);
+            card.Invalidate();
+        }
+        card.Click += ToggleCard;
+        icon.Click += ToggleCard;
+        name.Click += ToggleCard;
+        path.Click += ToggleCard;
+        _sourceGrid.Controls.Add(card);
+        _sourceCards[entry.Path] = card;
+        _sourceGrid.Resize -= SourceGridResize;
+        _sourceGrid.Resize += SourceGridResize;
     }
 
     private int GetSourceCardWidth()
     {
-        int available = Math.Max(0, _sourceGrid.ClientSize.Width - 32);
-        int width = (available / 4) - 8;
-        return Math.Clamp(width, 145, 280);
+        int available = Math.Max(0, _sourceGrid.ClientSize.Width - 30);
+        return Math.Max(190, (available / 4) - 8);
     }
 
     private void SourceGridResize(object? sender, EventArgs e)
     {
         int cardWidth = GetSourceCardWidth();
-        foreach (Control card in _sourceGrid.Controls) card.Width = cardWidth;
+        foreach (Control card in _sourceGrid.Controls)
+        {
+            card.Width = cardWidth;
+            foreach (Control child in card.Controls)
+                if (child is Label label) label.Width = cardWidth - label.Left - 4;
+        }
     }
     private int GetIconIndex(string key, string path)
     {
@@ -1923,7 +1967,7 @@ $log | Set-Content -LiteralPath $env:ONKOS_IPV4_REPORT -Encoding UTF8
         if (item.Tag is FolderEntry entry)
         {
             entry.Selected = selected;
-            if (_sourceChecks.TryGetValue(entry.Path, out var check) && !check.IsDisposed && check.Checked != selected) check.Checked = selected;
+            if (_sourceCards.TryGetValue(entry.Path, out var card) && !card.IsDisposed) card.Invalidate();
             item.ListView?.Invalidate(item.Bounds);
         }
     }
