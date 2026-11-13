@@ -28,8 +28,12 @@ internal static class OnkosMessageBox
     public static bool Confirm(IWin32Window? owner, string title, string message, string confirmText = "Continuar", string cancelText = "Cancelar", bool dangerous = false)
         => Show(owner, dangerous ? DialogKind.Warning : DialogKind.Confirm, title, message, null, true, confirmText, cancelText) == DialogResult.Yes;
 
+    public static DialogResult AskYesNoCancel(IWin32Window? owner, string title, string message,
+        string yesText = "Sí", string noText = "No", string cancelText = "Cancelar")
+        => Show(owner, DialogKind.Confirm, title, message, null, true, yesText, noText, cancelText);
+
     private static DialogResult Show(IWin32Window? owner, DialogKind kind, string title, string message,
-        string? details = null, bool confirm = false, string confirmText = "Aceptar", string cancelText = "Cancelar")
+        string? details = null, bool confirm = false, string confirmText = "Aceptar", string cancelText = "Cancelar", string? thirdText = null)
     {
         Color accent = kind switch
         {
@@ -122,16 +126,31 @@ internal static class OnkosMessageBox
 
         if (confirm)
         {
-            var cancel = new Button
+            var secondary = new Button
             {
-                Text = cancelText, Size = new Size(105, 36), Location = new Point(240, 13),
+                Text = cancelText, Size = new Size(105, 36), Location = new Point(thirdText is null ? 240 : 250, 13),
                 FlatStyle = FlatStyle.Flat, BackColor = Color.White, ForeColor = Text,
                 Font = new Font("Segoe UI", 9F, FontStyle.Bold), Cursor = Cursors.Hand,
                 DialogResult = DialogResult.No
             };
-            cancel.FlatAppearance.BorderColor = Color.FromArgb(218, 214, 225);
-            footer.Controls.Add(cancel);
-            form.CancelButton = cancel;
+            secondary.FlatAppearance.BorderColor = Color.FromArgb(218, 214, 225);
+            footer.Controls.Add(secondary);
+
+            if (thirdText is not null)
+            {
+                primary.Location = new Point(374, 13);
+                var cancel = new Button
+                {
+                    Text = thirdText, Size = new Size(105, 36), Location = new Point(126, 13),
+                    FlatStyle = FlatStyle.Flat, BackColor = Color.White, ForeColor = Text,
+                    Font = new Font("Segoe UI", 9F, FontStyle.Bold), Cursor = Cursors.Hand,
+                    DialogResult = DialogResult.Cancel
+                };
+                cancel.FlatAppearance.BorderColor = Color.FromArgb(218, 214, 225);
+                footer.Controls.Add(cancel);
+                form.CancelButton = cancel;
+            }
+            else form.CancelButton = secondary;
         }
         else form.CancelButton = primary;
 
