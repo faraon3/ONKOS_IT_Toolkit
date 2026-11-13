@@ -562,9 +562,24 @@ internal sealed class BackupForm : UserControl
     private void SourceMouseDown(object? sender, MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left) return;
-        var hit=_sources.HitTest(e.Location);
-        if(hit.Item!=null && e.X < hit.Item.Bounds.X+42)
-        { ToggleItem(hit.Item); }
+
+        // En vista Tile, HitTest puede no devolver el elemento al pulsar el espacio
+        // reservado para la casilla personalizada. GetItemAt y los límites del tile
+        // permiten detectar de forma consistente ese clic.
+        var item = _sources.GetItemAt(e.X, e.Y) ?? _sources.HitTest(e.Location).Item;
+        if (item == null) return;
+
+        var bounds = item.Bounds;
+        int relativeX = e.X - bounds.X;
+        int relativeY = e.Y - bounds.Y;
+
+        // La casilla dibujada ocupa los primeros 18 px, con margen izquierdo de 8 px.
+        // Se acepta toda la zona de control (hasta el icono) para facilitar el clic.
+        if (relativeX >= 0 && relativeX <= 42 &&
+            relativeY >= 0 && relativeY < bounds.Height)
+        {
+            ToggleItem(item);
+        }
     }
     private void DrawDriveItem(object? sender, DrawItemEventArgs e)
     {
