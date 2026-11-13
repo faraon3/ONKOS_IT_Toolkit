@@ -783,7 +783,7 @@ internal sealed class BackupForm : UserControl
             string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\";
             if (string.Equals(selectedRoot, systemRoot, StringComparison.OrdinalIgnoreCase))
             {
-                OnkosMessageBox.ShowWarning("No se permite guardar el respaldo en el disco donde está instalado Windows. Selecciona una memoria USB o un disco externo.");
+                OnkosMessageBox.ShowWarning(this, "Destino no permitido", "No se permite guardar el respaldo en el disco donde está instalado Windows. Selecciona una memoria USB o un disco externo.");
                 return;
             }
             _destination.Text = dialog.SelectedPath;
@@ -869,12 +869,12 @@ internal sealed class BackupForm : UserControl
         string destinationRoot = Path.GetPathRoot(dest) ?? "";
         if (string.Equals(destinationRoot, systemRoot, StringComparison.OrdinalIgnoreCase))
         {
-            OnkosMessageBox.ShowWarning("El disco de Windows no puede utilizarse como destino del respaldo. Conecta una memoria USB o un disco duro externo.");
+            OnkosMessageBox.ShowWarning(this, "Destino no permitido", "El disco de Windows no puede utilizarse como destino del respaldo. Conecta una memoria USB o un disco duro externo.");
             return;
         }
         if (!Directory.Exists(dest))
         {
-            OnkosMessageBox.ShowWarning("El destino seleccionado no está disponible. Conecta la unidad externa o selecciona otra carpeta.");
+            OnkosMessageBox.ShowWarning(this, "Destino no disponible", "El destino seleccionado no está disponible. Conecta la unidad externa o selecciona otra carpeta.");
             return;
         }
         if (string.IsNullOrWhiteSpace(dest) || !Directory.Exists(dest)) { OnkosMessageBox.Show(this, "Selecciona primero el destino del respaldo.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
