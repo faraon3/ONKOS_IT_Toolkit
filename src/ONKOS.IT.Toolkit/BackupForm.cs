@@ -710,6 +710,10 @@ internal sealed class BackupForm : UserControl
                         _destination.Clear();
                         OnkosMessageBox.ShowWarning(this, "Destino desconectado", $"La unidad {previousSelectedRoot} ya no está disponible. Selecciona otra unidad para continuar.");
                     }
+                    else
+                    {
+                        _destination.Text = _selectedDriveRoot;
+                    }
                 }
                 else
                 {
