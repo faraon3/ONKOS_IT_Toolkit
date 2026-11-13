@@ -117,12 +117,25 @@ internal sealed class BackupForm : UserControl
         string browseIconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "ExaminarCarpeta.png");
         if (File.Exists(browseIconPath)) { try { using var img = Image.FromFile(browseIconPath); choose.Image = new Bitmap(img, new Size(20, 20)); } catch { } }
         StyleButton(choose, true); choose.Click += (_, _) => ChooseDestination();
-        _destination.AutoEllipsis = true;
+        _destination.AutoEllipsis = false;
         _destination.TextAlign = ContentAlignment.MiddleLeft;
         _destination.BackColor = Surface;
         _destination.ForeColor = TextMain;
         _destination.Font = new Font("Segoe UI", 9F);
-        _destination.SetBounds(552, 8, 480, 34); _destination.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        _destination.SetBounds(552, 8, 480, 34);
+        _destination.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        var destinationTip = new ToolTip();
+        void FitDestinationPath()
+        {
+            int available = Math.Max(80, _destination.ClientSize.Width - 4);
+            float fontSize = 9F;
+            while (fontSize > 6.5F && TextRenderer.MeasureText(_destination.Text, new Font("Segoe UI", fontSize), new Size(int.MaxValue, 34), TextFormatFlags.SingleLine).Width > available)
+                fontSize -= 0.25F;
+            _destination.Font = new Font("Segoe UI", fontSize, FontStyle.Regular);
+            destinationTip.SetToolTip(_destination, _destination.Text);
+        }
+        _destination.Resize += (_, _) => FitDestinationPath();
+        _destination.TextChanged += (_, _) => FitDestinationPath();
         destinationRow.Controls.Add(_drivePicker); destinationRow.Controls.Add(choose); destinationRow.Controls.Add(_destination);
         destinationGroup.Controls.Add(destinationRow); RefreshDrives();
 
