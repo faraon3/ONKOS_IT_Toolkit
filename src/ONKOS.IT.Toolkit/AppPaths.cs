@@ -167,14 +167,14 @@ internal static class AppPaths
         {
             SetDataRoot(dialog.SelectedPath);
             MigrateIfNeeded();
-            MessageBox.Show(owner,
+            OnkosMessageBox.Show(owner,
                 $"Carpeta de datos configurada:\n{dialog.SelectedPath}\n\nLos drivers, programas e inventarios ya se guardarán aquí.",
                 "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return true;
         }
         catch (Exception ex)
         {
-            MessageBox.Show(owner, "No se pudo configurar la carpeta: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            OnkosMessageBox.Show(owner, "No se pudo configurar la carpeta: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return false;
         }
     }
