@@ -272,24 +272,24 @@ internal sealed class InventoryForm : UserControl
     {
         if (string.IsNullOrWhiteSpace(_lastTextReport))
         {
-            MessageBox.Show(this, "No hay datos. Pulsa ACTUALIZAR primero.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            OnkosMessageBox.Show(this, "No hay datos. Pulsa ACTUALIZAR primero.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
         try
         {
             Clipboard.SetText(_lastTextReport);
             _status.Text = "Resumen copiado al portapapeles.";
-            MessageBox.Show(this, "Resumen copiado al portapapeles.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            OnkosMessageBox.Show(this, "Resumen copiado al portapapeles.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "No se pudo copiar: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            OnkosMessageBox.Show(this, "No se pudo copiar: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 
     private void ExportCsv()
     {
-        if (_rows.Count == 0) { MessageBox.Show(this, "No hay datos para exportar. Pulsa ACTUALIZAR primero."); return; }
+        if (_rows.Count == 0) { OnkosMessageBox.Show(this, "No hay datos para exportar. Pulsa ACTUALIZAR primero."); return; }
         try
         {
             string file = Path.Combine(_reports, $"Inventario_{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
@@ -299,11 +299,11 @@ internal sealed class InventoryForm : UserControl
                 sb.AppendLine(string.Join(",", _columns.Select(c => "\"" + (row.TryGetValue(c, out var v) ? v : "").Replace("\"", "\"\"") + "\"")));
             File.WriteAllText(file, sb.ToString(), Encoding.UTF8);
             ActivityLog.Write("INVENTORY", "Export CSV", "OK", file);
-            MessageBox.Show(this, "Inventario exportado:\n" + file, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            OnkosMessageBox.Show(this, "Inventario exportado:\n" + file, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, "No se pudo exportar: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            OnkosMessageBox.Show(this, "No se pudo exportar: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
     }
 }
