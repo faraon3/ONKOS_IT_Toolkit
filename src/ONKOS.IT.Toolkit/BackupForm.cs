@@ -82,12 +82,11 @@ internal sealed class BackupForm : UserControl
         var selectionBar = new Panel { Dock = DockStyle.Top, Height = 36, BackColor = Surface, Padding = new Padding(0, 2, 8, 2) };
         _selectAllFolders.Text = "Seleccionar todo";
         _selectAllFolders.Size = new Size(150, 29);
-        _selectAllFolders.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        _selectAllFolders.Location = new Point(Math.Max(8, sourcesGroup.ClientSize.Width - 166), 3);
+        _selectAllFolders.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+        _selectAllFolders.Location = new Point(8, 3);
         StyleButton(_selectAllFolders, true);
         _selectAllFolders.Click += (_, _) => SetAllFoldersSelected(_sources.Items.Cast<ListViewItem>().Any(item => !item.Checked));
         selectionBar.Controls.Add(_selectAllFolders);
-        selectionBar.Resize += (_, _) => _selectAllFolders.Left = Math.Max(8, selectionBar.ClientSize.Width - _selectAllFolders.Width - 8);
         sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons); sourcesGroup.Controls.Add(selectionBar);
         UpdateSelectAllButtonText();
 
