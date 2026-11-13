@@ -170,7 +170,7 @@ internal sealed class BackupForm : UserControl
         LayoutDestinationRow();
         destinationGroup.Controls.Add(destinationRow);
         RefreshDrives();
-        _driveMonitor.Tick += (_, _) => { if (!IsDisposed && IsHandleCreated && Visible) RefreshDrives(); };
+        _driveMonitor.Tick += (_, _) => { if (!IsDisposed && IsHandleCreated && Visible && !_drivePicker.DroppedDown) RefreshDrives(); };
         _driveMonitor.Start();
         Disposed += (_, _) => { _driveMonitor.Stop(); _driveMonitor.Dispose(); };
 
