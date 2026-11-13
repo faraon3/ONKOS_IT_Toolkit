@@ -771,10 +771,16 @@ internal sealed class BackupForm : UserControl
             foreach (ManagementObject link in links)
             {
                 string antecedent = Convert.ToString(link["Antecedent"]) ?? "";
-                if (!usbPartitions.Any(p => antecedent.Contains(p.Replace("\\\\", "\\\\\\\\"), StringComparison.OrdinalIgnoreCase))) continue;
+                // Comparar el identificador de partición extraído de la referencia WMI.
+                var partitionMatch = System.Text.RegularExpressions.Regex.Match(
+                    antecedent, "DeviceID=\\"([^\\"]+)\\"", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (!partitionMatch.Success ||
+                    !usbPartitions.Contains(partitionMatch.Groups[1].Value)) continue;
+
                 string dependent = Convert.ToString(link["Dependent"]) ?? "";
-                var match = System.Text.RegularExpressions.Regex.Match(dependent, "DeviceID=\"([A-Z]:)\"");
-                if (match.Success) letters.Add(match.Groups[1].Value.TrimEnd(':'));
+                var driveMatch = System.Text.RegularExpressions.Regex.Match(
+                    dependent, "DeviceID=\\"([A-Z]:)\\"", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (driveMatch.Success) letters.Add(driveMatch.Groups[1].Value.TrimEnd(':'));
             }
         }
         catch { /* Si WMI no está disponible, las memorias extraíbles siguen apareciendo por DriveType.Removable. */ }
