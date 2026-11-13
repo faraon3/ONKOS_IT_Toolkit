@@ -411,7 +411,7 @@ internal sealed class BackupForm : UserControl
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         string path = dialog.SelectedPath;
         if (_sources.Items.Cast<ListViewItem>().Any(x => string.Equals(((FolderEntry)x.Tag!).Path, path, StringComparison.OrdinalIgnoreCase)))
-        { MessageBox.Show(this, "Esta carpeta ya está en la lista.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        { OnkosMessageBox.Show(this, "Esta carpeta ya está en la lista.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         AddListItem(Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)), path, true, "Unidad");
     }
     private void AddOtherUserFolders()
@@ -420,7 +420,7 @@ internal sealed class BackupForm : UserControl
         usersRoot = Path.GetFullPath(usersRoot);
         if (!Directory.Exists(usersRoot))
         {
-            MessageBox.Show(this, "No se encontró la carpeta de perfiles de Windows: " + usersRoot, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            OnkosMessageBox.Show(this, "No se encontró la carpeta de perfiles de Windows: " + usersRoot, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -436,7 +436,7 @@ internal sealed class BackupForm : UserControl
 
         if (profiles.Count == 0)
         {
-            MessageBox.Show(this, "No se encontraron perfiles de usuario.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            OnkosMessageBox.Show(this, "No se encontraron perfiles de usuario.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -486,7 +486,7 @@ internal sealed class BackupForm : UserControl
             }
         }
         if (added == 0)
-            MessageBox.Show(this, "No se agregaron carpetas. Los perfiles seleccionados pueden no tener carpetas personales disponibles o ya estaban agregados.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            OnkosMessageBox.Show(this, "No se agregaron carpetas. Los perfiles seleccionados pueden no tener carpetas personales disponibles o ya estaban agregados.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
         else
             WriteLog($"Se agregaron {added} carpetas de otros perfiles. Revisa las casillas antes de iniciar el backup.");
     }
@@ -514,11 +514,11 @@ internal sealed class BackupForm : UserControl
                 !string.Equals(entry.Path, other.Path, StringComparison.OrdinalIgnoreCase) &&
                 IsPathInside(entry.Path, other.Path)))
             .ToList();
-        if (selected.Count == 0 && !_ipv4.Checked) { MessageBox.Show(this, "Selecciona carpetas o activa la opción de guardar configuración de red.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        if (selected.Count == 0 && !_ipv4.Checked) { OnkosMessageBox.Show(this, "Selecciona carpetas o activa la opción de guardar configuración de red.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         string dest = _destination.Text.Trim();
-        if (string.IsNullOrWhiteSpace(dest) || !Directory.Exists(dest)) { MessageBox.Show(this, "Selecciona primero el destino del respaldo.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        if (string.IsNullOrWhiteSpace(dest) || !Directory.Exists(dest)) { OnkosMessageBox.Show(this, "Selecciona primero el destino del respaldo.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         foreach (var f in selected)
-            if (IsSameOrChild(dest, f.Path)) { MessageBox.Show(this, $"El destino está dentro de la carpeta origen ({f.Label}). Elige otra ubicación.", "Destino no válido", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+            if (IsSameOrChild(dest, f.Path)) { OnkosMessageBox.Show(this, $"El destino está dentro de la carpeta origen ({f.Label}). Elige otra ubicación.", "Destino no válido", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
 
         SaveSession(selected, dest);
 
@@ -590,7 +590,7 @@ internal sealed class BackupForm : UserControl
                 var drive = new DriveInfo(Path.GetPathRoot(root)!);
                 if (drive.IsReady && totalBytes > 0 && drive.AvailableFreeSpace < totalBytes * 1.1)
                 {
-                    var answer = MessageBox.Show(this,
+                    var answer = OnkosMessageBox.Show(this,
                         $"Espacio insuficiente en destino.\n\nRequerido aprox.: {totalBytes / 1024.0 / 1024 / 1024:F1} GB\nDisponible: {drive.AvailableFreeSpace / 1024.0 / 1024 / 1024:F1} GB\n\n¿Continuar de todas formas?",
                         "Espacio en disco", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                     if (answer != DialogResult.Yes)
@@ -818,7 +818,7 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
             {
                 SetProgress(done, total, "Backup cancelado por el usuario.", "Cancelado");
                 WriteLog($"Backup cancelado. Copiados: {copied}. Reanudados: {alreadyDone}. Errores: {errors}.{Environment.NewLine}Ruta: {root}");
-                MessageBox.Show(this,
+                OnkosMessageBox.Show(this,
                     $"Backup cancelado por el usuario.{Environment.NewLine}{Environment.NewLine}Copiados ahora: {copied}{Environment.NewLine}Reanudados (ya existían): {alreadyDone}{Environment.NewLine}Verificados: {verified}{Environment.NewLine}Pendientes: {errors}{Environment.NewLine}{Environment.NewLine}{root}{Environment.NewLine}{Environment.NewLine}Puedes reanudar más tarde abriendo esta misma carpeta como destino.",
                     "ONKOS Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 ActivityLog.Write("BACKUP", "Cancelado por usuario", "OK", $"Copiados: {copied} | Reanudados: {alreadyDone} | Errores: {errors}");
@@ -832,12 +832,12 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
                 if (errors > 0)
                     ShowErrorsModal(errorDetails, root);
                 else
-                    MessageBox.Show(this,
+                    OnkosMessageBox.Show(this,
                         $"Respaldo completado correctamente.{Environment.NewLine}{Environment.NewLine}Copiados: {copied}{Environment.NewLine}Reanudados (ya existían): {alreadyDone}{Environment.NewLine}Verificados: {verified}{Environment.NewLine}{Environment.NewLine}{root}",
                         "ONKOS Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
-        catch (Exception ex) { _status.Text = "El backup falló."; WriteLog("ERROR GENERAL: " + ex.Message); ActivityLog.Write("BACKUP", "Error general", "ERROR", ex.Message); MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        catch (Exception ex) { _status.Text = "El backup falló."; WriteLog("ERROR GENERAL: " + ex.Message); ActivityLog.Write("BACKUP", "Error general", "ERROR", ex.Message); OnkosMessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         finally
         {
             _busy = false; _run.Enabled = true;
@@ -930,13 +930,13 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
         string manifestPath = Path.Combine(backupRoot, "MANIFIESTO_BACKUP.csv");
         if (!File.Exists(manifestPath))
         {
-            MessageBox.Show(this, "No se encontró MANIFIESTO_BACKUP.csv. Selecciona la carpeta principal del backup generado por ONKOS IT Toolkit.", "Respaldo no válido", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            OnkosMessageBox.Show(this, "No se encontró MANIFIESTO_BACKUP.csv. Selecciona la carpeta principal del backup generado por ONKOS IT Toolkit.", "Respaldo no válido", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
         List<string[]> rows;
         try { rows = ParseCsv(File.ReadAllText(manifestPath, Encoding.UTF8)); }
-        catch (Exception ex) { MessageBox.Show(this, "No se pudo leer el manifiesto: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        catch (Exception ex) { OnkosMessageBox.Show(this, "No se pudo leer el manifiesto: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
 
         var files = rows.Skip(1)
             .Where(r => r.Length >= 4 && (string.Equals(r[0], "COPIADO", StringComparison.OrdinalIgnoreCase) || string.Equals(r[0], "YA COPIADO", StringComparison.OrdinalIgnoreCase)))
@@ -961,7 +961,7 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
 
         if (files.Count == 0 && !hasNetworkBackup)
         {
-            MessageBox.Show(this, "El manifiesto no contiene archivos respaldados y tampoco se encontró un respaldo de red válido.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            OnkosMessageBox.Show(this, "El manifiesto no contiene archivos respaldados y tampoco se encontró un respaldo de red válido.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -1014,7 +1014,7 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
             if (mapping.ShowDialog(this) != DialogResult.OK) return;
             if (profileMap.Any(kv => string.IsNullOrWhiteSpace(kv.Value) || !Directory.Exists(kv.Value)))
             {
-                MessageBox.Show(this, "Selecciona una carpeta de usuario destino válida para cada perfil.", "Destino inválido", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                OnkosMessageBox.Show(this, "Selecciona una carpeta de usuario destino válida para cada perfil.", "Destino inválido", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
         }
@@ -1022,7 +1022,7 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
         bool overwrite = false;
         if (files.Count > 0)
         {
-            var overwriteChoice = MessageBox.Show(this,
+            var overwriteChoice = OnkosMessageBox.Show(this,
                 $"Se encontraron {files.Count:N0} archivos respaldados.\n\n¿Deseas reemplazar archivos que ya existan en el destino seleccionado?\n\nSí = reemplazar\nNo = conservar los existentes y omitirlos",
                 "Confirmar restauración", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
             if (overwriteChoice == DialogResult.Cancel) return;
@@ -1095,7 +1095,7 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
             string legacyNetworkDump = Path.Combine(backupRoot, "Red", "IPv4_netsh_dump.txt");
             if (File.Exists(structuredNetworkFile))
             {
-                var networkChoice = MessageBox.Show(this,
+                var networkChoice = OnkosMessageBox.Show(this,
                     "El respaldo contiene configuración IPv4 estructurada por adaptador, incluyendo IP, máscara/prefijo, puerta de enlace, DHCP y DNS cuando estaban configurados.\n\n" +
                     "ONKOS identificará los adaptadores por nombre exacto. Si un nombre no coincide, ese adaptador se omitirá; no se asignará la configuración a otro adaptador automáticamente.\n\n" +
                     "¿Deseas revisar la configuración antes de restaurarla?",
@@ -1125,7 +1125,7 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
                                 preview.AppendLine("   DNS: " + string.Join(", ", dns.EnumerateArray().Select(x => x.GetString())));
                             preview.AppendLine();
                         }
-                        var finalNetworkChoice = MessageBox.Show(this,
+                        var finalNetworkChoice = OnkosMessageBox.Show(this,
                             preview + "\r\nSe aplicará únicamente a interfaces con el mismo nombre. La operación puede interrumpir la conexión. ¿CONFIRMAS?",
                             "Confirmación final — restaurar IPv4", MessageBoxButtons.YesNo, MessageBoxIcon.Stop);
                         if (finalNetworkChoice == DialogResult.Yes)
@@ -1216,14 +1216,14 @@ $log | Set-Content -LiteralPath $env:ONKOS_IPV4_REPORT -Encoding UTF8
             SetProgress(files.Count, files.Count, errors == 0 ? "¡Restauración finalizada!" : "Restauración finalizada con errores.", "Terminado");
             WriteLog($"Restauración finalizada. Restaurados: {restored}; omitidos: {skipped}; errores: {errors}.");
             ActivityLog.Write("RESTORE", "Restauración finalizada", errors == 0 ? "OK" : "CON ERRORES", $"Restaurados: {restored} | Omitidos: {skipped} | Errores: {errors}");
-            MessageBox.Show(this, $"Restauración finalizada.\n\nRestaurados: {restored:N0}\nOmitidos (existentes): {skipped:N0}\nErrores: {errors:N0}\n\nInforme: {reportPath}",
+            OnkosMessageBox.Show(this, $"Restauración finalizada.\n\nRestaurados: {restored:N0}\nOmitidos (existentes): {skipped:N0}\nErrores: {errors:N0}\n\nInforme: {reportPath}",
                 "ONKOS Restauración", MessageBoxButtons.OK, errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         catch (Exception ex)
         {
             WriteLog("ERROR RESTAURACIÓN: " + ex.Message);
             ActivityLog.Write("RESTORE", "Error general", "ERROR", ex.Message);
-            MessageBox.Show(this, ex.Message, "Error restaurando", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            OnkosMessageBox.Show(this, ex.Message, "Error restaurando", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { _busy = false; _run.Enabled = true; }
     }
