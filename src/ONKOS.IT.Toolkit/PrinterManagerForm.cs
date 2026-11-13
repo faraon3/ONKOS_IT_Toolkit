@@ -211,7 +211,7 @@ internal sealed class PrinterManagerForm : UserControl
 
         if (candidates.Count == 0)
         {
-            MessageBox.Show(this,
+            OnkosMessageBox.Show(this,
                 "No se encontró ningún instalador (.exe, .msi, .inf) entre los archivos seleccionados.",
                 "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
@@ -283,14 +283,14 @@ internal sealed class PrinterManagerForm : UserControl
             string summary = "Se agregaron " + added + " controlador(es) a la biblioteca.";
             if (auxiliaries.Count > 0) summary += "\n\nSe copiaron " + auxiliaries.Count + " archivo(s) auxiliar(es) junto a su instalador.";
             summary += "\n\n" + string.Join("\n", addedNames);
-            MessageBox.Show(this, summary, "ONKOS · Controladores agregados", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            OnkosMessageBox.Show(this, summary, "ONKOS · Controladores agregados", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {
             foreach (string folder in createdFolders) { try { if (Directory.Exists(folder)) Directory.Delete(folder, true); } catch { } }
             foreach (string key in _metadata.Keys.Where(k => createdFolders.Contains(Path.Combine(_library, k), StringComparer.OrdinalIgnoreCase)).ToList()) _metadata.Remove(key);
             try { SaveMetadata(); } catch { }
-            MessageBox.Show(this, ex.Message, "Error al agregar controladores", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            OnkosMessageBox.Show(this, ex.Message, "Error al agregar controladores", MessageBoxButtons.OK, MessageBoxIcon.Error);
             SetProgress(0, "No se pudieron cargar todos los controladores");
         }
         finally { SetBusy(false); }
@@ -308,7 +308,7 @@ internal sealed class PrinterManagerForm : UserControl
     {
         if (_installedList.SelectedItems.Count == 0)
         {
-            MessageBox.Show(this, "Selecciona una impresora de la lista.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            OnkosMessageBox.Show(this, "Selecciona una impresora de la lista.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return null;
         }
         return _installedList.SelectedItems[0].Tag as InstalledPrinter;
@@ -354,7 +354,7 @@ internal sealed class PrinterManagerForm : UserControl
     private void OpenPrinterQueue(string printerName)
     {
         try { Process.Start(new ProcessStartInfo { FileName = "rundll32.exe", Arguments = "printui.dll,PrintUIEntry /o /n \"" + printerName + "\"", UseShellExecute = true }); }
-        catch (Exception ex) { MessageBox.Show(this, "No se pudo abrir la cola: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        catch (Exception ex) { OnkosMessageBox.Show(this, "No se pudo abrir la cola: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
 
     private void SetDefaultPrinter(string printerName)
@@ -366,12 +366,12 @@ internal sealed class PrinterManagerForm : UserControl
             ActivityLog.Write("PRINTERS", "Set default", "OK", printerName);
             RefreshInstalled();
         }
-        catch (Exception ex) { MessageBox.Show(this, "No se pudo cambiar la predeterminada: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        catch (Exception ex) { OnkosMessageBox.Show(this, "No se pudo cambiar la predeterminada: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
 
     private void DeleteInstalledPrinter(string printerName)
     {
-        if (MessageBox.Show(this, $"¿Eliminar la impresora \"{printerName}\"?", "Eliminar impresora instalada", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        if (OnkosMessageBox.Show(this, $"¿Eliminar la impresora \"{printerName}\"?", "Eliminar impresora instalada", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         try
         {
             using var p = Process.Start(new ProcessStartInfo { FileName = "rundll32.exe", Arguments = "printui.dll,PrintUIEntry /dl /n \"" + printerName + "\" /q", UseShellExecute = true, CreateNoWindow = true });
@@ -379,7 +379,7 @@ internal sealed class PrinterManagerForm : UserControl
             ActivityLog.Write("PRINTERS", "Delete installed", "OK", printerName);
             RefreshInstalled();
         }
-        catch (Exception ex) { MessageBox.Show(this, "No se pudo eliminar: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+        catch (Exception ex) { OnkosMessageBox.Show(this, "No se pudo eliminar: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }
 
     private static void StyleTabs(TabControl tabs)
@@ -404,16 +404,16 @@ internal sealed class PrinterManagerForm : UserControl
     {
         var item = _list.SelectedItems.Count > 0 ? _list.SelectedItems[0] : null;
         if (item?.Tag is not string key || !_metadata.TryGetValue(key, out var meta))
-        { MessageBox.Show(this, "Selecciona una impresora de la biblioteca.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        { OnkosMessageBox.Show(this, "Selecciona una impresora de la biblioteca.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         string root = Path.Combine(_library, key);
         string installer = Path.GetFullPath(Path.Combine(root, meta.InstallerRelativePath));
         if (!installer.StartsWith(root, StringComparison.OrdinalIgnoreCase) || !File.Exists(installer))
-        { MessageBox.Show(this, "No se encuentra el instalador guardado para esta impresora.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        { OnkosMessageBox.Show(this, "No se encuentra el instalador guardado para esta impresora.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
 
         string msg = meta.InstallType == "inf"
             ? "Se agregará el controlador INF al almacén de controladores de Windows.\n\n¿Continuar?"
             : "Se abrirá el instalador del controlador seleccionado.\n\n¿Continuar?";
-        if (MessageBox.Show(this, msg, "Instalar " + meta.DisplayName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+        if (OnkosMessageBox.Show(this, msg, "Instalar " + meta.DisplayName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
 
         SetBusy(true, "Instalando controlador " + meta.DisplayName + "...");
         try
@@ -434,15 +434,15 @@ internal sealed class PrinterManagerForm : UserControl
             SetProgress(100, "Proceso de instalación finalizado");
             ActivityLog.Write("PRINTERS", "Install driver", exitCode == 0 ? "OK" : "ERROR", $"{meta.DisplayName} | ExitCode={exitCode}");
             if (exitCode == 0)
-                MessageBox.Show(this, "El instalador terminó correctamente.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                OnkosMessageBox.Show(this, "El instalador terminó correctamente.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
             else
-                MessageBox.Show(this, "El proceso terminó con código " + exitCode + ".", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                OnkosMessageBox.Show(this, "El proceso terminó con código " + exitCode + ".", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         catch (Exception ex)
         {
             SetProgress(0, "Error durante la instalación");
             ActivityLog.Write("PRINTERS", "Install driver", "ERROR", ex.Message);
-            MessageBox.Show(this, ex.Message, "ONKOS · Error de instalación", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            OnkosMessageBox.Show(this, ex.Message, "ONKOS · Error de instalación", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { SetBusy(false); }
     }
@@ -450,9 +450,9 @@ internal sealed class PrinterManagerForm : UserControl
     private void RemoveSelected()
     {
         var item = _list.SelectedItems.Count > 0 ? _list.SelectedItems[0] : null;
-        if (item?.Tag is not string key) { MessageBox.Show(this, "Selecciona una impresora para eliminar."); return; }
-        if (MessageBox.Show(this, "¿Eliminar " + item.Text + " y sus archivos de la biblioteca local?", "Eliminar impresora", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-        try { Directory.Delete(Path.Combine(_library, key), true); } catch (Exception ex) { MessageBox.Show(this, ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
+        if (item?.Tag is not string key) { OnkosMessageBox.Show(this, "Selecciona una impresora para eliminar."); return; }
+        if (OnkosMessageBox.Show(this, "¿Eliminar " + item.Text + " y sus archivos de la biblioteca local?", "Eliminar impresora", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        try { Directory.Delete(Path.Combine(_library, key), true); } catch (Exception ex) { OnkosMessageBox.Show(this, ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
         _metadata.Remove(key); SaveMetadata(); RefreshList();
     }
 
@@ -468,7 +468,7 @@ internal sealed class PrinterManagerForm : UserControl
     private void RenameSelected()
     {
         var item = _list.SelectedItems.Count > 0 ? _list.SelectedItems[0] : null;
-        if (item?.Tag is not string key || !_metadata.TryGetValue(key, out var meta)) { MessageBox.Show(this, "Selecciona una impresora."); return; }
+        if (item?.Tag is not string key || !_metadata.TryGetValue(key, out var meta)) { OnkosMessageBox.Show(this, "Selecciona una impresora."); return; }
         string? value = Prompt("Nombre visible de la impresora:", meta.DisplayName);
         if (string.IsNullOrWhiteSpace(value)) return;
         meta.DisplayName = value.Trim(); SaveMetadata(); RefreshList();
@@ -477,7 +477,7 @@ internal sealed class PrinterManagerForm : UserControl
     private void ChangeLogo(ListViewItem? selectedItem = null)
     {
         var item = selectedItem ?? (_list.SelectedItems.Count > 0 ? _list.SelectedItems[0] : null);
-        if (item?.Tag is not string key || !_metadata.TryGetValue(key, out var meta)) { MessageBox.Show(this, "Selecciona una impresora."); return; }
+        if (item?.Tag is not string key || !_metadata.TryGetValue(key, out var meta)) { OnkosMessageBox.Show(this, "Selecciona una impresora."); return; }
         using var dialog = new OpenFileDialog { Title = "Selecciona el logo de la impresora", Filter = "Imágenes (*.png;*.jpg;*.jpeg;*.bmp;*.ico)|*.png;*.jpg;*.jpeg;*.bmp;*.ico" };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         try
@@ -486,7 +486,7 @@ internal sealed class PrinterManagerForm : UserControl
             using var image = Image.FromFile(dialog.FileName); using var bitmap = new Bitmap(image, new Size(64, 64)); bitmap.Save(target, System.Drawing.Imaging.ImageFormat.Png);
             meta.LogoPath = target; SaveMetadata(); RefreshList();
         }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "ONKOS · Logo", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        catch (Exception ex) { OnkosMessageBox.Show(this, ex.Message, "ONKOS · Logo", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
 
     private void RefreshList()
