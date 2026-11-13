@@ -544,9 +544,10 @@ internal sealed class BackupForm : UserControl
         string root;
         if (!string.IsNullOrWhiteSpace(previousBackup))
         {
-            var choice = MessageBox.Show(this,
+            var choice = OnkosMessageBox.AskYesNoCancel(this,
+                "ONKOS — Reanudar respaldo",
                 $"Se encontró un respaldo anterior de este equipo:\n\n{previousBackup}\n\n¿Deseas continuar ese respaldo?\n\nSí = reanudar el respaldo anterior\nNo = crear un respaldo nuevo\nCancelar = no iniciar",
-                "ONKOS — Reanudar respaldo", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                "Sí, reanudar", "No, crear nuevo", "Cancelar");
             if (choice == DialogResult.Cancel) return;
             root = choice == DialogResult.Yes
                 ? previousBackup!
