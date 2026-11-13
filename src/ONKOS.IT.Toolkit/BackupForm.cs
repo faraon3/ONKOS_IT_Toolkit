@@ -18,6 +18,8 @@ internal sealed class BackupForm : UserControl
 {
     public event Action? BackRequested;
     private readonly ListView _sources = new();
+    private readonly FlowLayoutPanel _sourceGrid = new() { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(8, 6, 8, 6), BackColor = Surface };
+    private readonly Dictionary<string, CheckBox> _sourceChecks = new(StringComparer.OrdinalIgnoreCase);
     private readonly ImageList _folderIcons = new();
     private readonly ManualDriveComboBox _drivePicker = new();
     private readonly Label _destination = new();
@@ -118,7 +120,8 @@ internal sealed class BackupForm : UserControl
         StyleButton(_selectAllFolders, true);
         _selectAllFolders.Click += (_, _) => SetAllFoldersSelected(_sources.Items.Cast<ListViewItem>().Any(item => !IsItemChecked(item)));
         selectionBar.Controls.Add(_selectAllFolders);
-        sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons); sourcesGroup.Controls.Add(selectionBar);
+        _sources.Visible = false;
+        sourcesGroup.Controls.Add(_sourceGrid); sourcesGroup.Controls.Add(sourceButtons); sourcesGroup.Controls.Add(selectionBar);
         UpdateSelectAllButtonText();
 
         var destinationGroup = MakeGroup("02  ·  Elige dónde guardar el respaldo");
@@ -429,7 +432,10 @@ internal sealed class BackupForm : UserControl
         try
         {
             if (item.Tag is FolderEntry entry)
+            {
                 item.Text = $"{entry.Label} ({FormatSize(size)})";
+                if (_sourceChecks.TryGetValue(entry.Path, out var check) && !check.IsDisposed) check.Text = item.Text;
+            }
             if (item.SubItems.Count > 1)
                 item.SubItems[1].Text = ShortenFolderPath(path);
             _sources.Invalidate(item.Bounds);
@@ -521,8 +527,30 @@ internal sealed class BackupForm : UserControl
         var entry = new FolderEntry(label, path, !string.IsNullOrWhiteSpace(iconKey), selected, icon);
         var item = new ListViewItem(label) { Tag = entry };
         item.SubItems.Add(path); _sources.Items.Add(item);
+        AddSourceCard(entry);
         if (selected) _ = UpdateFolderSizeAsync(item, (FolderEntry)item.Tag!);
         UpdateSelectAllButtonText();
+    }
+    private void AddSourceCard(FolderEntry entry)
+    {
+        int cardWidth = Math.Max(190, (_sourceGrid.ClientSize.Width - 42) / 4);
+        var card = new Panel { Width = cardWidth, Height = 54, Margin = new Padding(4, 3, 4, 3), BackColor = Surface2, Padding = new Padding(5, 3, 5, 2) };
+        var check = new CheckBox { AutoSize = false, Dock = DockStyle.Top, Height = 23, Text = entry.Label, Checked = entry.Selected, ForeColor = TextMain, BackColor = Surface2, Font = new Font("Segoe UI", 9.2F, FontStyle.Bold), CheckAlign = ContentAlignment.MiddleLeft, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(3, 0, 0, 0), Cursor = Cursors.Hand };
+        var path = new Label { Dock = DockStyle.Fill, Text = ShortenFolderPath(entry.Path), ForeColor = TextMuted, BackColor = Surface2, Font = new Font("Segoe UI", 7.3F), AutoEllipsis = true, Padding = new Padding(25, 0, 0, 0) };
+        check.CheckedChanged += (_, _) => {
+            entry.Selected = check.Checked;
+            var listItem = _sources.Items.Cast<ListViewItem>().FirstOrDefault(x => x.Tag is FolderEntry fe && ReferenceEquals(fe, entry));
+            if (check.Checked && listItem != null) _ = UpdateFolderSizeAsync(listItem, entry);
+            UpdateSelectAllButtonText();
+        };
+        card.Controls.Add(path); card.Controls.Add(check); _sourceGrid.Controls.Add(card); _sourceChecks[entry.Path] = check;
+        _sourceGrid.Resize -= SourceGridResize; _sourceGrid.Resize += SourceGridResize;
+    }
+
+    private void SourceGridResize(object? sender, EventArgs e)
+    {
+        int cardWidth = Math.Max(190, (_sourceGrid.ClientSize.Width - 42) / 4);
+        foreach (Control card in _sourceGrid.Controls) card.Width = cardWidth;
     }
     private int GetIconIndex(string key, string path)
     {
@@ -1876,6 +1904,7 @@ $log | Set-Content -LiteralPath $env:ONKOS_IPV4_REPORT -Encoding UTF8
         if (item.Tag is FolderEntry entry)
         {
             entry.Selected = selected;
+            if (_sourceChecks.TryGetValue(entry.Path, out var check) && !check.IsDisposed && check.Checked != selected) check.Checked = selected;
             item.ListView?.Invalidate(item.Bounds);
         }
     }
