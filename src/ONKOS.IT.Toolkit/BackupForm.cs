@@ -183,25 +183,37 @@ internal sealed class BackupForm : UserControl
         var results = await Task.Run(() => items.Select(item =>
         {
             var entry = (FolderEntry)item.Tag!;
-            return (Item: item, Entry: entry, Size: GetFolderSizeSafe(entry.Path));
+            return (Item: item, Entry: entry, Scan: ScanFolderContents(entry.Path));
         }).ToList());
 
-        if (IsDisposed) return;
+        if (IsDisposed || Disposing) return;
 
         int selectedCount = 0;
         int emptyCount = 0;
+        int inaccessibleCount = 0;
         foreach (var result in results)
         {
-            _sizeCache[result.Entry.Path] = result.Size;
-            result.Item.Checked = result.Size > 0;
-            ApplySizeToItem(result.Item, result.Entry.Path, result.Size);
-            if (result.Size > 0) selectedCount++;
+            var scan = result.Scan;
+            if (scan.AccessError)
+            {
+                // No marcar como vacía una carpeta cuyo contenido no se pudo revisar.
+                result.Item.Checked = false;
+                result.Item.SubItems[1].Text = result.Entry.Path + "  ·  No se pudo analizar";
+                inaccessibleCount++;
+                WriteLog($"No se pudo analizar (sin selección automática): {result.Entry.Path}");
+                continue;
+            }
+
+            _sizeCache[result.Entry.Path] = scan.TotalBytes;
+            result.Item.Checked = scan.TotalBytes > 0;
+            ApplySizeToItem(result.Item, result.Entry.Path, scan.TotalBytes);
+            if (scan.TotalBytes > 0) selectedCount++;
             else emptyCount++;
         }
 
         UpdateSelectAllButtonText();
-        _status.Text = $"Análisis terminado: {selectedCount} carpeta(s) con datos seleccionadas";
-        WriteLog($"Análisis inicial terminado. Con información: {selectedCount}; vacías o sin datos legibles: {emptyCount}. Revisa la selección antes de iniciar el respaldo.");
+        _status.Text = $"Análisis terminado: {selectedCount} con datos · {emptyCount} vacías · {inaccessibleCount} sin acceso";
+        WriteLog($"Análisis inicial terminado. Con archivos y peso: {selectedCount}; carpetas vacías (0 B): {emptyCount}; no analizadas por permisos u otros errores: {inaccessibleCount}. Solo las carpetas con peso mayor que 0 B quedaron preseleccionadas.");
     }
 
     private void LayoutActions()
@@ -373,12 +385,13 @@ internal sealed class BackupForm : UserControl
         catch { }
     }
 
-    private static long GetFolderSizeSafe(string path)
+    private static (long TotalBytes, bool AccessError) ScanFolderContents(string path)
     {
         long total = 0;
+        bool accessError = false;
         try
         {
-            if (!Directory.Exists(path)) return 0;
+            if (!Directory.Exists(path)) return (0, true);
 
             var pending = new Stack<string>();
             pending.Push(path);
@@ -390,10 +403,11 @@ internal sealed class BackupForm : UserControl
                 {
                     foreach (string file in Directory.EnumerateFiles(current))
                     {
-                        try { total += new FileInfo(file).Length; } catch { }
+                        try { total += new FileInfo(file).Length; }
+                        catch { accessError = true; }
                     }
                 }
-                catch { }
+                catch { accessError = true; }
 
                 try
                 {
@@ -405,14 +419,21 @@ internal sealed class BackupForm : UserControl
                             if ((attributes & FileAttributes.ReparsePoint) == 0)
                                 pending.Push(directory);
                         }
-                        catch { }
+                        catch { accessError = true; }
                     }
                 }
-                catch { }
+                catch { accessError = true; }
             }
         }
-        catch { }
-        return total;
+        catch { accessError = true; }
+
+        return (total, accessError);
+    }
+
+    private static long GetFolderSizeSafe(string path)
+    {
+        // Utilizado para mostrar el tamaño cuando se marca manualmente una carpeta.
+        return ScanFolderContents(path).TotalBytes;
     }
 
     private static string FormatSize(long bytes)
