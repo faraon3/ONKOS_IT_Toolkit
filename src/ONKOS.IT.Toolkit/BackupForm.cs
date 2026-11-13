@@ -101,12 +101,27 @@ internal sealed class BackupForm : UserControl
         StyleButton(_selectAllFolders, true);
         _selectAllFolders.Click += (_, _) => SetAllFoldersSelected(_sources.Items.Cast<ListViewItem>().Any(item => !item.Checked));
         selectionBar.Controls.Add(_selectAllFolders);
-        addUser.Location = new Point(168, 3);
+        // La opción de red queda visible en la misma fila, entre Seleccionar todo y Otro usuario.
+        StyleCheck(_ipv4);
+        _ipv4.SetBounds(390, 3, 225, 29);
+        string networkSaveIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "GuardarConfiguracionRed.png");
+        if (File.Exists(networkSaveIcon))
+        {
+            try
+            {
+                using var networkImage = Image.FromFile(networkSaveIcon);
+                var networkPicture = new PictureBox { Image = new Bitmap(networkImage, new Size(20, 20)), SizeMode = PictureBoxSizeMode.Zoom, Location = new Point(370, 7), Size = new Size(20, 20), BackColor = Color.Transparent };
+                selectionBar.Controls.Add(networkPicture);
+            }
+            catch { }
+        }
+        selectionBar.Controls.Add(_ipv4);
+        addUser.Location = new Point(625, 3);
         selectionBar.Controls.Add(addUser);
         sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons); sourcesGroup.Controls.Add(selectionBar);
         UpdateSelectAllButtonText();
 
-        var destinationGroup = MakeGroup("03  ·  Elige dónde guardar el respaldo");
+        var destinationGroup = MakeGroup("02  ·  Elige dónde guardar el respaldo");
         destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 72;
         var destinationRow = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
         _drivePicker.DropDownStyle = ComboBoxStyle.DropDownList; StyleCombo(_drivePicker); _drivePicker.DrawMode = DrawMode.OwnerDrawFixed; _drivePicker.ItemHeight = 25; _drivePicker.DrawItem += DrawDriveItem;
@@ -139,36 +154,7 @@ internal sealed class BackupForm : UserControl
         destinationRow.Controls.Add(_drivePicker); destinationRow.Controls.Add(choose); destinationRow.Controls.Add(_destination);
         destinationGroup.Controls.Add(destinationRow); RefreshDrives();
 
-        var optionsGroup = new Panel { Dock = DockStyle.Top, Height = 42, BackColor = Surface, Margin = new Padding(0, 0, 0, 8) };
-        var optionsToggle = new Button { Text = "Opciones adicionales  ▸", Location = new Point(8, 5), Size = new Size(280, 32), TextAlign = ContentAlignment.MiddleLeft, ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(8, 0, 6, 0) };
-        StyleButton(optionsToggle, true);
-        string advancedIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "OpcionesAvanzadas.png");
-        if (File.Exists(advancedIcon)) { using var icon = Image.FromFile(advancedIcon); optionsToggle.Image = new Bitmap(icon, new Size(20, 20)); }
-        var options = new Panel { Location = new Point(8, 42), Height = 42, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, BackColor = Surface };
-        StyleCheck(_ipv4);
-        _ipv4.SetBounds(34, 4, 290, 32);
-        string networkSaveIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "GuardarConfiguracionRed.png");
-        if (File.Exists(networkSaveIcon))
-        {
-            try
-            {
-                using var icon = new Icon(networkSaveIcon);
-                var iconPicture = new PictureBox { Image = icon.ToBitmap(), SizeMode = PictureBoxSizeMode.Zoom, Location = new Point(7, 8), Size = new Size(22, 22), BackColor = Color.Transparent };
-                options.Controls.Add(iconPicture);
-            }
-            catch { }
-        }
-        options.Controls.Add(_ipv4);
-        options.Visible = false;
-        optionsToggle.Click += (_, _) =>
-        {
-            options.Visible = !options.Visible;
-            optionsGroup.Height = options.Visible ? 84 : 42;
-            optionsToggle.Text = options.Visible ? "Opciones adicionales  ▾" : "Opciones adicionales  ▸";
-        };
-        optionsGroup.Controls.Add(options); optionsGroup.Controls.Add(optionsToggle);
-
-        var progressGroup = MakeGroup("04  ·  Progreso de la copia");
+        var progressGroup = MakeGroup("03  ·  Progreso de la copia");
         progressGroup.Dock = DockStyle.Top; progressGroup.Height = 112;
         var progressPanel = new Panel { Dock = DockStyle.Top, Height = 32, Padding = new Padding(3), BackColor = Surface2 };
         _bar.Dock = DockStyle.Fill; _bar.Value = 0;
@@ -206,7 +192,7 @@ internal sealed class BackupForm : UserControl
         _restore.Click += async (_, _) => await RestoreBackupAsync();
         _cancel.Click += (_, _) => { try { _cts?.Cancel(); } catch { } };
         _actionBar.Controls.Add(_run); _actionBar.Controls.Add(_cancel); _actionBar.Controls.Add(_restore);
-        content.Controls.Add(logGroup); content.Controls.Add(progressGroup); content.Controls.Add(destinationGroup); content.Controls.Add(optionsGroup); content.Controls.Add(sourcesGroup);
+        content.Controls.Add(logGroup); content.Controls.Add(progressGroup); content.Controls.Add(destinationGroup); content.Controls.Add(sourcesGroup);
         Controls.Add(content); Controls.Add(_actionBar); Controls.Add(header);
 
         ApplyLastSession();
