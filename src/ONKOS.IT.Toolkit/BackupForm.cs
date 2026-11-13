@@ -18,7 +18,7 @@ internal sealed class BackupForm : UserControl
 {
     public event Action? BackRequested;
     private readonly ListView _sources = new();
-    private readonly FlowLayoutPanel _sourceGrid = new() { Dock = DockStyle.Fill, AutoScroll = true, WrapContents = true, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(8, 6, 8, 6), BackColor = Surface };
+    private readonly FlowLayoutPanel _sourceGrid = new() { Dock = DockStyle.Top, AutoScroll = false, WrapContents = true, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(8, 6, 8, 6), BackColor = Surface };
     private readonly Dictionary<string, Panel> _sourceCards = new(StringComparer.OrdinalIgnoreCase);
     private readonly ImageList _folderIcons = new();
     private readonly ManualDriveComboBox _drivePicker = new();
@@ -626,14 +626,24 @@ internal sealed class BackupForm : UserControl
 
     private void UpdateSourceGridLayout()
     {
-        // Ajusta el alto al número real de filas y evita espacio vacío innecesario.
+        // El panel ya no usa Dock=Fill ni AutoScroll: su altura se ajusta al
+        // número de filas reales para que no quede un área vacía con scrollbar.
         int count = _sourceGrid.Controls.Count;
-        int rows = Math.Max(1, (int)Math.Ceiling(count / 4.0));
-        int gridHeight = rows * 46 + 8;
-        _sourceGrid.MinimumSize = new Size(0, gridHeight);
+        int columns = 4;
+        int rows = count == 0 ? 1 : (int)Math.Ceiling(count / (double)columns);
+        int rowHeight = 46;
+        int gridHeight = rows * rowHeight + _sourceGrid.Padding.Vertical;
+
+        _sourceGrid.Dock = DockStyle.Top;
+        _sourceGrid.AutoScroll = false;
+        _sourceGrid.MinimumSize = Size.Empty;
         _sourceGrid.Height = gridHeight;
-        if (_sourceGrid.Parent is Control group)
-            group.Height = gridHeight + 40 + 46 + 28;
+
+        if (_sourceGrid.Parent is GroupBox group)
+        {
+            // Alto total = selector + barra superior + botones inferiores + título/bordes.
+            group.Height = gridHeight + 40 + 46 + 38;
+        }
     }
     private int GetIconIndex(string key, string path)
     {
