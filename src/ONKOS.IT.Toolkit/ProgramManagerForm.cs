@@ -28,6 +28,7 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly Button _addProgram = new() { Text = "+  AGREGAR PROGRAMA" };
     private readonly Button _remove = new() { Text = "ELIMINAR PROGRAMA" };
     private readonly Button _back = new() { Text = "‹  VOLVER AL INICIO" };
+    private readonly Button _selectAll = new() { Text = "Seleccionar todo" };
     private readonly TextBox _search = new() { Width = 300, PlaceholderText = "Buscar programa..." };
     private readonly Button _clearSearch = new() { Text = "×", Width = 34, Height = 32, Font = new Font("Segoe UI", 16F, FontStyle.Bold) };
     private readonly Dictionary<string, ProgramMeta> _metadata = new(StringComparer.OrdinalIgnoreCase);
@@ -59,7 +60,10 @@ internal sealed class ProgramManagerForm : UserControl
         var group = UiHelpers.MakeGroup("01  ·  Biblioteca de programas  |  " + _architectureLabel); group.Dock = DockStyle.Fill;
 
         var toolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = UiColors.Surface };
-        var searchBox = new Panel { Bounds = new Rectangle(10, 6, 390, 36), BackColor = UiColors.Surface2 };
+        _selectAll.SetBounds(10, 6, 150, 36);
+        UiHelpers.StyleButton(_selectAll, true);
+        _selectAll.Click += (_, _) => SetAllVisibleProgramsChecked(!_list.Items.Cast<ListViewItem>().All(item => item.Tag is string p && _checkedPaths.Contains(p)));
+        var searchBox = new Panel { Bounds = new Rectangle(170, 6, 390, 36), BackColor = UiColors.Surface2 };
         searchBox.Paint += (_, e) =>
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -85,6 +89,7 @@ internal sealed class ProgramManagerForm : UserControl
         _search.GotFocus += (_, _) => searchBox.Invalidate();
         _search.LostFocus += (_, _) => searchBox.Invalidate();
         searchBox.Controls.Add(searchIcon); searchBox.Controls.Add(_search); searchBox.Controls.Add(_clearSearch);
+        toolbar.Controls.Add(_selectAll);
         toolbar.Controls.Add(searchBox);
 
         _list.BackColor = UiColors.Surface; _list.ForeColor = UiColors.TextMain; _list.Font = new Font("Segoe UI", 10F); _list.SmallImageList = _images;
@@ -473,7 +478,28 @@ internal sealed class ProgramManagerForm : UserControl
 
         _list.EndUpdate();
         _list.Invalidate();
+        UpdateSelectAllButtonText();
         _status.Text = $"Windows detectado: {_architectureLabel}.";
+    }
+
+    private void SetAllVisibleProgramsChecked(bool selected)
+    {
+        foreach (ListViewItem item in _list.Items)
+        {
+            if (item.Tag is not string path) continue;
+            if (selected) _checkedPaths.Add(path);
+            else _checkedPaths.Remove(path);
+        }
+        _list.Invalidate();
+        UpdateSelectAllButtonText();
+    }
+
+    private void UpdateSelectAllButtonText()
+    {
+        if (_selectAll.IsDisposed) return;
+        bool allSelected = _list.Items.Count > 0 && _list.Items.Cast<ListViewItem>()
+            .All(item => item.Tag is string path && _checkedPaths.Contains(path));
+        _selectAll.Text = allSelected ? "Deseleccionar todo" : "Seleccionar todo";
     }
 
     private void SetProgress(int value, string caption)
