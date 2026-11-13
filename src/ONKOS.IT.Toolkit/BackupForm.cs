@@ -115,19 +115,26 @@ internal sealed class BackupForm : UserControl
         StyleButton(optionsToggle, true);
         string advancedIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "OpcionesAvanzadas.png");
         if (File.Exists(advancedIcon)) { using var icon = Image.FromFile(advancedIcon); optionsToggle.Image = new Bitmap(icon, new Size(20, 20)); }
-        var options = new Panel { Location = new Point(8, 42), Height = 94, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, BackColor = Surface };
+        var options = new Panel { Location = new Point(8, 42), Height = 42, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, BackColor = Surface };
         StyleCheck(_ipv4);
-        _ipv4.SetBounds(8, 4, 270, 32);
-        var nameLabel = new Label { Text = "Nombre de la copia (opcional)", ForeColor = TextMain, Font = new Font("Segoe UI", 9F, FontStyle.Bold), AutoSize = true, Location = new Point(8, 43) };
-        _backupLabel.SetBounds(8, 65, 850, 30); _backupLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-        _backupLabel.PlaceholderText = "Ejemplo: Recepcion_Principal";
-        StyleTextBox(_backupLabel);
-        options.Controls.Add(_ipv4); options.Controls.Add(nameLabel); options.Controls.Add(_backupLabel);
+        _ipv4.SetBounds(34, 4, 290, 32);
+        string networkSaveIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "GuardarConfiguracionRed.ico");
+        if (File.Exists(networkSaveIcon))
+        {
+            try
+            {
+                using var icon = new Icon(networkSaveIcon);
+                var iconPicture = new PictureBox { Image = icon.ToBitmap(), SizeMode = PictureBoxSizeMode.Zoom, Location = new Point(7, 8), Size = new Size(22, 22), BackColor = Color.Transparent };
+                options.Controls.Add(iconPicture);
+            }
+            catch { }
+        }
+        options.Controls.Add(_ipv4);
         options.Visible = false;
         optionsToggle.Click += (_, _) =>
         {
             options.Visible = !options.Visible;
-            optionsGroup.Height = options.Visible ? 145 : 42;
+            optionsGroup.Height = options.Visible ? 84 : 42;
             optionsToggle.Text = options.Visible ? "Opciones adicionales  ▾" : "Opciones adicionales  ▸";
         };
         optionsGroup.Controls.Add(options); optionsGroup.Controls.Add(optionsToggle);
@@ -680,6 +687,58 @@ internal sealed class BackupForm : UserControl
         if (dialog.ShowDialog(this) == DialogResult.OK) _destination.Text = dialog.SelectedPath;
     }
 
+    private bool TryPromptBackupName(out string backupName)
+    {
+        backupName = string.Empty;
+        using var dialog = new Form
+        {
+            Text = "Nombre del respaldo",
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            ShowInTaskbar = false,
+            ClientSize = new Size(430, 160),
+            BackColor = Surface,
+            ForeColor = TextMain,
+            Font = new Font("Segoe UI", 9.5F)
+        };
+
+        var label = new Label
+        {
+            Text = "Escribe un nombre para identificar esta copia (opcional):",
+            AutoSize = false,
+            Location = new Point(18, 18),
+            Size = new Size(394, 28),
+            ForeColor = TextMain
+        };
+        var input = new TextBox
+        {
+            Location = new Point(18, 52),
+            Size = new Size(394, 30),
+            Text = _backupLabel.Text,
+            BackColor = Surface2,
+            ForeColor = TextMain,
+            BorderStyle = BorderStyle.FixedSingle,
+            Font = new Font("Segoe UI", 10F)
+        };
+        var accept = new Button { Text = "CONTINUAR", DialogResult = DialogResult.OK, Size = new Size(120, 34), Location = new Point(164, 108) };
+        StyleButton(accept, false);
+        var cancel = new Button { Text = "CANCELAR", DialogResult = DialogResult.Cancel, Size = new Size(120, 34), Location = new Point(292, 108) };
+        StyleButton(cancel, true);
+        dialog.Controls.Add(label);
+        dialog.Controls.Add(input);
+        dialog.Controls.Add(accept);
+        dialog.Controls.Add(cancel);
+        dialog.AcceptButton = accept;
+        dialog.CancelButton = cancel;
+        input.SelectAll();
+
+        if (dialog.ShowDialog(this) != DialogResult.OK) return false;
+        backupName = input.Text.Trim();
+        return true;
+    }
+
     private async Task StartBackupAsync()
     {
         if (_busy) return;
@@ -707,9 +766,11 @@ internal sealed class BackupForm : UserControl
         foreach (var f in selected)
             if (IsSameOrChild(dest, f.Path)) { OnkosMessageBox.Show(this, $"El destino está dentro de la carpeta origen ({f.Label}). Elige otra ubicación.", "Destino no válido", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
 
+        if (!TryPromptBackupName(out string enteredBackupName)) return;
+        _backupLabel.Text = enteredBackupName;
         SaveSession(selected, dest);
 
-        string customPrefix = SafeName(_backupLabel.Text.Trim());
+        string customPrefix = SafeName(enteredBackupName.Trim());
         string folderPrefix = string.IsNullOrWhiteSpace(customPrefix) ? "" : customPrefix + "_";
         string backupPattern = $"{folderPrefix}{Environment.MachineName}_*";
         string? previousBackup = null;
