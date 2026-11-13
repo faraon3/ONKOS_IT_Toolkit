@@ -103,7 +103,9 @@ internal sealed class BackupForm : UserControl
         _drivePicker.SetBounds(10, 8, 330, 34);
         _drivePicker.SelectedIndexChanged += (_, _) => { if (_drivePicker.SelectedItem is DriveChoice d) _destination.Text = d.Root; };
         _drivePicker.DropDown += (_, _) => RefreshDrives();
-        var choose = new Button { Text = "Examinar carpeta / red…", Width = 220, Height = 34, Location = new Point(352, 8) };
+        var choose = new Button { Text = "Examinar carpeta", Width = 190, Height = 34, Location = new Point(352, 8), ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(8, 0, 6, 0) };
+        string browseIconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "ExaminarCarpeta.png");
+        if (File.Exists(browseIconPath)) { try { using var img = Image.FromFile(browseIconPath); choose.Image = new Bitmap(img, new Size(20, 20)); } catch { } }
         StyleButton(choose, true); choose.Click += (_, _) => ChooseDestination();
         _destination.ReadOnly = true; StyleTextBox(_destination);
         _destination.SetBounds(10, 52, 850, 32); _destination.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
@@ -541,7 +543,7 @@ internal sealed class BackupForm : UserControl
         if(e.Index<0)return;
         var drive=(DriveChoice)_drivePicker.Items[e.Index]!;
         e.DrawBackground();
-        string symbol=drive.Type==DriveType.Removable ? "USB / EXTERNO" : drive.Type==DriveType.Network ? "RED" : "DISCO";
+        
         var iconPath=Path.Combine(AppContext.BaseDirectory,"Assets","Unidad_USB.png");
         if(File.Exists(iconPath))
         {
@@ -549,7 +551,7 @@ internal sealed class BackupForm : UserControl
             catch { }
         }
         Color fore=(e.State&DrawItemState.Selected)!=0?Color.White:TextMain;
-        TextRenderer.DrawText(e.Graphics,symbol+"  "+drive.Label,_drivePicker.Font,new Rectangle(e.Bounds.X+28,e.Bounds.Y,e.Bounds.Width-30,e.Bounds.Height),fore,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(e.Graphics,drive.Label,_drivePicker.Font,new Rectangle(e.Bounds.X+28,e.Bounds.Y,e.Bounds.Width-30,e.Bounds.Height),fore,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
         e.DrawFocusRectangle();
     }
     private static GraphicsPath RoundedRect(Rectangle r,int radius)
@@ -660,7 +662,7 @@ internal sealed class BackupForm : UserControl
                     string kind = d.DriveType == DriveType.Removable ? "USB / extraíble"
                         : d.DriveType == DriveType.Network ? "Red"
                         : d.DriveType == DriveType.Fixed ? "Disco fijo / externo" : d.DriveType.ToString();
-                    return new DriveChoice($"{d.Name} · {label} · {kind} · {freeGb} GB libres", d.RootDirectory.FullName, d.DriveType);
+                    return new DriveChoice($"DISCO {d.Name}", d.RootDirectory.FullName, d.DriveType);
                 }
                 catch { return null; }
             })
