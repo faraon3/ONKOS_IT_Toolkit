@@ -955,9 +955,13 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
             .Where(x => !string.IsNullOrWhiteSpace(x.BackupFile) && !string.IsNullOrWhiteSpace(x.OriginalFile))
             .ToList();
 
-        if (files.Count == 0)
+        string structuredNetworkBackup = Path.Combine(backupRoot, "Red", "IPv4_config.json");
+        string legacyNetworkBackup = Path.Combine(backupRoot, "Red", "IPv4_netsh_dump.txt");
+        bool hasNetworkBackup = File.Exists(structuredNetworkBackup) || File.Exists(legacyNetworkBackup);
+
+        if (files.Count == 0 && !hasNetworkBackup)
         {
-            MessageBox.Show(this, "El manifiesto no contiene archivos respaldados correctamente.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, "El manifiesto no contiene archivos respaldados y tampoco se encontró un respaldo de red válido.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 
@@ -1015,11 +1019,19 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
             }
         }
 
-        var overwriteChoice = MessageBox.Show(this,
-            $"Se encontraron {files.Count:N0} archivos respaldados.\n\n¿Deseas reemplazar archivos que ya existan en el destino seleccionado?\n\nSí = reemplazar\nNo = conservar los existentes y omitirlos",
-            "Confirmar restauración", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
-        if (overwriteChoice == DialogResult.Cancel) return;
-        bool overwrite = overwriteChoice == DialogResult.Yes;
+        bool overwrite = false;
+        if (files.Count > 0)
+        {
+            var overwriteChoice = MessageBox.Show(this,
+                $"Se encontraron {files.Count:N0} archivos respaldados.\n\n¿Deseas reemplazar archivos que ya existan en el destino seleccionado?\n\nSí = reemplazar\nNo = conservar los existentes y omitirlos",
+                "Confirmar restauración", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+            if (overwriteChoice == DialogResult.Cancel) return;
+            overwrite = overwriteChoice == DialogResult.Yes;
+        }
+        else
+        {
+            WriteLog("Respaldo de red detectado sin archivos de usuario. Se continuará directamente con la revisión IPv4.");
+        }
 
         _busy = true; _run.Enabled = false; _log.Clear();
         SetProgress(0, files.Count, "Preparando restauración…", "Leyendo manifiesto");
