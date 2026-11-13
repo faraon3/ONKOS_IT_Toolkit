@@ -180,7 +180,7 @@ internal sealed class ProgramManagerForm : UserControl
     {
         try { if (File.Exists(_metadataPath)) { var loaded = JsonSerializer.Deserialize<Dictionary<string, ProgramMeta>>(File.ReadAllText(_metadataPath)); if (loaded != null) foreach (var pair in loaded) _metadata[pair.Key] = pair.Value; } } catch { }
     }
-    private void SaveMetadata() { try { File.WriteAllText(_metadataPath, JsonSerializer.Serialize(_metadata, new JsonSerializerOptions { WriteIndented = true })); } catch (Exception ex) { MessageBox.Show(this, "No se pudo guardar la configuración: " + ex.Message); } }
+    private void SaveMetadata() { try { File.WriteAllText(_metadataPath, JsonSerializer.Serialize(_metadata, new JsonSerializerOptions { WriteIndented = true })); } catch (Exception ex) { OnkosMessageBox.Show(this, "No se pudo guardar la configuración: " + ex.Message); } }
     private string MetaKey(string file) => Path.GetRelativePath(_library, file).Replace('\\', '/');
     private ProgramMeta Meta(string file) { string key = MetaKey(file); if (!_metadata.TryGetValue(key, out var m)) { if (_metadata.TryGetValue(Path.GetFileName(file), out var legacy)) { m = legacy; _metadata.Remove(Path.GetFileName(file)); _metadata[key] = m; } else _metadata[key] = m = new ProgramMeta(); } return m; }
     private string DisplayName(string file) => Meta(file).DisplayName ?? Path.GetFileNameWithoutExtension(file);
@@ -202,7 +202,7 @@ internal sealed class ProgramManagerForm : UserControl
         string selectedExe = Path.GetFullPath(exeDialog.FileName);
         if (!selectedExe.StartsWith(root, StringComparison.OrdinalIgnoreCase))
         {
-            MessageBox.Show(this, "El ejecutable debe estar dentro de la carpeta seleccionada.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            OnkosMessageBox.Show(this, "El ejecutable debe estar dentro de la carpeta seleccionada.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -237,7 +237,7 @@ internal sealed class ProgramManagerForm : UserControl
             SaveMetadata();
             RefreshList();
             SetProgress(100, "Ejecutable guardado: " + displayName);
-            MessageBox.Show(this,
+            OnkosMessageBox.Show(this,
                 "Se agregó únicamente el ejecutable que seleccionaste.\n\nPrograma: " + displayName +
                 "\nArchivo guardado: " + Path.GetFileName(selectedExe),
                 "ONKOS · Programa portable", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -245,7 +245,7 @@ internal sealed class ProgramManagerForm : UserControl
         catch (Exception ex)
         {
             try { if (Directory.Exists(dest)) Directory.Delete(dest, true); } catch { }
-            MessageBox.Show(this, ex.Message, "Error al agregar portable", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            OnkosMessageBox.Show(this, ex.Message, "Error al agregar portable", MessageBoxButtons.OK, MessageBoxIcon.Error);
             SetProgress(0, "No se pudo guardar el ejecutable");
         }
         finally { SetBusy(false); }
@@ -313,7 +313,7 @@ internal sealed class ProgramManagerForm : UserControl
             _status.Text = $"Agregados {added} instalador(es); errores: {failed}.";
             string summary = $"Proceso terminado.\n\nAgregados: {added}\nErrores: {failed}";
             if (errors.Count > 0) summary += "\n\n" + string.Join("\n", errors.Take(8));
-            MessageBox.Show(this, summary, "ONKOS · Agregar programas", MessageBoxButtons.OK,
+            OnkosMessageBox.Show(this, summary, "ONKOS · Agregar programas", MessageBoxButtons.OK,
                 failed == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         finally { SetBusy(false); }
@@ -341,7 +341,7 @@ internal sealed class ProgramManagerForm : UserControl
             using var img = Image.FromFile(dialog.FileName); using var bmp = new Bitmap(img, new Size(64, 64)); bmp.Save(target, System.Drawing.Imaging.ImageFormat.Png);
             Meta(file).LogoPath = target; SaveMetadata(); RefreshList();
         }
-        catch (Exception ex) { MessageBox.Show(this, "No se pudo cargar el logo: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        catch (Exception ex) { OnkosMessageBox.Show(this, "No se pudo cargar el logo: " + ex.Message, "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
     }
 
     private Image LoadProgramImage(string file)
@@ -355,8 +355,8 @@ internal sealed class ProgramManagerForm : UserControl
     private void RemoveSelected()
     {
         var selected = _list.SelectedItems.Cast<ListViewItem>().ToList();
-        if (selected.Count == 0) { MessageBox.Show("Selecciona un instalador de la lista."); return; }
-        if (MessageBox.Show(this, $"¿Eliminar {selected.Count} instalador(es) de la biblioteca?", "Confirmar", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        if (selected.Count == 0) { OnkosMessageBox.Show("Selecciona un instalador de la lista."); return; }
+        if (OnkosMessageBox.Show(this, $"¿Eliminar {selected.Count} instalador(es) de la biblioteca?", "Confirmar", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         foreach (var item in selected) { try { string p = (string)item.Tag!; File.Delete(p); _checkedPaths.Remove(p); _metadata.Remove(MetaKey(p)); } catch { } }
         SaveMetadata(); RefreshList();
     }
@@ -364,9 +364,9 @@ internal sealed class ProgramManagerForm : UserControl
     private async Task InstallSelectedAsync()
     {
         var selected = _list.Items.Cast<ListViewItem>().Where(i => i.Tag is string p && _checkedPaths.Contains(p)).ToList();
-        if (selected.Count == 0) { MessageBox.Show("Marca los programas que deseas ejecutar con la casilla morada."); return; }
+        if (selected.Count == 0) { OnkosMessageBox.Show("Marca los programas que deseas ejecutar con la casilla morada."); return; }
         string confirmText = $"Se ejecutarán {selected.Count} instalador(es), uno a la vez.\n\nSi el instalador pide UAC, acepta para continuar. Cada instalador abrirá su propio asistente si es necesario.\n\n¿Continuar?";
-        if (MessageBox.Show(confirmText, "Ejecutar instaladores", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+        if (OnkosMessageBox.Show(confirmText, "Ejecutar instaladores", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
         SetBusy(true, "Preparando ejecución..."); int ok = 0, failed = 0, completed = 0;
         var failureDetails = new List<string>();
         SetProgress(0, $"Preparando instalación de {selected.Count} programa(s)");
@@ -424,7 +424,7 @@ internal sealed class ProgramManagerForm : UserControl
         string resultMessage = $"Proceso terminado.\n\nEjecutados correctamente: {ok}\nCon error: {failed}";
         if (failureDetails.Count > 0)
             resultMessage += "\n\nDETALLE DE LOS ERRORES:\n" + string.Join("\n\n", failureDetails.Take(10));
-        MessageBox.Show(this, resultMessage, "ONKOS · Resultado", MessageBoxButtons.OK,
+        OnkosMessageBox.Show(this, resultMessage, "ONKOS · Resultado", MessageBoxButtons.OK,
             failed == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         ActivityLog.Write("PROGRAMS", "Ejecutados", failed == 0 ? "OK" : "CON ERRORES", $"OK: {ok} | Errores: {failed}");
     }
