@@ -165,6 +165,42 @@ internal sealed class BackupForm : UserControl
         Controls.Add(content); Controls.Add(_actionBar); Controls.Add(header);
 
         ApplyLastSession();
+        _ = ScanFoldersAndSelectWithDataAsync();
+    }
+
+    private async Task ScanFoldersAndSelectWithDataAsync()
+    {
+        if (_sources.Items.Count == 0) return;
+
+        _status.Text = "Analizando carpetas y buscando archivos...";
+        WriteLog("Análisis inicial: calculando el tamaño de todas las carpetas para preseleccionar solo las que contienen datos.");
+
+        var items = _sources.Items.Cast<ListViewItem>()
+            .Where(item => item.Tag is FolderEntry)
+            .ToList();
+
+        var results = await Task.Run(() => items.Select(item =>
+        {
+            var entry = (FolderEntry)item.Tag!;
+            return (Item: item, Entry: entry, Size: GetFolderSizeSafe(entry.Path));
+        }).ToList());
+
+        if (IsDisposed) return;
+
+        int selectedCount = 0;
+        int emptyCount = 0;
+        foreach (var result in results)
+        {
+            _sizeCache[result.Entry.Path] = result.Size;
+            result.Item.Checked = result.Size > 0;
+            ApplySizeToItem(result.Item, result.Entry.Path, result.Size);
+            if (result.Size > 0) selectedCount++;
+            else emptyCount++;
+        }
+
+        UpdateSelectAllButtonText();
+        _status.Text = $"Análisis terminado: {selectedCount} carpeta(s) con datos seleccionadas";
+        WriteLog($"Análisis inicial terminado. Con información: {selectedCount}; vacías o sin datos legibles: {emptyCount}. Revisa la selección antes de iniciar el respaldo.");
     }
 
     private void LayoutActions()
@@ -338,16 +374,44 @@ internal sealed class BackupForm : UserControl
 
     private static long GetFolderSizeSafe(string path)
     {
+        long total = 0;
         try
         {
-            long total = 0;
-            foreach (var f in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+            if (!Directory.Exists(path)) return 0;
+
+            var pending = new Stack<string>();
+            pending.Push(path);
+            while (pending.Count > 0)
             {
-                try { total += new FileInfo(f).Length; } catch { }
+                string current = pending.Pop();
+
+                try
+                {
+                    foreach (string file in Directory.EnumerateFiles(current))
+                    {
+                        try { total += new FileInfo(file).Length; } catch { }
+                    }
+                }
+                catch { }
+
+                try
+                {
+                    foreach (string directory in Directory.EnumerateDirectories(current))
+                    {
+                        try
+                        {
+                            var attributes = File.GetAttributes(directory);
+                            if ((attributes & FileAttributes.ReparsePoint) == 0)
+                                pending.Push(directory);
+                        }
+                        catch { }
+                    }
+                }
+                catch { }
             }
-            return total;
         }
-        catch { return 0; }
+        catch { }
+        return total;
     }
 
     private static string FormatSize(long bytes)
