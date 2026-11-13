@@ -106,7 +106,7 @@ internal sealed class MainForm : Form
         {
             if (AppPaths.PromptForDataRoot(this))
             {
-                MessageBox.Show(this,
+                OnkosMessageBox.Show(this,
                     "La carpeta de datos cambió. Reinicia la aplicación para que los módulos usen la nueva ruta.",
                     "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
