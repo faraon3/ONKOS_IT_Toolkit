@@ -58,7 +58,7 @@ internal sealed class BackupForm : UserControl
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
         sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 285;
         _folderIcons.ColorDepth = ColorDepth.Depth32Bit; _folderIcons.ImageSize = new Size(24, 24);
-        _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(250, 42); _sources.CheckBoxes = true;
+        _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(250, 42); _sources.CheckBoxes = false;
         // Distribuye los elementos en cuatro columnas para que Chrome y las carpetas agregadas
         // aparezcan hacia la derecha y no queden ocultos debajo de la lista.
         void UpdateSourceTileWidth()
@@ -68,10 +68,11 @@ internal sealed class BackupForm : UserControl
             _sources.TileSize = new Size(tileWidth, 42);
         }
         _sources.Resize += (_, _) => UpdateSourceTileWidth();
-        _sources.FullRowSelect = true; _sources.HideSelection = false; _sources.BorderStyle = BorderStyle.None; _sources.CheckBoxes = true; _sources.OwnerDraw = true;
+        _sources.FullRowSelect = true; _sources.HideSelection = false; _sources.BorderStyle = BorderStyle.None; _sources.CheckBoxes = false; _sources.OwnerDraw = true;
         _sources.DrawColumnHeader += (_, e) => { if (e.Header is null) return; using var brush = new SolidBrush(Purple); using var font = new Font("Segoe UI", 9.5F, FontStyle.Bold); e.Graphics.FillRectangle(brush, e.Bounds); TextRenderer.DrawText(e.Graphics, e.Header.Text ?? string.Empty, font, e.Bounds, Color.White, TextFormatFlags.Left | TextFormatFlags.VerticalCenter); };
         _sources.DrawItem += DrawSourceTile;
         _sources.DrawSubItem += DrawSourceSubItem;
+        _sources.MouseDown += SourceMouseDown;
         _sources.KeyDown += (_, e) => { if (e.KeyCode == Keys.Space && _sources.SelectedItems.Count > 0) { var item = _sources.SelectedItems[0]; ToggleItem(item); e.Handled = true; } };
         _sources.BackColor = Surface; _sources.ForeColor = TextMain; _sources.Font = new Font("Segoe UI", 9.5F);
         _sources.SmallImageList = _folderIcons;
@@ -99,7 +100,7 @@ internal sealed class BackupForm : UserControl
         _selectAllFolders.Anchor = AnchorStyles.Top | AnchorStyles.Left;
         _selectAllFolders.Location = new Point(8, 3);
         StyleButton(_selectAllFolders, true);
-        _selectAllFolders.Click += (_, _) => SetAllFoldersSelected(_sources.Items.Cast<ListViewItem>().Any(item => !item.Checked));
+        _selectAllFolders.Click += (_, _) => SetAllFoldersSelected(_sources.Items.Cast<ListViewItem>().Any(item => !IsItemChecked(item)));
         selectionBar.Controls.Add(_selectAllFolders);
         // La opción de red queda visible en la misma fila, entre Seleccionar todo y Otro usuario.
         StyleCheck(_ipv4);
@@ -227,7 +228,7 @@ internal sealed class BackupForm : UserControl
             if (scan.AccessError)
             {
                 // No marcar como vacía una carpeta cuyo contenido no se pudo revisar.
-                result.Item.Checked = false;
+                SetItemChecked(result.Item, false);
                 result.Item.Text = result.Entry.Label + " (No analizado)";
                 result.Item.SubItems[1].Text = ShortenFolderPath(result.Entry.Path);
                 inaccessibleCount++;
@@ -236,7 +237,7 @@ internal sealed class BackupForm : UserControl
             }
 
             _sizeCache[result.Entry.Path] = scan.TotalBytes;
-            result.Item.Checked = scan.TotalBytes > 0;
+            SetItemChecked(result.Item, scan.TotalBytes > 0);
             ApplySizeToItem(result.Item, result.Entry.Path, scan.TotalBytes);
             if (scan.TotalBytes > 0) selectedCount++;
             else emptyCount++;
@@ -335,7 +336,7 @@ internal sealed class BackupForm : UserControl
             {
                 foreach (ListViewItem item in _sources.Items)
                     if (item.Tag is FolderEntry fe && s.SelectedPaths.Contains(fe.Path, StringComparer.OrdinalIgnoreCase))
-                        item.Checked = true;
+                        SetItemChecked(item, true);
             }
             if (!string.IsNullOrWhiteSpace(s.Destination)) _destination.Text = s.Destination;
             if (!string.IsNullOrWhiteSpace(s.BackupLabel)) _backupLabel.Text = s.BackupLabel;
@@ -359,9 +360,9 @@ internal sealed class BackupForm : UserControl
 
     private void ToggleItem(ListViewItem item)
     {
-        item.Checked = !item.Checked;
+        SetItemChecked(item, !IsItemChecked(item));
         _sources.Invalidate(item.Bounds);
-        if (item.Checked && item.Tag is FolderEntry fe)
+        if (IsItemChecked(item) && item.Tag is FolderEntry fe)
             _ = UpdateFolderSizeAsync(item, fe);
         UpdateSelectAllButtonText();
     }
@@ -370,7 +371,7 @@ internal sealed class BackupForm : UserControl
     {
         foreach (ListViewItem item in _sources.Items)
         {
-            item.Checked = selected;
+            SetItemChecked(item, selected);
             if (selected && item.Tag is FolderEntry folder)
                 _ = UpdateFolderSizeAsync(item, folder);
         }
@@ -384,7 +385,7 @@ internal sealed class BackupForm : UserControl
     private void UpdateSelectAllButtonText()
     {
         if (_selectAllFolders.IsDisposed) return;
-        bool allSelected = _sources.Items.Count > 0 && _sources.Items.Cast<ListViewItem>().All(item => item.Checked);
+        bool allSelected = _sources.Items.Count > 0 && _sources.Items.Cast<ListViewItem>().All(item => IsItemChecked(item));
         _selectAllFolders.Text = allSelected ? "Deseleccionar todo" : "Seleccionar todo";
     }
 
@@ -499,7 +500,7 @@ internal sealed class BackupForm : UserControl
     private void AddListItem(string label, string path, bool selected, string iconKey)
     {
         int icon = GetIconIndex(iconKey, path);
-        var item = new ListViewItem(label, icon) { Checked = selected, Tag = new FolderEntry(label, path, !string.IsNullOrWhiteSpace(iconKey)) };
+        var item = new ListViewItem(label, icon) { Tag = new FolderEntry(label, path, !string.IsNullOrWhiteSpace(iconKey), selected) };
         item.SubItems.Add(path); _sources.Items.Add(item);
         if (selected) _ = UpdateFolderSizeAsync(item, (FolderEntry)item.Tag!);
         UpdateSelectAllButtonText();
@@ -516,8 +517,8 @@ internal sealed class BackupForm : UserControl
         var item = e.Item; if (item is null) return;
         var bounds = e.Bounds; using var bg = new SolidBrush(item.Selected ? Color.FromArgb(58, 46, 78) : Surface); e.Graphics.FillRectangle(bg, bounds);
         int x=bounds.X+8, y=bounds.Y+(bounds.Height-16)/2; var box=new Rectangle(x,y,16,16);
-        using var cb=new SolidBrush(item.Checked ? Purple : Color.FromArgb(46,40,59)); using var pen=new Pen(item.Checked ? PurpleHover : Border,1.2f); using var path=RoundedRect(box,4); e.Graphics.FillPath(cb,path); e.Graphics.DrawPath(pen,path);
-        if(item.Checked){using var check=new Pen(Color.White,2.2f); e.Graphics.DrawLines(check,new[]{new Point(x+3,y+8),new Point(x+6,y+11),new Point(x+13,y+4)});}
+        using var cb=new SolidBrush(IsItemChecked(item) ? Purple : Color.FromArgb(46,40,59)); using var pen=new Pen(IsItemChecked(item) ? PurpleHover : Border,1.2f); using var path=RoundedRect(box,4); e.Graphics.FillPath(cb,path); e.Graphics.DrawPath(pen,path);
+        if(IsItemChecked(item)){using var check=new Pen(Color.White,2.2f); e.Graphics.DrawLines(check,new[]{new Point(x+3,y+8),new Point(x+6,y+11),new Point(x+13,y+4)});}
         if(item.ImageIndex>=0 && _folderIcons.Images.Count>item.ImageIndex){var img=_folderIcons.Images[item.ImageIndex]; if(img!=null)e.Graphics.DrawImage(img,x+23,bounds.Y+(bounds.Height-24)/2,24,24);}
         TextRenderer.DrawText(e.Graphics,item.Text,_sources.Font,new Rectangle(x+52,bounds.Y+2, bounds.Width-58,18),TextMain,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
         string pathText=item.SubItems.Count>1?item.SubItems[1].Text:string.Empty; TextRenderer.DrawText(e.Graphics,pathText,new Font("Segoe UI",7.5F),new Rectangle(x+52,bounds.Y+19,bounds.Width-58,17),TextMuted,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
@@ -532,11 +533,11 @@ internal sealed class BackupForm : UserControl
         {
             int x=e.Bounds.X+8, y=e.Bounds.Y+(e.Bounds.Height-16)/2;
             var box=new Rectangle(x,y,16,16);
-            using var cb=new SolidBrush(e.Item.Checked ? Purple : Color.FromArgb(46,40,59));
-            using var pen=new Pen(e.Item.Checked ? PurpleHover : Border,1.2f);
+            using var cb=new SolidBrush(IsItemChecked(e.Item) ? Purple : Color.FromArgb(46,40,59));
+            using var pen=new Pen(IsItemChecked(e.Item) ? PurpleHover : Border,1.2f);
             using var path=RoundedRect(box,4);
             e.Graphics.FillPath(cb,path); e.Graphics.DrawPath(pen,path);
-            if(e.Item.Checked){using var check=new Pen(Color.White,2.2f); e.Graphics.DrawLines(check,new[]{new Point(x+3,y+8),new Point(x+6,y+11),new Point(x+13,y+4)});}
+            if(IsItemChecked(e.Item)){using var check=new Pen(Color.White,2.2f); e.Graphics.DrawLines(check,new[]{new Point(x+3,y+8),new Point(x+6,y+11),new Point(x+13,y+4)});}
             if (e.Item.ImageIndex >= 0 && _sources.SmallImageList?.Images is not null && e.Item.ImageIndex < _sources.SmallImageList.Images.Count)
             {
                 var icon = _sources.SmallImageList.Images[e.Item.ImageIndex];
@@ -759,7 +760,7 @@ internal sealed class BackupForm : UserControl
     private async Task StartBackupAsync()
     {
         if (_busy) return;
-        var selected = _sources.Items.Cast<ListViewItem>().Where(x => x.Checked).Select(x => (FolderEntry)x.Tag!).ToList();
+        var selected = _sources.Items.Cast<ListViewItem>().Where(x => IsItemChecked(x)).Select(x => (FolderEntry)x.Tag!).ToList();
 
         selected = selected
             .Where(entry => !selected.Any(other =>
@@ -1726,7 +1727,20 @@ $log | Set-Content -LiteralPath $env:ONKOS_IPV4_REPORT -Encoding UTF8
         return stdout;
     }
 
-    private sealed record FolderEntry(string Label, string Path, bool Custom);
+    private sealed class FolderEntry
+    {
+        public string Label { get; }
+        public string Path { get; }
+        public bool Custom { get; }
+        public bool Selected { get; set; }
+        public FolderEntry(string label, string path, bool custom, bool selected = false)
+        { Label = label; Path = path; Custom = custom; Selected = selected; }
+    }
+    private static bool IsItemChecked(ListViewItem item) => item.Tag is FolderEntry entry && entry.Selected;
+    private static void SetItemChecked(ListViewItem item, bool selected)
+    {
+        if (item.Tag is FolderEntry entry) entry.Selected = selected;
+    }
     private sealed record ProfileChoice(string Name, string Path) { public override string ToString() => $"{Name}    —    {Path}"; }
     private sealed record DriveChoice(string Label, string Root, DriveType Type) { public override string ToString() => Label; }
 
