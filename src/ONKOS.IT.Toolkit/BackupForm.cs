@@ -71,8 +71,14 @@ internal sealed class BackupForm : UserControl
         _sources.Resize += (_, _) => { if (_sources.Columns.Count > 1) { _sources.Columns[0].Width = Math.Min(230, Math.Max(170, _sources.ClientSize.Width / 3)); _sources.Columns[1].Width = Math.Max(120, _sources.ClientSize.Width - _sources.Columns[0].Width - 4); } };
         LoadKnownFolders();
         var sourceButtons = new Panel { Dock = DockStyle.Bottom, Height = 42, BackColor = Surface };
-        _addFolder.Text = "+  Agregar carpeta desde cualquier disco"; StyleButton(_addFolder, true);
-        _addFolder.SetBounds(8, 6, 270, 30); _addFolder.Click += (_, _) => AddCustomFolder();
+        _addFolder.Text = "Agregar carpeta"; StyleButton(_addFolder, true);
+        _addFolder.SetBounds(8, 6, 165, 30);
+        _addFolder.ImageAlign = ContentAlignment.MiddleLeft;
+        _addFolder.TextImageRelation = TextImageRelation.ImageBeforeText;
+        _addFolder.Padding = new Padding(8, 0, 6, 0);
+        string addFolderIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "AgregarCarpeta.png");
+        if (File.Exists(addFolderIcon)) { using var icon = Image.FromFile(addFolderIcon); _addFolder.Image = new Bitmap(icon, new Size(20, 20)); }
+        _addFolder.Click += (_, _) => AddCustomFolder();
         var addUser = new Button { Text = "Otro usuario", Location = new Point(286, 6), Size = new Size(190, 30), ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(8, 0, 6, 0) };
         StyleButton(addUser, true);
         string otherUserIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "OtroUsuario.png");
@@ -198,7 +204,8 @@ internal sealed class BackupForm : UserControl
             {
                 // No marcar como vacía una carpeta cuyo contenido no se pudo revisar.
                 result.Item.Checked = false;
-                result.Item.SubItems[1].Text = "No se pudo analizar  ·  " + ShortenFolderPath(result.Entry.Path);
+                result.Item.Text = result.Entry.Label + " (No analizado)";
+                result.Item.SubItems[1].Text = ShortenFolderPath(result.Entry.Path);
                 inaccessibleCount++;
                 WriteLog($"No se pudo analizar (sin selección automática): {result.Entry.Path}");
                 continue;
@@ -378,8 +385,10 @@ internal sealed class BackupForm : UserControl
     {
         try
         {
+            if (item.Tag is FolderEntry entry)
+                item.Text = $"{entry.Label} ({FormatSize(size)})";
             if (item.SubItems.Count > 1)
-                item.SubItems[1].Text = FormatSize(size) + "  ·  " + ShortenFolderPath(path);
+                item.SubItems[1].Text = ShortenFolderPath(path);
             _sources.Invalidate(item.Bounds);
         }
         catch { }
