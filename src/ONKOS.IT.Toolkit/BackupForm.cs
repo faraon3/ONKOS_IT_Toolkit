@@ -1871,7 +1871,7 @@ $log | Set-Content -LiteralPath $env:ONKOS_IPV4_REPORT -Encoding UTF8
         {
             entry.Selected = selected;
             item.ImageIndex = CreateSourceTileIcon(entry.FolderIconIndex, selected);
-            item.Invalidate();
+            item.ListView?.Invalidate(item.Bounds);
         }
     }
     private sealed record ProfileChoice(string Name, string Path) { public override string ToString() => $"{Name}    —    {Path}"; }
