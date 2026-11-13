@@ -56,7 +56,7 @@ internal sealed class BackupForm : UserControl
 
         var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), AutoScroll = true, BackColor = Bg };
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
-        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 285;
+        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 350;
         _folderIcons.ColorDepth = ColorDepth.Depth32Bit; _folderIcons.ImageSize = new Size(24, 24);
         _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(250, 42); _sources.CheckBoxes = false;
         // Distribuye los elementos en cuatro columnas para que Chrome y las carpetas agregadas
@@ -79,9 +79,9 @@ internal sealed class BackupForm : UserControl
         _sources.Columns.Add("Carpeta / ubicación", 220); _sources.Columns.Add("Ruta", 500);
         _sources.Resize += (_, _) => { if (_sources.Columns.Count > 1) { _sources.Columns[0].Width = Math.Min(230, Math.Max(170, _sources.ClientSize.Width / 3)); _sources.Columns[1].Width = Math.Max(120, _sources.ClientSize.Width - _sources.Columns[0].Width - 4); } };
         LoadKnownFolders();
-        var sourceButtons = new Panel { Dock = DockStyle.Bottom, Height = 42, BackColor = Surface };
+        var sourceButtons = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = Surface };
         _addFolder.Text = "Agregar carpeta"; StyleButton(_addFolder, true);
-        _addFolder.SetBounds(8, 6, 165, 30);
+        _addFolder.SetBounds(10, 8, 210, 38);
         _addFolder.ImageAlign = ContentAlignment.MiddleLeft;
         _addFolder.TextImageRelation = TextImageRelation.ImageBeforeText;
         _addFolder.Padding = new Padding(8, 0, 6, 0);
@@ -94,7 +94,21 @@ internal sealed class BackupForm : UserControl
         if (File.Exists(otherUserIcon)) { using var icon = Image.FromFile(otherUserIcon); addUser.Image = new Bitmap(icon, new Size(20, 20)); }
         addUser.Click += (_, _) => AddOtherUserFolders();
         sourceButtons.Controls.Add(_addFolder);
-        var selectionBar = new Panel { Dock = DockStyle.Top, Height = 36, BackColor = Surface, Padding = new Padding(0, 2, 8, 2) };
+        // Fila inferior según el diseño solicitado.
+        addUser.Location = new Point(238, 8);
+        addUser.Size = new Size(240, 38);
+        sourceButtons.Controls.Add(addUser);
+        StyleCheck(_ipv4);
+        _ipv4.SetBounds(510, 8, 330, 38);
+        _ipv4.Text = "Guardar configuración de red";
+        _ipv4.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
+        string networkSaveIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "GuardarConfiguracionRed.png");
+        if (File.Exists(networkSaveIcon))
+        {
+            try { using var networkImage = Image.FromFile(networkSaveIcon); _ipv4.Image = new Bitmap(networkImage, new Size(24, 24)); _ipv4.ImageAlign = ContentAlignment.MiddleLeft; _ipv4.TextImageRelation = TextImageRelation.ImageBeforeText; _ipv4.Padding = new Padding(6, 0, 0, 0); } catch { }
+        }
+        sourceButtons.Controls.Add(_ipv4);
+        var selectionBar = new Panel { Dock = DockStyle.Top, Height = 48, BackColor = Surface, Padding = new Padding(0, 2, 8, 2) };
         _selectAllFolders.Text = "Seleccionar todo";
         _selectAllFolders.Size = new Size(150, 29);
         _selectAllFolders.Anchor = AnchorStyles.Top | AnchorStyles.Left;
@@ -102,23 +116,6 @@ internal sealed class BackupForm : UserControl
         StyleButton(_selectAllFolders, true);
         _selectAllFolders.Click += (_, _) => SetAllFoldersSelected(_sources.Items.Cast<ListViewItem>().Any(item => !IsItemChecked(item)));
         selectionBar.Controls.Add(_selectAllFolders);
-        // La opción de red queda visible en la misma fila, entre Seleccionar todo y Otro usuario.
-        StyleCheck(_ipv4);
-        _ipv4.SetBounds(390, 3, 225, 29);
-        string networkSaveIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "GuardarConfiguracionRed.png");
-        if (File.Exists(networkSaveIcon))
-        {
-            try
-            {
-                using var networkImage = Image.FromFile(networkSaveIcon);
-                var networkPicture = new PictureBox { Image = new Bitmap(networkImage, new Size(20, 20)), SizeMode = PictureBoxSizeMode.Zoom, Location = new Point(370, 7), Size = new Size(20, 20), BackColor = Color.Transparent };
-                selectionBar.Controls.Add(networkPicture);
-            }
-            catch { }
-        }
-        selectionBar.Controls.Add(_ipv4);
-        addUser.Location = new Point(625, 3);
-        selectionBar.Controls.Add(addUser);
         sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons); sourcesGroup.Controls.Add(selectionBar);
         UpdateSelectAllButtonText();
 
@@ -1789,7 +1786,14 @@ internal sealed class PurpleCheckBox : CheckBox
             using var tick = new Pen(Color.White, 2.1F) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
             g.DrawLines(tick, new[] { new Point(x + 3, y + 8), new Point(x + 6, y + 11), new Point(x + 13, y + 4) });
         }
-        TextRenderer.DrawText(g, Text, Font, new Rectangle(29, 0, Math.Max(0, Width - 34), Height), ForeColor, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                int textX = 29;
+        if (Image != null)
+        {
+            int imageSize = Math.Min(24, Height - 6);
+            g.DrawImage(Image, new Rectangle(textX, (Height - imageSize) / 2, imageSize, imageSize));
+            textX += imageSize + 7;
+        }
+        TextRenderer.DrawText(g, Text, Font, new Rectangle(textX, 0, Math.Max(0, Width - textX - 5), Height), ForeColor, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 
     private static GraphicsPath RoundedCheckRect(Rectangle r, int radius)
