@@ -686,7 +686,7 @@ internal sealed class BackupForm : UserControl
     {
         string previousDestination = _destination.Text.Trim();
         _drivePicker.Items.Clear();
-        string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\\";
+        string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\";
         string appRoot = Path.GetPathRoot(AppContext.BaseDirectory) ?? string.Empty;
         var usbLetters = GetUsbPhysicalDriveLetters();
         var drives = new List<DriveChoice>();
@@ -780,7 +780,7 @@ internal sealed class BackupForm : UserControl
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
             string selectedRoot = Path.GetPathRoot(dialog.SelectedPath) ?? "";
-            string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\\";
+            string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\";
             if (string.Equals(selectedRoot, systemRoot, StringComparison.OrdinalIgnoreCase))
             {
                 OnkosMessageBox.ShowWarning("No se permite guardar el respaldo en el disco donde está instalado Windows. Selecciona una memoria USB o un disco externo.");
@@ -865,7 +865,7 @@ internal sealed class BackupForm : UserControl
 
         if (selected.Count == 0 && !_ipv4.Checked) { OnkosMessageBox.Show(this, "Selecciona carpetas o activa la opción de guardar configuración de red.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         string dest = _destination.Text.Trim();
-        string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\\";
+        string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\";
         string destinationRoot = Path.GetPathRoot(dest) ?? "";
         if (string.Equals(destinationRoot, systemRoot, StringComparison.OrdinalIgnoreCase))
         {
