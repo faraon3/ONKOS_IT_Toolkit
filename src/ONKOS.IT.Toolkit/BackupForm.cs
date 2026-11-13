@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
+using System.Management;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -123,10 +124,10 @@ internal sealed class BackupForm : UserControl
         destinationGroup.Dock = DockStyle.Top; destinationGroup.Height = 72;
         var destinationRow = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
         _drivePicker.DropDownStyle = ComboBoxStyle.DropDownList; StyleCombo(_drivePicker); _drivePicker.DrawMode = DrawMode.OwnerDrawFixed; _drivePicker.ItemHeight = 25; _drivePicker.DrawItem += DrawDriveItem;
-        _drivePicker.SetBounds(10, 8, 330, 34);
+        _drivePicker.SetBounds(10, 8, 300, 34);
         _drivePicker.SelectedIndexChanged += (_, _) => { if (_drivePicker.SelectedItem is DriveChoice d) _destination.Text = d.Root; };
         _drivePicker.DropDown += (_, _) => RefreshDrives();
-        var choose = new Button { Text = "Examinar carpeta", Width = 190, Height = 34, Location = new Point(352, 8), ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(8, 0, 6, 0) };
+        var choose = new Button { Text = "Examinar carpeta", Width = 180, Height = 34, Location = new Point(322, 8), ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(8, 0, 6, 0) };
         string browseIconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "ExaminarCarpeta.png");
         if (File.Exists(browseIconPath)) { try { using var img = Image.FromFile(browseIconPath); choose.Image = new Bitmap(img, new Size(20, 20)); } catch { } }
         StyleButton(choose, true); choose.Click += (_, _) => ChooseDestination();
@@ -135,7 +136,7 @@ internal sealed class BackupForm : UserControl
         _destination.BackColor = Surface;
         _destination.ForeColor = TextMain;
         _destination.Font = new Font("Segoe UI", 9F);
-        _destination.SetBounds(552, 8, 480, 34);
+        _destination.SetBounds(514, 8, 480, 34);
         _destination.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         var destinationTip = new ToolTip();
         void FitDestinationPath()
@@ -150,6 +151,19 @@ internal sealed class BackupForm : UserControl
         _destination.Resize += (_, _) => FitDestinationPath();
         _destination.TextChanged += (_, _) => FitDestinationPath();
         destinationRow.Controls.Add(_drivePicker); destinationRow.Controls.Add(choose); destinationRow.Controls.Add(_destination);
+        void LayoutDestinationRow()
+        {
+            int width = destinationRow.ClientSize.Width;
+            int comboWidth = Math.Clamp((int)(width * 0.31), 190, 300);
+            int browseWidth = Math.Clamp((int)(width * 0.19), 155, 180);
+            int x = 10;
+            _drivePicker.SetBounds(x, 8, comboWidth, 34);
+            choose.SetBounds(x + comboWidth + 12, 8, browseWidth, 34);
+            int pathX = x + comboWidth + 12 + browseWidth + 12;
+            _destination.SetBounds(pathX, 8, Math.Max(40, width - pathX - 12), 34);
+        }
+        destinationRow.Resize += (_, _) => LayoutDestinationRow();
+        LayoutDestinationRow();
         destinationGroup.Controls.Add(destinationRow); RefreshDrives();
 
         var progressGroup = MakeGroup("03  ·  Progreso de la copia");
@@ -672,31 +686,37 @@ internal sealed class BackupForm : UserControl
     {
         string previousDestination = _destination.Text.Trim();
         _drivePicker.Items.Clear();
+        string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\\";
+        string appRoot = Path.GetPathRoot(AppContext.BaseDirectory) ?? string.Empty;
+        var usbLetters = GetUsbPhysicalDriveLetters();
+        var drives = new List<DriveChoice>();
 
-        var drives = DriveInfo.GetDrives()
-            .Where(d => d.IsReady)
-            .Select(d =>
-            {
-                try
-                {
-                    long freeGb = d.AvailableFreeSpace / 1024 / 1024 / 1024;
-                    string label = string.IsNullOrWhiteSpace(d.VolumeLabel) ? "(sin etiqueta)" : d.VolumeLabel;
-                    string kind = d.DriveType == DriveType.Removable ? "USB / extraíble"
-                        : d.DriveType == DriveType.Network ? "Red"
-                        : d.DriveType == DriveType.Fixed ? "Disco fijo / externo" : d.DriveType.ToString();
-                    return new DriveChoice($"DISCO {d.Name}", d.RootDirectory.FullName, d.DriveType);
-                }
-                catch { return null; }
-            })
-            .Where(d => d != null)
-            .OrderBy(d => d!.Type == DriveType.Removable ? 0 : d!.Type == DriveType.Fixed ? 1 : d!.Type == DriveType.Network ? 2 : 3)
-            .ToList();
-
-        foreach (var drive in drives)
+        foreach (var d in DriveInfo.GetDrives())
         {
-            if (drive is not null)
-                _drivePicker.Items.Add(drive);
+            try
+            {
+                if (!d.IsReady) continue;
+                string root = d.RootDirectory.FullName;
+                if (string.Equals(root, systemRoot, StringComparison.OrdinalIgnoreCase)) continue;
+
+                bool isAppDrive = !string.IsNullOrWhiteSpace(appRoot) &&
+                    string.Equals(root, appRoot, StringComparison.OrdinalIgnoreCase);
+                bool isRemovable = d.DriveType == DriveType.Removable;
+                bool isUsbFixed = d.DriveType == DriveType.Fixed &&
+                    usbLetters.Contains(root.TrimEnd('\\', ':').ToUpperInvariant());
+                if (!isAppDrive && !isRemovable && !isUsbFixed) continue;
+
+                string label = isAppDrive ? $"UNIDAD DEL PROGRAMA {root}"
+                    : isRemovable ? $"USB {root}" : $"DISCO EXTERNO {root}";
+                drives.Add(new DriveChoice(label, root, d.DriveType));
+            }
+            catch { }
         }
+
+        foreach (var drive in drives
+            .OrderBy(d => d.Root.Equals(appRoot, StringComparison.OrdinalIgnoreCase) ? 0 :
+                          d.Type == DriveType.Removable ? 1 : 2))
+            _drivePicker.Items.Add(drive);
 
         int previousIndex = -1;
         for (int i = 0; i < _drivePicker.Items.Count; i++)
@@ -708,11 +728,66 @@ internal sealed class BackupForm : UserControl
 
         if (previousIndex >= 0) _drivePicker.SelectedIndex = previousIndex;
         else if (_drivePicker.Items.Count > 0) _drivePicker.SelectedIndex = 0;
+        else
+        {
+            _destination.Text = "Conecta una memoria USB o disco duro externo";
+            WriteLog("No se encontraron unidades USB, discos externos ni la unidad donde se ejecuta ONKOS.");
+        }
+    }
+
+    private static HashSet<string> GetUsbPhysicalDriveLetters()
+    {
+        var letters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var usbPartitions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            using (var disks = new ManagementObjectSearcher("SELECT DeviceID, InterfaceType, PNPDeviceID FROM Win32_DiskDrive"))
+            using (var diskResults = disks.Get())
+            {
+                foreach (ManagementObject disk in diskResults)
+                {
+                    string interfaceType = Convert.ToString(disk["InterfaceType"]) ?? "";
+                    string pnp = Convert.ToString(disk["PNPDeviceID"]) ?? "";
+                    if (!interfaceType.Equals("USB", StringComparison.OrdinalIgnoreCase) &&
+                        !pnp.Contains("USB", StringComparison.OrdinalIgnoreCase)) continue;
+                    string deviceId = Convert.ToString(disk["DeviceID"]) ?? "";
+                    string escaped = deviceId.Replace("\\\\", "\\\\\\\\").Replace("'", "\\\\'");
+                    using var partitions = new ManagementObjectSearcher(
+                        $"ASSOCIATORS OF {{Win32_DiskDrive.DeviceID='{escaped}'}} WHERE AssocClass=Win32_DiskDriveToDiskPartition");
+                    using var partitionResults = partitions.Get();
+                    foreach (ManagementObject partition in partitionResults)
+                        usbPartitions.Add(Convert.ToString(partition["DeviceID"]) ?? "");
+                }
+            }
+
+            using var logicalLinks = new ManagementObjectSearcher("SELECT Antecedent, Dependent FROM Win32_LogicalDiskToPartition");
+            using var links = logicalLinks.Get();
+            foreach (ManagementObject link in links)
+            {
+                string antecedent = Convert.ToString(link["Antecedent"]) ?? "";
+                if (!usbPartitions.Any(p => antecedent.Contains(p.Replace("\\\\", "\\\\\\\\"), StringComparison.OrdinalIgnoreCase))) continue;
+                string dependent = Convert.ToString(link["Dependent"]) ?? "";
+                var match = System.Text.RegularExpressions.Regex.Match(dependent, "DeviceID=\"([A-Z]:)\"");
+                if (match.Success) letters.Add(match.Groups[1].Value.TrimEnd(':'));
+            }
+        }
+        catch { /* Si WMI no está disponible, las memorias extraíbles siguen apareciendo por DriveType.Removable. */ }
+        return letters;
     }
     private void ChooseDestination()
     {
         using var dialog = new FolderBrowserDialog { Description = "Selecciona el destino del backup (USB, disco externo o red)." };
-        if (dialog.ShowDialog(this) == DialogResult.OK) _destination.Text = dialog.SelectedPath;
+        if (dialog.ShowDialog(this) == DialogResult.OK)
+        {
+            string selectedRoot = Path.GetPathRoot(dialog.SelectedPath) ?? "";
+            string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\\";
+            if (string.Equals(selectedRoot, systemRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                OnkosMessageBox.ShowWarning("No se permite guardar el respaldo en el disco donde está instalado Windows. Selecciona una memoria USB o un disco externo.");
+                return;
+            }
+            _destination.Text = dialog.SelectedPath;
+        }
     }
 
     private bool TryPromptBackupName(out string backupName)
@@ -790,6 +865,18 @@ internal sealed class BackupForm : UserControl
 
         if (selected.Count == 0 && !_ipv4.Checked) { OnkosMessageBox.Show(this, "Selecciona carpetas o activa la opción de guardar configuración de red.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         string dest = _destination.Text.Trim();
+        string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\\";
+        string destinationRoot = Path.GetPathRoot(dest) ?? "";
+        if (string.Equals(destinationRoot, systemRoot, StringComparison.OrdinalIgnoreCase))
+        {
+            OnkosMessageBox.ShowWarning("El disco de Windows no puede utilizarse como destino del respaldo. Conecta una memoria USB o un disco duro externo.");
+            return;
+        }
+        if (!Directory.Exists(dest))
+        {
+            OnkosMessageBox.ShowWarning("El destino seleccionado no está disponible. Conecta la unidad externa o selecciona otra carpeta.");
+            return;
+        }
         if (string.IsNullOrWhiteSpace(dest) || !Directory.Exists(dest)) { OnkosMessageBox.Show(this, "Selecciona primero el destino del respaldo.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         foreach (var f in selected)
             if (IsSameOrChild(dest, f.Path)) { OnkosMessageBox.Show(this, $"El destino está dentro de la carpeta origen ({f.Label}). Elige otra ubicación.", "Destino no válido", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
