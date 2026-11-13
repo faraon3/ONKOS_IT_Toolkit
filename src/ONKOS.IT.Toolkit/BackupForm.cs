@@ -730,8 +730,10 @@ internal sealed class BackupForm : UserControl
         else if (_drivePicker.Items.Count > 0) _drivePicker.SelectedIndex = 0;
         else
         {
+            _drivePicker.Items.Add("SIN UNIDADES EXTERNAS");
+            _drivePicker.SelectedIndex = 0;
             _destination.Text = "Conecta una memoria USB o disco duro externo";
-            WriteLog("No se encontraron unidades USB, discos externos ni la unidad donde se ejecuta ONKOS.");
+            WriteLog("No se encontraron unidades USB ni discos externos disponibles. El disco de Windows está excluido.");
         }
     }
 
