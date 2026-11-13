@@ -624,6 +624,8 @@ internal sealed class BackupForm : UserControl
 
             int total = Math.Max(fileList.Count + (_ipv4.Checked ? 1 : 0), 1);
             int done = 0, copied = 0, verified = 0;
+            int networkAdaptersBackedUp = 0;
+            bool networkBackupSucceeded = false;
             var manifestRows = new List<string> { CsvRow("Estado", "Verificación", "Origen", "Destino", "Bytes", "Fecha", "Detalle") };
             IProgress<(int done, int total, string message, string current)> progress = new Progress<(int done, int total, string message, string current)>(p => { SetProgress(p.done, p.total, $"Copiando… {p.done} de {p.total}", p.current); if (!string.IsNullOrWhiteSpace(p.message)) WriteLog(p.message); });
             var token = _cts.Token;
@@ -770,6 +772,8 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
                         int adapterCount = jsonDocument.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array
                             ? jsonDocument.RootElement.GetArrayLength() : 0;
                         if (adapterCount == 0) throw new IOException("No se detectaron adaptadores con configuración IPv4 para respaldar.");
+                        networkAdaptersBackedUp = adapterCount;
+                        networkBackupSucceeded = true;
                         File.WriteAllText(Path.Combine(root, "Red", "LEEME.txt"),
                             "Respaldo de red: IPv4_netsh_dump.txt (referencia) e IPv4_config.json (IP, prefijo/máscara, puerta de enlace, DHCP y DNS por adaptador). " +
                             "La restauración estructurada solo aplicará configuraciones a adaptadores cuyo nombre coincida exactamente; revise el mapeo antes de confirmar." +
@@ -833,7 +837,17 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
                     ShowErrorsModal(errorDetails, root);
                 else
                     OnkosMessageBox.Show(this,
-                        $"Respaldo completado correctamente.{Environment.NewLine}{Environment.NewLine}Copiados: {copied}{Environment.NewLine}Reanudados (ya existían): {alreadyDone}{Environment.NewLine}Verificados: {verified}{Environment.NewLine}{Environment.NewLine}{root}",
+                        $"Respaldo completado correctamente.{Environment.NewLine}{Environment.NewLine}" +
+                    $"Archivos copiados: {copied}{Environment.NewLine}" +
+                    $"Archivos reanudados (ya existían): {alreadyDone}{Environment.NewLine}" +
+                    $"Archivos verificados: {verified}{Environment.NewLine}" +
+                    (networkBackupSucceeded
+                        ? $"Configuración de red respaldada: Sí ({networkAdaptersBackedUp} adaptador(es) IPv4){Environment.NewLine}"
+                        : (_ipv4.Checked ? $"Configuración de red respaldada: No{Environment.NewLine}" : "")) +
+                    (fileList.Count == 0 && networkBackupSucceeded
+                        ? $"Tipo de respaldo: Solo configuración de red (no se seleccionaron carpetas).{Environment.NewLine}"
+                        : "") +
+                    $"{Environment.NewLine}{root}",
                         "ONKOS Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
