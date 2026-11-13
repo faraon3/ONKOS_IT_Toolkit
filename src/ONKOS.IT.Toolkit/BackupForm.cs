@@ -36,6 +36,9 @@ internal sealed class BackupForm : UserControl
     private readonly Dictionary<string, long> _sizeCache = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _cts;
     private bool _busy;
+    private readonly System.Windows.Forms.Timer _driveMonitor = new() { Interval = 2000 };
+    private string _selectedDriveRoot = string.Empty;
+    private bool _refreshingDrives;
 
     private static readonly Color Bg = Color.FromArgb(18, 16, 25);
     private static readonly Color Surface = Color.FromArgb(31, 27, 41);
@@ -124,7 +127,7 @@ internal sealed class BackupForm : UserControl
         var destinationRow = new Panel { Dock = DockStyle.Fill, BackColor = Surface };
         _drivePicker.DropDownStyle = ComboBoxStyle.DropDownList; StyleCombo(_drivePicker); _drivePicker.DrawMode = DrawMode.OwnerDrawFixed; _drivePicker.ItemHeight = 25; _drivePicker.DrawItem += DrawDriveItem;
         _drivePicker.SetBounds(10, 8, 300, 34);
-        _drivePicker.SelectedIndexChanged += (_, _) => { if (_drivePicker.SelectedItem is DriveChoice d) _destination.Text = d.Root; };
+        _drivePicker.SelectedIndexChanged += (_, _) => { if (!_refreshingDrives && _drivePicker.SelectedItem is DriveChoice d) { _selectedDriveRoot = d.Root; _destination.Text = d.Root; } };
         _drivePicker.DropDown += (_, _) => RefreshDrives();
         var choose = new Button { Text = "Examinar carpeta", Width = 180, Height = 34, Location = new Point(322, 8), ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(8, 0, 6, 0) };
         string browseIconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "ExaminarCarpeta.png");
@@ -165,7 +168,11 @@ internal sealed class BackupForm : UserControl
         }
         destinationRow.Resize += (_, _) => LayoutDestinationRow();
         LayoutDestinationRow();
-        destinationGroup.Controls.Add(destinationRow); RefreshDrives();
+        destinationGroup.Controls.Add(destinationRow);
+        RefreshDrives();
+        _driveMonitor.Tick += (_, _) => { if (!IsDisposed && IsHandleCreated && Visible) RefreshDrives(); };
+        _driveMonitor.Start();
+        Disposed += (_, _) => { _driveMonitor.Stop(); _driveMonitor.Dispose(); };
 
         var progressGroup = MakeGroup("03  ·  Progreso de la copia");
         progressGroup.Dock = DockStyle.Top; progressGroup.Height = 112;
@@ -655,57 +662,71 @@ internal sealed class BackupForm : UserControl
 
     private void RefreshDrives()
     {
-        string previousDestination = _destination.Text.Trim();
-        _drivePicker.Items.Clear();
-        string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\";
-        string appRoot = Path.GetPathRoot(AppContext.BaseDirectory) ?? string.Empty;
-        var usbLetters = GetUsbPhysicalDriveLetters();
-        var drives = new List<DriveChoice>();
-
-        foreach (var d in DriveInfo.GetDrives())
+        if (_refreshingDrives || IsDisposed) return;
+        _refreshingDrives = true;
+        try
         {
+            string previousSelectedRoot = _selectedDriveRoot;
+            string previousDestination = _destination.Text.Trim();
+            string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\";
+            string appRoot = Path.GetPathRoot(AppContext.BaseDirectory) ?? string.Empty;
+            var usbLetters = GetUsbPhysicalDriveLetters();
+            var drives = new List<DriveChoice>();
+            foreach (var d in DriveInfo.GetDrives())
+            {
+                try
+                {
+                    if (!d.IsReady) continue;
+                    string root = d.RootDirectory.FullName;
+                    if (string.Equals(root, systemRoot, StringComparison.OrdinalIgnoreCase)) continue;
+                    bool isAppDrive = !string.IsNullOrWhiteSpace(appRoot) && string.Equals(root, appRoot, StringComparison.OrdinalIgnoreCase);
+                    bool isRemovable = d.DriveType == DriveType.Removable;
+                    bool isUsbFixed = d.DriveType == DriveType.Fixed && usbLetters.Contains(root.TrimEnd('\\', ':').ToUpperInvariant());
+                    if (!isAppDrive && !isRemovable && !isUsbFixed) continue;
+                    string label = isAppDrive ? $"UNIDAD DEL PROGRAMA {root}" : isRemovable ? $"USB {root}" : $"DISCO EXTERNO {root}";
+                    drives.Add(new DriveChoice(label, root, d.DriveType));
+                }
+                catch { }
+            }
+            _drivePicker.BeginUpdate();
             try
             {
-                if (!d.IsReady) continue;
-                string root = d.RootDirectory.FullName;
-                if (string.Equals(root, systemRoot, StringComparison.OrdinalIgnoreCase)) continue;
-
-                bool isAppDrive = !string.IsNullOrWhiteSpace(appRoot) &&
-                    string.Equals(root, appRoot, StringComparison.OrdinalIgnoreCase);
-                bool isRemovable = d.DriveType == DriveType.Removable;
-                bool isUsbFixed = d.DriveType == DriveType.Fixed &&
-                    usbLetters.Contains(root.TrimEnd('\\', ':').ToUpperInvariant());
-                if (!isAppDrive && !isRemovable && !isUsbFixed) continue;
-
-                string label = isAppDrive ? $"UNIDAD DEL PROGRAMA {root}"
-                    : isRemovable ? $"USB {root}" : $"DISCO EXTERNO {root}";
-                drives.Add(new DriveChoice(label, root, d.DriveType));
+                _drivePicker.Items.Clear();
+                foreach (var drive in drives.OrderBy(d => d.Root.Equals(appRoot, StringComparison.OrdinalIgnoreCase) ? 0 : d.Type == DriveType.Removable ? 1 : 2)) _drivePicker.Items.Add(drive);
+                int previousIndex = -1;
+                for (int i = 0; i < _drivePicker.Items.Count; i++)
+                    if (_drivePicker.Items[i] is DriveChoice choice && string.Equals(choice.Root, previousSelectedRoot, StringComparison.OrdinalIgnoreCase)) { previousIndex = i; break; }
+                if (previousIndex >= 0)
+                {
+                    _drivePicker.SelectedIndex = previousIndex;
+                    _selectedDriveRoot = previousSelectedRoot;
+                }
+                else if (_drivePicker.Items.Count > 0)
+                {
+                    _drivePicker.SelectedIndex = 0;
+                    _selectedDriveRoot = ((_drivePicker.Items[0] as DriveChoice)?.Root) ?? string.Empty;
+                    if (!string.IsNullOrWhiteSpace(previousSelectedRoot))
+                    {
+                        _destination.Clear();
+                        OnkosMessageBox.ShowWarning(this, "Destino desconectado", $"La unidad {previousSelectedRoot} ya no está disponible. Selecciona otra unidad para continuar.");
+                    }
+                }
+                else
+                {
+                    _drivePicker.Items.Add("SIN UNIDADES EXTERNAS");
+                    _drivePicker.SelectedIndex = 0;
+                    _selectedDriveRoot = string.Empty;
+                    if (!string.IsNullOrWhiteSpace(previousSelectedRoot))
+                    {
+                        _destination.Clear();
+                        OnkosMessageBox.ShowWarning(this, "Destino desconectado", $"La unidad {previousSelectedRoot} ya no está disponible. Conecta otra memoria USB o disco duro externo.");
+                    }
+                    else if (string.IsNullOrWhiteSpace(previousDestination)) _destination.Text = "Conecta una memoria USB o disco duro externo";
+                }
             }
-            catch { }
+            finally { _drivePicker.EndUpdate(); }
         }
-
-        foreach (var drive in drives
-            .OrderBy(d => d.Root.Equals(appRoot, StringComparison.OrdinalIgnoreCase) ? 0 :
-                          d.Type == DriveType.Removable ? 1 : 2))
-            _drivePicker.Items.Add(drive);
-
-        int previousIndex = -1;
-        for (int i = 0; i < _drivePicker.Items.Count; i++)
-        {
-            if (_drivePicker.Items[i] is DriveChoice choice &&
-                string.Equals(choice.Root, previousDestination, StringComparison.OrdinalIgnoreCase))
-            { previousIndex = i; break; }
-        }
-
-        if (previousIndex >= 0) _drivePicker.SelectedIndex = previousIndex;
-        else if (_drivePicker.Items.Count > 0) _drivePicker.SelectedIndex = 0;
-        else
-        {
-            _drivePicker.Items.Add("SIN UNIDADES EXTERNAS");
-            _drivePicker.SelectedIndex = 0;
-            _destination.Text = "Conecta una memoria USB o disco duro externo";
-            WriteLog("No se encontraron unidades USB ni discos externos disponibles. El disco de Windows está excluido.");
-        }
+        finally { _refreshingDrives = false; }
     }
 
     private static HashSet<string> GetUsbPhysicalDriveLetters()
