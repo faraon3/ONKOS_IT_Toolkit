@@ -38,8 +38,8 @@ internal static class OnkosMessageBox
     {
         DialogKind kind = icon switch
         {
-            MessageBoxIcon.Warning or MessageBoxIcon.Exclamation => DialogKind.Warning,
-            MessageBoxIcon.Error or MessageBoxIcon.Hand or MessageBoxIcon.Stop => DialogKind.Error,
+            MessageBoxIcon.Warning => DialogKind.Warning,
+            MessageBoxIcon.Error => DialogKind.Error,
             MessageBoxIcon.Question => DialogKind.Confirm,
             _ => DialogKind.Info
         };
