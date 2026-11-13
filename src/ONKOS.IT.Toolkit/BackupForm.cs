@@ -118,7 +118,7 @@ internal sealed class BackupForm : UserControl
         var options = new Panel { Location = new Point(8, 42), Height = 42, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, BackColor = Surface };
         StyleCheck(_ipv4);
         _ipv4.SetBounds(34, 4, 290, 32);
-        string networkSaveIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "GuardarConfiguracionRed.ico");
+        string networkSaveIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "GuardarConfiguracionRed.png");
         if (File.Exists(networkSaveIcon))
         {
             try
