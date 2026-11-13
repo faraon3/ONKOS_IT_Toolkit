@@ -533,9 +533,21 @@ internal sealed class BackupForm : UserControl
     }
     private void AddSourceCard(FolderEntry entry)
     {
-        int cardWidth = Math.Max(190, (_sourceGrid.ClientSize.Width - 42) / 4);
-        var card = new Panel { Width = cardWidth, Height = 54, Margin = new Padding(4, 3, 4, 3), BackColor = Surface2, Padding = new Padding(5, 3, 5, 2) };
-        var check = new CheckBox { AutoSize = false, Dock = DockStyle.Top, Height = 23, Text = entry.Label, Checked = entry.Selected, ForeColor = TextMain, BackColor = Surface2, Font = new Font("Segoe UI", 9.2F, FontStyle.Bold), CheckAlign = ContentAlignment.MiddleLeft, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(3, 0, 0, 0), Cursor = Cursors.Hand };
+        int cardWidth = GetSourceCardWidth();
+        var card = new Panel { Width = cardWidth, Height = 56, Margin = new Padding(3, 3, 3, 3), BackColor = Surface2, Padding = new Padding(5, 3, 5, 2) };
+        var check = new CheckBox
+        {
+            AutoSize = false, Dock = DockStyle.Top, Height = 24,
+            Text = entry.Label, Checked = entry.Selected,
+            ForeColor = TextMain, BackColor = Surface2,
+            Font = new Font("Segoe UI", 9.1F, FontStyle.Bold),
+            FlatStyle = FlatStyle.Flat, UseVisualStyleBackColor = false,
+            CheckAlign = ContentAlignment.MiddleLeft, TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(3, 0, 0, 0), Cursor = Cursors.Hand
+        };
+        check.FlatAppearance.BorderColor = Border;
+        check.FlatAppearance.CheckedBackColor = Purple;
+        check.FlatAppearance.MouseOverBackColor = Color.FromArgb(54, 46, 70);
         var path = new Label { Dock = DockStyle.Fill, Text = ShortenFolderPath(entry.Path), ForeColor = TextMuted, BackColor = Surface2, Font = new Font("Segoe UI", 7.3F), AutoEllipsis = true, Padding = new Padding(25, 0, 0, 0) };
         check.CheckedChanged += (_, _) => {
             entry.Selected = check.Checked;
@@ -547,9 +559,16 @@ internal sealed class BackupForm : UserControl
         _sourceGrid.Resize -= SourceGridResize; _sourceGrid.Resize += SourceGridResize;
     }
 
+    private int GetSourceCardWidth()
+    {
+        int available = Math.Max(0, _sourceGrid.ClientSize.Width - 32);
+        int width = (available / 4) - 8;
+        return Math.Clamp(width, 145, 280);
+    }
+
     private void SourceGridResize(object? sender, EventArgs e)
     {
-        int cardWidth = Math.Max(190, (_sourceGrid.ClientSize.Width - 42) / 4);
+        int cardWidth = GetSourceCardWidth();
         foreach (Control card in _sourceGrid.Controls) card.Width = cardWidth;
     }
     private int GetIconIndex(string key, string path)
