@@ -434,7 +434,12 @@ internal sealed class BackupForm : UserControl
             if (item.Tag is FolderEntry entry)
             {
                 item.Text = $"{entry.Label} ({FormatSize(size)})";
-                if (_sourceChecks.TryGetValue(entry.Path, out var check) && !check.IsDisposed) check.Text = item.Text;
+                if (_sourceCards.TryGetValue(entry.Path, out var card) && !card.IsDisposed)
+                {
+                    var nameLabel = card.Controls.OfType<Label>().FirstOrDefault(x => x.Location.X == 52 && x.Location.Y == 1);
+                    if (nameLabel != null) nameLabel.Text = item.Text;
+                    card.Invalidate();
+                }
             }
             if (item.SubItems.Count > 1)
                 item.SubItems[1].Text = ShortenFolderPath(path);
