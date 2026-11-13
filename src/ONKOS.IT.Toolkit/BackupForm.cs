@@ -683,7 +683,11 @@ internal sealed class BackupForm : UserControl
             .OrderBy(d => d!.Type == DriveType.Removable ? 0 : d!.Type == DriveType.Fixed ? 1 : d!.Type == DriveType.Network ? 2 : 3)
             .ToList();
 
-        foreach (var drive in drives) _drivePicker.Items.Add(drive);
+        foreach (var drive in drives)
+        {
+            if (drive is not null)
+                _drivePicker.Items.Add(drive);
+        }
 
         int previousIndex = -1;
         for (int i = 0; i < _drivePicker.Items.Count; i++)
