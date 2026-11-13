@@ -95,28 +95,6 @@ internal sealed class MainForm : Form
         };
         _footer.Controls.Add(versionLabel);
 
-        var dataButton = new Button
-        {
-            Text = "CAMBIAR CARPETA DE DATOS", Size = new Size(220, 26), Location = new Point(220, 4),
-            FlatStyle = FlatStyle.Flat, BackColor = UiColors.Surface2, ForeColor = UiColors.TextMain,
-            Font = new Font("Segoe UI", 8F, FontStyle.Bold), Cursor = Cursors.Hand
-        };
-        dataButton.FlatAppearance.BorderSize = 0;
-        dataButton.Click += (_, _) =>
-        {
-            if (AppPaths.PromptForDataRoot(this))
-            {
-                OnkosMessageBox.Show(this,
-                    "La carpeta de datos cambió. Reinicia la aplicación para que los módulos usen la nueva ruta.",
-                    "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-        };
-        TooltipHelper.Set(dataButton, "Cambia la carpeta donde se guardan drivers, programas e inventarios. Útil para usar una USB o disco externo.");
-        _footer.Controls.Add(dataButton);
-
-        var pathLabel = new Label { Text = AppPaths.DataRoot, ForeColor = Color.FromArgb(128, 119, 145), AutoSize = false, TextAlign = ContentAlignment.MiddleRight, Width = 500, Height = 34, Anchor = AnchorStyles.Top | AnchorStyles.Right, Location = new Point(Width - 525, 0) };
-        _footer.Controls.Add(pathLabel);
-        _footer.Resize += (_, _) => pathLabel.Left = _footer.ClientSize.Width - pathLabel.Width - 20;
 
         _mainContent.Controls.Add(home);
         Controls.Add(_mainContent);
