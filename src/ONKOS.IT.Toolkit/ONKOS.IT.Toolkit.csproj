@@ -9,9 +9,9 @@
     <AssemblyName>ONKOS_IT_Toolkit</AssemblyName>
     <RootNamespace>ONKOS.IT.Toolkit</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.1.17</Version>
-    <FileVersion>1.1.17.0</FileVersion>
-    <AssemblyVersion>1.1.17.0</AssemblyVersion>
+    <Version>1.1.18</Version>
+    <FileVersion>1.1.18.0</FileVersion>
+    <AssemblyVersion>1.1.18.0</AssemblyVersion>
     <Company>Clínica Onkos</Company>
     <Product>ONKOS IT Toolkit</Product>
     <Description>Herramienta portable de soporte técnico</Description>
