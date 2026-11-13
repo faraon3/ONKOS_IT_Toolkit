@@ -763,44 +763,45 @@ internal sealed class BackupForm : UserControl
         var letters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         try
         {
-            var usbPartitions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            using (var disks = new ManagementObjectSearcher("SELECT DeviceID, InterfaceType, PNPDeviceID FROM Win32_DiskDrive"))
-            using (var diskResults = disks.Get())
+            // Usar las asociaciones WMI directamente evita depender del formato
+            // textual de las rutas Antecedent/Dependent, que varía entre equipos.
+            using var disks = new ManagementObjectSearcher(
+                "SELECT DeviceID, InterfaceType, PNPDeviceID FROM Win32_DiskDrive");
+            using var diskResults = disks.Get();
+
+            foreach (ManagementObject disk in diskResults)
             {
-                foreach (ManagementObject disk in diskResults)
+                try
                 {
-                    string interfaceType = Convert.ToString(disk["InterfaceType"]) ?? "";
-                    string pnp = Convert.ToString(disk["PNPDeviceID"]) ?? "";
-                    if (!interfaceType.Equals("USB", StringComparison.OrdinalIgnoreCase) &&
-                        !pnp.Contains("USB", StringComparison.OrdinalIgnoreCase)) continue;
-                    string deviceId = Convert.ToString(disk["DeviceID"]) ?? "";
-                    string escaped = deviceId.Replace("\\\\", "\\\\\\\\").Replace("'", "\\\\'");
-                    using var partitions = new ManagementObjectSearcher(
-                        $"ASSOCIATORS OF {{Win32_DiskDrive.DeviceID='{escaped}'}} WHERE AssocClass=Win32_DiskDriveToDiskPartition");
-                    using var partitionResults = partitions.Get();
-                    foreach (ManagementObject partition in partitionResults)
-                        usbPartitions.Add(Convert.ToString(partition["DeviceID"]) ?? "");
+                    string interfaceType = Convert.ToString(disk["InterfaceType"]) ?? string.Empty;
+                    string pnp = Convert.ToString(disk["PNPDeviceID"]) ?? string.Empty;
+                    bool isUsb = interfaceType.Equals("USB", StringComparison.OrdinalIgnoreCase)
+                        || pnp.Contains("USB", StringComparison.OrdinalIgnoreCase)
+                        || pnp.Contains("USBSTOR", StringComparison.OrdinalIgnoreCase);
+                    if (!isUsb) continue;
+
+                    using ManagementObjectCollection partitions = disk.GetRelated("Win32_DiskPartition");
+                    foreach (ManagementObject partition in partitions)
+                    {
+                        using ManagementObjectCollection logicalDisks = partition.GetRelated("Win32_LogicalDisk");
+                        foreach (ManagementObject logicalDisk in logicalDisks)
+                        {
+                            string deviceId = Convert.ToString(logicalDisk["DeviceID"]) ?? string.Empty;
+                            if (deviceId.Length == 2 && deviceId[1] == ':')
+                                letters.Add(deviceId[..1].ToUpperInvariant());
+                        }
+                    }
+                }
+                catch
+                {
+                    // Continuar con otros discos si uno de ellos no permite consultar asociaciones.
                 }
             }
-
-            using var logicalLinks = new ManagementObjectSearcher("SELECT Antecedent, Dependent FROM Win32_LogicalDiskToPartition");
-            using var links = logicalLinks.Get();
-            foreach (ManagementObject link in links)
-            {
-                string antecedent = Convert.ToString(link["Antecedent"]) ?? "";
-                // Comparar el identificador de partición extraído de la referencia WMI.
-                var partitionMatch = System.Text.RegularExpressions.Regex.Match(
-                    antecedent, @"DeviceID=""([^""]+)""", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                if (!partitionMatch.Success ||
-                    !usbPartitions.Contains(partitionMatch.Groups[1].Value)) continue;
-
-                string dependent = Convert.ToString(link["Dependent"]) ?? "";
-                var driveMatch = System.Text.RegularExpressions.Regex.Match(
-                    dependent, @"DeviceID=""([A-Z]:)""", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                if (driveMatch.Success) letters.Add(driveMatch.Groups[1].Value.TrimEnd(':'));
-            }
         }
-        catch { /* Si WMI no está disponible, las memorias extraíbles siguen apareciendo por DriveType.Removable. */ }
+        catch
+        {
+            // Si WMI falla, RefreshDrives aún podrá listar unidades marcadas como Removable.
+        }
         return letters;
     }
     private void ChooseDestination()
