@@ -19,7 +19,7 @@ internal sealed class BackupForm : UserControl
     private readonly ListView _sources = new();
     private readonly ImageList _folderIcons = new();
     private readonly ManualDriveComboBox _drivePicker = new();
-    private readonly TextBox _destination = new();
+    private readonly Label _destination = new();
     private readonly TextBox _backupLabel = new();
     private readonly PurpleCheckBox _ipv4 = new() { Text = "Guardar configuración de red", Checked = true, AutoSize = false };
     private readonly ModernProgressBar _bar = new();
@@ -84,7 +84,7 @@ internal sealed class BackupForm : UserControl
         string otherUserIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "OtroUsuario.png");
         if (File.Exists(otherUserIcon)) { using var icon = Image.FromFile(otherUserIcon); addUser.Image = new Bitmap(icon, new Size(20, 20)); }
         addUser.Click += (_, _) => AddOtherUserFolders();
-        sourceButtons.Controls.Add(_addFolder); sourceButtons.Controls.Add(addUser);
+        sourceButtons.Controls.Add(_addFolder);
         var selectionBar = new Panel { Dock = DockStyle.Top, Height = 36, BackColor = Surface, Padding = new Padding(0, 2, 8, 2) };
         _selectAllFolders.Text = "Seleccionar todo";
         _selectAllFolders.Size = new Size(150, 29);
@@ -93,6 +93,8 @@ internal sealed class BackupForm : UserControl
         StyleButton(_selectAllFolders, true);
         _selectAllFolders.Click += (_, _) => SetAllFoldersSelected(_sources.Items.Cast<ListViewItem>().Any(item => !item.Checked));
         selectionBar.Controls.Add(_selectAllFolders);
+        addUser.Location = new Point(168, 3);
+        selectionBar.Controls.Add(addUser);
         sourcesGroup.Controls.Add(_sources); sourcesGroup.Controls.Add(sourceButtons); sourcesGroup.Controls.Add(selectionBar);
         UpdateSelectAllButtonText();
 
@@ -107,9 +109,10 @@ internal sealed class BackupForm : UserControl
         string browseIconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "ExaminarCarpeta.png");
         if (File.Exists(browseIconPath)) { try { using var img = Image.FromFile(browseIconPath); choose.Image = new Bitmap(img, new Size(20, 20)); } catch { } }
         StyleButton(choose, true); choose.Click += (_, _) => ChooseDestination();
-        _destination.ReadOnly = true; StyleTextBox(_destination);
-        _destination.BorderStyle = BorderStyle.None;
+        _destination.AutoEllipsis = true;
+        _destination.TextAlign = ContentAlignment.MiddleLeft;
         _destination.BackColor = Surface;
+        _destination.ForeColor = TextMain;
         _destination.Font = new Font("Segoe UI", 9F);
         _destination.SetBounds(552, 8, 480, 34); _destination.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         destinationRow.Controls.Add(_drivePicker); destinationRow.Controls.Add(choose); destinationRow.Controls.Add(_destination);
@@ -154,8 +157,10 @@ internal sealed class BackupForm : UserControl
         progressGroup.Controls.Add(_currentFile); progressGroup.Controls.Add(_status); progressGroup.Controls.Add(progressPanel);
 
         var logGroup = new Panel { Dock = DockStyle.Top, Height = 42, BackColor = Surface, Margin = new Padding(0, 0, 0, 8) };
-        var logToggle = new Button { Text = "☰  Ver detalles técnicos  ▸", Location = new Point(8, 5), Size = new Size(280, 32), TextAlign = ContentAlignment.MiddleLeft };
+        var logToggle = new Button { Text = "Ver detalles técnicos  ▸", Location = new Point(8, 5), Size = new Size(280, 32), TextAlign = ContentAlignment.MiddleLeft, ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(8, 0, 6, 0) };
         StyleButton(logToggle, true);
+        string technicalIconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "VerDetallesTecnicos.png");
+        if (File.Exists(technicalIconPath)) { try { using var img = Image.FromFile(technicalIconPath); logToggle.Image = new Bitmap(img, new Size(22, 22)); } catch { } }
         _log.SetBounds(8, 42, 850, 75); _log.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         _log.Multiline = true; _log.ReadOnly = true; _log.ScrollBars = ScrollBars.Vertical;
         _log.Font = new Font("Consolas", 9F); _log.BackColor = Color.FromArgb(13, 12, 18); _log.ForeColor = Color.FromArgb(203, 195, 218); _log.BorderStyle = BorderStyle.None;
@@ -164,7 +169,7 @@ internal sealed class BackupForm : UserControl
         {
             _log.Visible = !_log.Visible;
             logGroup.Height = _log.Visible ? 125 : 42;
-            logToggle.Text = _log.Visible ? "☰  Ocultar detalles técnicos  ▾" : "☰  Ver detalles técnicos  ▸";
+            logToggle.Text = _log.Visible ? "Ocultar detalles técnicos  ▾" : "Ver detalles técnicos  ▸";
         };
         logGroup.Controls.Add(_log); logGroup.Controls.Add(logToggle);
 
