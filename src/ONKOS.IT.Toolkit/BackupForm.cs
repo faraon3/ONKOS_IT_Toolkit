@@ -18,7 +18,7 @@ internal sealed class BackupForm : UserControl
     public event Action? BackRequested;
     private readonly ListView _sources = new();
     private readonly ImageList _folderIcons = new();
-    private readonly ComboBox _drivePicker = new();
+    private readonly ManualDriveComboBox _drivePicker = new();
     private readonly TextBox _destination = new();
     private readonly TextBox _backupLabel = new();
     private readonly PurpleCheckBox _ipv4 = new() { Text = "Guardar configuración de red", Checked = true, AutoSize = false };
@@ -96,6 +96,7 @@ internal sealed class BackupForm : UserControl
         _drivePicker.DropDownStyle = ComboBoxStyle.DropDownList; StyleCombo(_drivePicker); _drivePicker.DrawMode = DrawMode.OwnerDrawFixed; _drivePicker.ItemHeight = 25; _drivePicker.DrawItem += DrawDriveItem;
         _drivePicker.SetBounds(10, 8, 330, 34);
         _drivePicker.SelectedIndexChanged += (_, _) => { if (_drivePicker.SelectedItem is DriveChoice d) _destination.Text = d.Root; };
+        _drivePicker.DropDown += (_, _) => RefreshDrives();
         var choose = new Button { Text = "Examinar carpeta / red…", Width = 220, Height = 34, Location = new Point(352, 8) };
         StyleButton(choose, true); choose.Click += (_, _) => ChooseDestination();
         _destination.ReadOnly = true; StyleTextBox(_destination);
@@ -594,10 +595,40 @@ internal sealed class BackupForm : UserControl
 
     private void RefreshDrives()
     {
+        string previousDestination = _destination.Text.Trim();
         _drivePicker.Items.Clear();
-        foreach (var drive in DriveInfo.GetDrives().Where(d => d.IsReady))
-        { try { _drivePicker.Items.Add(new DriveChoice($"{drive.Name} · {drive.VolumeLabel} · {drive.DriveType} · {drive.AvailableFreeSpace / 1024 / 1024 / 1024} GB libres", drive.RootDirectory.FullName, drive.DriveType)); } catch { } }
-        if (_drivePicker.Items.Count > 0) _drivePicker.SelectedIndex = 0;
+
+        var drives = DriveInfo.GetDrives()
+            .Where(d => d.IsReady)
+            .Select(d =>
+            {
+                try
+                {
+                    long freeGb = d.AvailableFreeSpace / 1024 / 1024 / 1024;
+                    string label = string.IsNullOrWhiteSpace(d.VolumeLabel) ? "(sin etiqueta)" : d.VolumeLabel;
+                    string kind = d.DriveType == DriveType.Removable ? "USB / extraíble"
+                        : d.DriveType == DriveType.Network ? "Red"
+                        : d.DriveType == DriveType.Fixed ? "Disco fijo / externo" : d.DriveType.ToString();
+                    return new DriveChoice($"{d.Name} · {label} · {kind} · {freeGb} GB libres", d.RootDirectory.FullName, d.DriveType);
+                }
+                catch { return null; }
+            })
+            .Where(d => d != null)
+            .OrderBy(d => d!.Type == DriveType.Removable ? 0 : d!.Type == DriveType.Fixed ? 1 : d!.Type == DriveType.Network ? 2 : 3)
+            .ToList();
+
+        foreach (var drive in drives) _drivePicker.Items.Add(drive);
+
+        int previousIndex = -1;
+        for (int i = 0; i < _drivePicker.Items.Count; i++)
+        {
+            if (_drivePicker.Items[i] is DriveChoice choice &&
+                string.Equals(choice.Root, previousDestination, StringComparison.OrdinalIgnoreCase))
+            { previousIndex = i; break; }
+        }
+
+        if (previousIndex >= 0) _drivePicker.SelectedIndex = previousIndex;
+        else if (_drivePicker.Items.Count > 0) _drivePicker.SelectedIndex = 0;
     }
     private void ChooseDestination()
     {
@@ -1635,6 +1666,20 @@ internal sealed class PurpleCheckBox : CheckBox
         path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
         path.CloseFigure();
         return path;
+    }
+}
+
+internal sealed class ManualDriveComboBox : ComboBox
+{
+    private const int WmMouseWheel = 0x020A;
+    private const int WmMouseHWheel = 0x020E;
+
+    protected override void WndProc(ref Message m)
+    {
+        // Evita que la rueda del mouse cambie accidentalmente el disco seleccionado.
+        // El usuario debe abrir la lista y elegir el destino manualmente.
+        if (m.Msg == WmMouseWheel || m.Msg == WmMouseHWheel) return;
+        base.WndProc(ref m);
     }
 }
 
