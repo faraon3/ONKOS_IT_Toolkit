@@ -96,6 +96,16 @@ internal static class OnkosMessageBox
             _ => "?"
         };
 
+        using var bodyFont = new Font("Segoe UI", 10F);
+        Size measuredBody = TextRenderer.MeasureText(
+            message ?? string.Empty, bodyFont, new Size(456, 1200),
+            TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
+        int bodyHeight = Math.Max(54, measuredBody.Height + 8);
+        int detailsTop = 122 + bodyHeight + 8;
+        int formHeight = details is null
+            ? Math.Max(232, 122 + bodyHeight + 78)
+            : Math.Max(300, detailsTop + 58 + 74);
+
         using var form = new Form
         {
             Text = title,
@@ -106,7 +116,7 @@ internal static class OnkosMessageBox
             MaximizeBox = false,
             BackColor = Surface,
             Font = new Font("Segoe UI", 9.5F),
-            ClientSize = new Size(510, details is null ? 232 : 300),
+            ClientSize = new Size(510, formHeight),
             AutoScaleMode = AutoScaleMode.Font
         };
 
@@ -133,8 +143,8 @@ internal static class OnkosMessageBox
         };
         var body = new Label
         {
-            Text = message, ForeColor = Muted, Font = new Font("Segoe UI", 10F),
-            AutoSize = false, Location = new Point(27, 122), Size = new Size(456, details is null ? 54 : 64)
+            Text = message, ForeColor = Muted, Font = bodyFont,
+            AutoSize = false, Location = new Point(27, 122), Size = new Size(456, bodyHeight)
         };
         form.Controls.Add(heading);
         form.Controls.Add(body);
@@ -147,7 +157,7 @@ internal static class OnkosMessageBox
                 Text = details, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical,
                 BorderStyle = BorderStyle.FixedSingle, BackColor = Color.FromArgb(247, 246, 249),
                 ForeColor = Muted, Font = new Font("Consolas", 8.5F),
-                Location = new Point(27, 190), Size = new Size(456, 58), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+                Location = new Point(27, detailsTop), Size = new Size(456, 58), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
             };
             form.Controls.Add(detailBox);
         }
@@ -155,7 +165,7 @@ internal static class OnkosMessageBox
         var footer = new Panel { Dock = DockStyle.Bottom, Height = 62, BackColor = Color.FromArgb(248, 247, 250) };
         var primary = new Button
         {
-            Text = confirmText, Size = new Size(125, 36), Location = new Point(354, 13),
+            Text = confirmText, Size = new Size(125, 36), Location = new Point(confirm ? (thirdText is null ? 251 : 309) : 192, 13),
             FlatStyle = FlatStyle.Flat, BackColor = accent, ForeColor = Color.White,
             Font = new Font("Segoe UI", 9F, FontStyle.Bold), Cursor = Cursors.Hand,
             DialogResult = confirm ? primaryResult : DialogResult.OK
@@ -167,7 +177,7 @@ internal static class OnkosMessageBox
         {
             var secondary = new Button
             {
-                Text = cancelText, Size = new Size(105, 36), Location = new Point(thirdText is null ? 240 : 250, 13),
+                Text = cancelText, Size = new Size(105, 36), Location = new Point(thirdText is null ? 134 : 192, 13),
                 FlatStyle = FlatStyle.Flat, BackColor = Color.White, ForeColor = Text,
                 Font = new Font("Segoe UI", 9F, FontStyle.Bold), Cursor = Cursors.Hand,
                 DialogResult = secondaryResult
@@ -177,10 +187,10 @@ internal static class OnkosMessageBox
 
             if (thirdText is not null)
             {
-                primary.Location = new Point(374, 13);
+                primary.Location = new Point(309, 13);
                 var cancel = new Button
                 {
-                    Text = thirdText, Size = new Size(105, 36), Location = new Point(126, 13),
+                    Text = thirdText, Size = new Size(105, 36), Location = new Point(75, 13),
                     FlatStyle = FlatStyle.Flat, BackColor = Color.White, ForeColor = Text,
                     Font = new Font("Segoe UI", 9F, FontStyle.Bold), Cursor = Cursors.Hand,
                     DialogResult = DialogResult.Cancel
