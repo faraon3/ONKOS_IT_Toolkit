@@ -206,7 +206,6 @@ internal sealed class BackupForm : UserControl
         AddKnown("OneDrive", null, false, "One Drive", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "OneDrive"));
         AddKnown("Vínculos", null, false, "Vinculos", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Links"));
         AddKnown("Objetos 3D", null, false, "Objeto-3d", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "3D Objects"));
-        AddKnown("Biblioteca ONKOS (drivers + programas)", null, false, "ONKOS", Path.Combine(AppPaths.DataRoot, "Data"));
     }
 
     private void ApplyLastSession()
