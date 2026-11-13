@@ -96,11 +96,11 @@ internal sealed class BackupForm : UserControl
         addUser.Click += (_, _) => AddOtherUserFolders();
         sourceButtons.Controls.Add(_addFolder);
         // Fila inferior según el diseño solicitado.
-        addUser.Location = new Point(238, 4);
+        addUser.Location = new Point(225, 4);
         addUser.Size = new Size(240, 36);
         sourceButtons.Controls.Add(addUser);
         StyleCheck(_ipv4);
-        _ipv4.SetBounds(510, 4, 330, 36);
+        _ipv4.SetBounds(475, 4, 330, 36);
         _ipv4.Text = "Guardar configuración de red";
         _ipv4.Font = new Font("Segoe UI", 9.5F, FontStyle.Bold);
         string networkSaveIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "GuardarConfiguracionRed.png");
