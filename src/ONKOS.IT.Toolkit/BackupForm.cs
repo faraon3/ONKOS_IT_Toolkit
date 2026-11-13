@@ -198,7 +198,7 @@ internal sealed class BackupForm : UserControl
             {
                 // No marcar como vacía una carpeta cuyo contenido no se pudo revisar.
                 result.Item.Checked = false;
-                result.Item.SubItems[1].Text = result.Entry.Path + "  ·  No se pudo analizar";
+                result.Item.SubItems[1].Text = "No se pudo analizar  ·  " + ShortenFolderPath(result.Entry.Path);
                 inaccessibleCount++;
                 WriteLog($"No se pudo analizar (sin selección automática): {result.Entry.Path}");
                 continue;
@@ -379,10 +379,24 @@ internal sealed class BackupForm : UserControl
         try
         {
             if (item.SubItems.Count > 1)
-                item.SubItems[1].Text = path + "  ·  " + FormatSize(size);
+                item.SubItems[1].Text = FormatSize(size) + "  ·  " + ShortenFolderPath(path);
             _sources.Invalidate(item.Bounds);
         }
         catch { }
+    }
+
+    private static string ShortenFolderPath(string path)
+    {
+        try
+        {
+            string trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string[] parts = trimmed.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length <= 3) return trimmed;
+
+            // Conserva los últimos niveles para identificar la carpeta sin ocupar toda la línea.
+            return "…\\" + string.Join("\\", parts[^3..]);
+        }
+        catch { return Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)); }
     }
 
     private static (long TotalBytes, bool AccessError) ScanFolderContents(string path)
