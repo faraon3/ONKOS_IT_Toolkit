@@ -62,7 +62,7 @@ internal sealed class BackupForm : UserControl
 
         var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), AutoScroll = true, BackColor = Bg };
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
-        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 310;
+        sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 250;
         _folderIcons.ColorDepth = ColorDepth.Depth32Bit; _folderIcons.ImageSize = new Size(24, 24);
         _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(250, 38); _sources.CheckBoxes = false;
         // Distribuye los elementos en cuatro columnas para que Chrome y las carpetas agregadas
@@ -122,6 +122,7 @@ internal sealed class BackupForm : UserControl
         selectionBar.Controls.Add(_selectAllFolders);
         _sources.Visible = false;
         sourcesGroup.Controls.Add(_sourceGrid); sourcesGroup.Controls.Add(sourceButtons); sourcesGroup.Controls.Add(selectionBar);
+        UpdateSourceGridLayout();
         UpdateSelectAllButtonText();
 
         var destinationGroup = MakeGroup("02  ·  Elige dónde guardar el respaldo");
@@ -600,6 +601,7 @@ internal sealed class BackupForm : UserControl
         path.Click += ToggleCard;
         _sourceGrid.Controls.Add(card);
         _sourceCards[entry.Path] = card;
+        UpdateSourceGridLayout();
         _sourceGrid.Resize -= SourceGridResize;
         _sourceGrid.Resize += SourceGridResize;
     }
@@ -619,6 +621,19 @@ internal sealed class BackupForm : UserControl
             foreach (Control child in card.Controls)
                 if (child is Label label) label.Width = cardWidth - label.Left - 4;
         }
+        UpdateSourceGridLayout();
+    }
+
+    private void UpdateSourceGridLayout()
+    {
+        // Ajusta el alto al número real de filas y evita espacio vacío innecesario.
+        int count = _sourceGrid.Controls.Count;
+        int rows = Math.Max(1, (int)Math.Ceiling(count / 4.0));
+        int gridHeight = rows * 46 + 8;
+        _sourceGrid.MinimumSize = new Size(0, gridHeight);
+        _sourceGrid.Height = gridHeight;
+        if (_sourceGrid.Parent is Control group)
+            group.Height = gridHeight + 40 + 46 + 28;
     }
     private int GetIconIndex(string key, string path)
     {
