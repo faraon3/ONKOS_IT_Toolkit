@@ -32,8 +32,47 @@ internal static class OnkosMessageBox
         string yesText = "Sí", string noText = "No", string cancelText = "Cancelar")
         => Show(owner, DialogKind.Confirm, title, message, null, true, yesText, noText, cancelText);
 
+    // Compatibilidad visual: reemplazo centralizado de MessageBox.Show para toda la aplicación.
+    public static DialogResult Show(IWin32Window? owner, string message, string title,
+        MessageBoxButtons buttons, MessageBoxIcon icon)
+    {
+        DialogKind kind = icon switch
+        {
+            MessageBoxIcon.Warning or MessageBoxIcon.Exclamation => DialogKind.Warning,
+            MessageBoxIcon.Error or MessageBoxIcon.Hand or MessageBoxIcon.Stop => DialogKind.Error,
+            MessageBoxIcon.Question => DialogKind.Confirm,
+            _ => DialogKind.Info
+        };
+
+        return buttons switch
+        {
+            MessageBoxButtons.YesNo => Show(owner, kind, title, message, null, true, "Sí", "No",
+                null, DialogResult.Yes, DialogResult.No),
+            MessageBoxButtons.YesNoCancel => Show(owner, kind, title, message, null, true, "Sí", "No",
+                "Cancelar", DialogResult.Yes, DialogResult.No),
+            MessageBoxButtons.OKCancel => Show(owner, kind, title, message, null, true, "Aceptar", "Cancelar",
+                null, DialogResult.OK, DialogResult.Cancel),
+            _ => Show(owner, kind, title, message)
+        };
+    }
+
+    public static DialogResult Show(IWin32Window? owner, string message, string title)
+        => Show(owner, DialogKind.Info, title, message);
+
+    public static DialogResult Show(IWin32Window? owner, string message)
+        => Show(owner, DialogKind.Info, "ONKOS", message);
+
+    public static DialogResult Show(string message, string title, MessageBoxButtons buttons, MessageBoxIcon icon)
+        => Show(null, message, title, buttons, icon);
+
+    public static DialogResult Show(string message, string title)
+        => Show(null, DialogKind.Info, title, message);
+
+    public static DialogResult Show(string message)
+        => Show(null, DialogKind.Info, "ONKOS", message);
+
     private static DialogResult Show(IWin32Window? owner, DialogKind kind, string title, string message,
-        string? details = null, bool confirm = false, string confirmText = "Aceptar", string cancelText = "Cancelar", string? thirdText = null)
+        string? details = null, bool confirm = false, string confirmText = "Aceptar", string cancelText = "Cancelar", string? thirdText = null, DialogResult primaryResult = DialogResult.Yes, DialogResult secondaryResult = DialogResult.No)
     {
         Color accent = kind switch
         {
@@ -119,7 +158,7 @@ internal static class OnkosMessageBox
             Text = confirmText, Size = new Size(125, 36), Location = new Point(354, 13),
             FlatStyle = FlatStyle.Flat, BackColor = accent, ForeColor = Color.White,
             Font = new Font("Segoe UI", 9F, FontStyle.Bold), Cursor = Cursors.Hand,
-            DialogResult = confirm ? DialogResult.Yes : DialogResult.OK
+            DialogResult = confirm ? primaryResult : DialogResult.OK
         };
         primary.FlatAppearance.BorderSize = 0;
         footer.Controls.Add(primary);
@@ -131,7 +170,7 @@ internal static class OnkosMessageBox
                 Text = cancelText, Size = new Size(105, 36), Location = new Point(thirdText is null ? 240 : 250, 13),
                 FlatStyle = FlatStyle.Flat, BackColor = Color.White, ForeColor = Text,
                 Font = new Font("Segoe UI", 9F, FontStyle.Bold), Cursor = Cursors.Hand,
-                DialogResult = DialogResult.No
+                DialogResult = secondaryResult
             };
             secondary.FlatAppearance.BorderColor = Color.FromArgb(218, 214, 225);
             footer.Controls.Add(secondary);
