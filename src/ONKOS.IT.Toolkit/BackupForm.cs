@@ -893,7 +893,7 @@ internal sealed class BackupForm : UserControl
             // Usar las asociaciones WMI directamente evita depender del formato
             // textual de las rutas Antecedent/Dependent, que varía entre equipos.
             using var disks = new ManagementObjectSearcher(
-                "SELECT DeviceID, InterfaceType, PNPDeviceID FROM Win32_DiskDrive");
+                "SELECT DeviceID, InterfaceType, PNPDeviceID, Service, MediaType FROM Win32_DiskDrive");
             using var diskResults = disks.Get();
 
             foreach (ManagementObject disk in diskResults)
@@ -902,9 +902,18 @@ internal sealed class BackupForm : UserControl
                 {
                     string interfaceType = Convert.ToString(disk["InterfaceType"]) ?? string.Empty;
                     string pnp = Convert.ToString(disk["PNPDeviceID"]) ?? string.Empty;
+                    string service = Convert.ToString(disk["Service"]) ?? string.Empty;
+                    string mediaType = Convert.ToString(disk["MediaType"]) ?? string.Empty;
+
+                    // Muchos discos duros USB modernos usan puente SATA-USB/UASP.
+                    // Windows puede reportarlos como Fixed y con InterfaceType=SCSI,
+                    // aunque físicamente estén conectados por USB.
                     bool isUsb = interfaceType.Equals("USB", StringComparison.OrdinalIgnoreCase)
                         || pnp.Contains("USB", StringComparison.OrdinalIgnoreCase)
-                        || pnp.Contains("USBSTOR", StringComparison.OrdinalIgnoreCase);
+                        || pnp.Contains("USBSTOR", StringComparison.OrdinalIgnoreCase)
+                        || service.Contains("USBSTOR", StringComparison.OrdinalIgnoreCase)
+                        || service.Contains("UASP", StringComparison.OrdinalIgnoreCase);
+
                     if (!isUsb) continue;
 
                     using ManagementObjectCollection partitions = disk.GetRelated("Win32_DiskPartition");
