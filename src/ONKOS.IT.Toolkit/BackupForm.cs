@@ -836,8 +836,8 @@ internal sealed class BackupForm : UserControl
 
                     bool isAppDrive = !string.IsNullOrWhiteSpace(appRoot) && string.Equals(root, appRoot, StringComparison.OrdinalIgnoreCase);
                     string driveTypeLabel = d.DriveType == DriveType.Removable ? "EXTRAÍBLE" : "LOCAL";
-                    string label = $"{volumeName} ({root.TrimEnd('\\\\')}) · {driveTypeLabel}";
-                    if (isAppDrive) label = $"{volumeName} ({root.TrimEnd('\\\\')}) · UNIDAD DEL PROGRAMA";
+                    string label = $"{volumeName} ({root.TrimEnd('\\')}) · {driveTypeLabel}";
+                    if (isAppDrive) label = $"{volumeName} ({root.TrimEnd('\\')}) · UNIDAD DEL PROGRAMA";
                     drives.Add(new DriveChoice(label, root, d.DriveType));
                 }
                 catch { }
