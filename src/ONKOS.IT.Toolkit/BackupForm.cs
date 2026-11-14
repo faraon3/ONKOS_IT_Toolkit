@@ -830,9 +830,14 @@ internal sealed class BackupForm : UserControl
                     // Mostrar todas las unidades locales listas: C:, discos secundarios y USB.
                     if (d.DriveType != DriveType.Fixed && d.DriveType != DriveType.Removable) continue;
                     string root = d.RootDirectory.FullName;
+                    string volumeName = string.Empty;
+                    try { volumeName = d.VolumeLabel?.Trim() ?? string.Empty; } catch { }
+                    if (string.IsNullOrWhiteSpace(volumeName)) volumeName = "SIN NOMBRE";
+
                     bool isAppDrive = !string.IsNullOrWhiteSpace(appRoot) && string.Equals(root, appRoot, StringComparison.OrdinalIgnoreCase);
-                    string label = d.DriveType == DriveType.Removable ? $"UNIDAD EXTRAÍBLE {root}" : $"DISCO LOCAL {root}";
-                    if (isAppDrive) label = $"UNIDAD DEL PROGRAMA · {root}";
+                    string driveTypeLabel = d.DriveType == DriveType.Removable ? "EXTRAÍBLE" : "LOCAL";
+                    string label = $"{volumeName} ({root.TrimEnd('\\\\')}) · {driveTypeLabel}";
+                    if (isAppDrive) label = $"{volumeName} ({root.TrimEnd('\\\\')}) · UNIDAD DEL PROGRAMA";
                     drives.Add(new DriveChoice(label, root, d.DriveType));
                 }
                 catch { }
