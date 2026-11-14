@@ -820,22 +820,19 @@ internal sealed class BackupForm : UserControl
         {
             string previousSelectedRoot = _selectedDriveRoot;
             string previousDestination = _destination.Text.Trim();
-            string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\";
             string appRoot = Path.GetPathRoot(AppContext.BaseDirectory) ?? string.Empty;
-            var usbLetters = GetUsbPhysicalDriveLetters();
             var drives = new List<DriveChoice>();
             foreach (var d in DriveInfo.GetDrives())
             {
                 try
                 {
                     if (!d.IsReady) continue;
+                    // Mostrar todas las unidades locales listas: C:, discos secundarios y USB.
+                    if (d.DriveType != DriveType.Fixed && d.DriveType != DriveType.Removable) continue;
                     string root = d.RootDirectory.FullName;
-                    if (string.Equals(root, systemRoot, StringComparison.OrdinalIgnoreCase)) continue;
                     bool isAppDrive = !string.IsNullOrWhiteSpace(appRoot) && string.Equals(root, appRoot, StringComparison.OrdinalIgnoreCase);
-                    bool isRemovable = d.DriveType == DriveType.Removable;
-                    bool isUsbFixed = d.DriveType == DriveType.Fixed && usbLetters.Contains(root.TrimEnd('\\', ':').ToUpperInvariant());
-                    if (!isAppDrive && !isRemovable && !isUsbFixed) continue;
-                    string label = isAppDrive ? $"UNIDAD DEL PROGRAMA {root}" : isRemovable ? $"USB {root}" : $"DISCO EXTERNO {root}";
+                    string label = d.DriveType == DriveType.Removable ? $"UNIDAD EXTRAÍBLE {root}" : $"DISCO LOCAL {root}";
+                    if (isAppDrive) label = $"UNIDAD DEL PROGRAMA · {root}";
                     drives.Add(new DriveChoice(label, root, d.DriveType));
                 }
                 catch { }
@@ -869,7 +866,7 @@ internal sealed class BackupForm : UserControl
                 }
                 else
                 {
-                    _drivePicker.Items.Add("SIN UNIDADES EXTERNAS");
+                    _drivePicker.Items.Add("SIN UNIDADES DISPONIBLES");
                     _drivePicker.SelectedIndex = 0;
                     _selectedDriveRoot = string.Empty;
                     if (!string.IsNullOrWhiteSpace(previousSelectedRoot))
@@ -877,7 +874,7 @@ internal sealed class BackupForm : UserControl
                         _destination.Text = string.Empty;
                         OnkosMessageBox.ShowWarning(this, "Destino desconectado", $"La unidad {previousSelectedRoot} ya no está disponible. Conecta otra memoria USB o disco duro externo.");
                     }
-                    else if (string.IsNullOrWhiteSpace(previousDestination)) _destination.Text = "Conecta una memoria USB o disco duro externo";
+                    else if (string.IsNullOrWhiteSpace(previousDestination)) _destination.Text = "Conecta o selecciona una unidad de almacenamiento";
                 }
             }
             finally { _drivePicker.EndUpdate(); }
@@ -945,13 +942,6 @@ internal sealed class BackupForm : UserControl
         using var dialog = new FolderBrowserDialog { Description = "Selecciona el destino del backup (USB, disco externo o red)." };
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
-            string selectedRoot = Path.GetPathRoot(dialog.SelectedPath) ?? "";
-            string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\";
-            if (string.Equals(selectedRoot, systemRoot, StringComparison.OrdinalIgnoreCase))
-            {
-                OnkosMessageBox.ShowWarning(this, "Destino no permitido", "No se permite guardar el respaldo en el disco donde está instalado Windows. Selecciona una memoria USB o un disco externo.");
-                return;
-            }
             _destination.Text = dialog.SelectedPath;
         }
     }
@@ -1031,13 +1021,6 @@ internal sealed class BackupForm : UserControl
 
         if (selected.Count == 0 && !_ipv4.Checked) { OnkosMessageBox.Show(this, "Selecciona carpetas o activa la opción de guardar configuración de red.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
         string dest = _destination.Text.Trim();
-        string systemRoot = Path.GetPathRoot(Environment.GetFolderPath(Environment.SpecialFolder.Windows)) ?? @"C:\";
-        string destinationRoot = Path.GetPathRoot(dest) ?? "";
-        if (string.Equals(destinationRoot, systemRoot, StringComparison.OrdinalIgnoreCase))
-        {
-            OnkosMessageBox.ShowWarning(this, "Destino no permitido", "El disco de Windows no puede utilizarse como destino del respaldo. Conecta una memoria USB o un disco duro externo.");
-            return;
-        }
         if (!Directory.Exists(dest))
         {
             OnkosMessageBox.ShowWarning(this, "Destino no disponible", "El destino seleccionado no está disponible. Conecta la unidad externa o selecciona otra carpeta.");
