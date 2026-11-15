@@ -25,6 +25,7 @@ internal sealed class MainForm : Form
     private PrinterManagerForm? _printers;
     private BackupForm? _backup;
     private InventoryForm? _inventory;
+    private AdManagerForm? _adManager;
     private bool _fullScreenMode;
 
     public MainForm()
@@ -71,16 +72,18 @@ internal sealed class MainForm : Form
         intro.Controls.Add(new Label { Text = "¿Qué necesitas hacer?", ForeColor = UiColors.TextMain, Font = new Font("Segoe UI", 17F, FontStyle.Bold), AutoSize = true, Location = new Point(2, 0) });
         intro.Controls.Add(new Label { Text = "Selecciona una herramienta para comenzar.", ForeColor = UiColors.TextMuted, Font = new Font("Segoe UI", 10F), AutoSize = true, Location = new Point(4, 39) });
 
-        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = UiColors.Bg, Padding = new Padding(0, 4, 0, 4) };
+        var grid = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3, BackColor = UiColors.Bg, Padding = new Padding(0, 4, 0, 4) };
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
         grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33F));
+        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33F));
+        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 33.34F));
 
         AddModule(grid, 0, 0, "01", "Backup y migración", "Copia documentos y configuraciones antes de formatear o cambiar de equipo.", true, () => OpenBackup());
         AddModule(grid, 1, 0, "02", "Programas", "Organiza instaladores y ejecuta instalaciones en los equipos.", true, () => OpenPrograms());
         AddModule(grid, 0, 1, "03", "Impresoras", "Guarda controladores, personaliza logos y ejecuta instalaciones.", true, () => OpenPrinters());
         AddModule(grid, 1, 1, "04", "Inventario", "Consulta y exporta información técnica del computador.", true, () => OpenInventory());
+        AddModule(grid, 0, 2, "05", "Active Directory", "Consulta áreas, organiza equipos y administra usuarios del dominio.", true, () => OpenADManager());
 
         home.Controls.Add(grid);
         home.Controls.Add(intro);
@@ -147,6 +150,7 @@ internal sealed class MainForm : Form
     private void OpenPrinters() { if (_printers == null) { _printers = new PrinterManagerForm(); _printers.BackRequested += ShowHome; } ShowModule(_printers); }
     private void OpenBackup() { if (_backup == null) { _backup = new BackupForm(); _backup.BackRequested += ShowHome; } ShowModule(_backup); }
     private void OpenInventory() { if (_inventory == null) { _inventory = new InventoryForm(); _inventory.BackRequested += ShowHome; } ShowModule(_inventory); }
+    private void OpenADManager() { if (_adManager == null) { _adManager = new AdManagerForm(); _adManager.BackRequested += ShowHome; } ShowModule(_adManager); }
 
     private static void AddModule(TableLayoutPanel grid, int column, int row, string number, string title, string description, bool enabled, Action? action = null)
     {
