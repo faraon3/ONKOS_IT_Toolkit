@@ -18,7 +18,7 @@ internal sealed class BackupForm : UserControl
 {
     public event Action? BackRequested;
     private readonly ListView _sources = new();
-    private readonly FlowLayoutPanel _sourceGrid = new() { Dock = DockStyle.Top, AutoScroll = false, WrapContents = true, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(8, 6, 8, 6), BackColor = Surface };
+    private readonly FlowLayoutPanel _sourceGrid = new() { Dock = DockStyle.Top, AutoScroll = false, WrapContents = true, FlowDirection = FlowDirection.LeftToRight, Padding = new Padding(8, 6, 8, 6), BackColor = OnkosTheme.Surface };
     private readonly Dictionary<string, Panel> _sourceCards = new(StringComparer.OrdinalIgnoreCase);
     private readonly ImageList _folderIcons = new();
     private readonly ManualDriveComboBox _drivePicker = new();
@@ -34,7 +34,7 @@ internal sealed class BackupForm : UserControl
     private readonly Button _addFolder = new();
     private readonly Button _selectAllFolders = new();
     private readonly Button _cancel = new() { Text = "CANCELAR", Visible = false };
-    private readonly Panel _actionBar = new() { Dock = DockStyle.Bottom, Height = 54, BackColor = Color.FromArgb(18, 16, 25), Padding = new Padding(3, 2, 3, 2) };
+    private readonly Panel _actionBar = new() { Dock = DockStyle.Bottom, Height = 54, BackColor = OnkosTheme.Bg, Padding = new Padding(3, 2, 3, 2) };
     private readonly Dictionary<string, long> _sizeCache = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _cts;
     private bool _busy;
@@ -42,31 +42,59 @@ internal sealed class BackupForm : UserControl
     private string _selectedDriveRoot = string.Empty;
     private bool _refreshingDrives;
 
-    private static readonly Color Bg = Color.FromArgb(18, 16, 25);
-    private static readonly Color Surface = Color.FromArgb(31, 27, 41);
-    private static readonly Color Surface2 = Color.FromArgb(39, 34, 51);
-    private static readonly Color Purple = Color.FromArgb(105, 73, 164);
-    private static readonly Color PurpleHover = Color.FromArgb(126, 91, 190);
-    private static readonly Color TextMain = Color.FromArgb(244, 241, 250);
-    private static readonly Color TextMuted = Color.FromArgb(183, 174, 199);
-    private static readonly Color Border = Color.FromArgb(65, 57, 82);
+    // Alias al tema centralizado
+    private static Color Bg        => OnkosTheme.Bg;
+    private static Color Surface   => OnkosTheme.Surface;
+    private static Color Surface2  => OnkosTheme.Surface2;
+    private static Color Purple    => OnkosTheme.Purple;
+    private static Color PurpleHover => OnkosTheme.PurpleHover;
+    private static Color TextMain  => OnkosTheme.TextMain;
+    private static Color TextMuted => OnkosTheme.TextMuted;
+    private static Color Border    => OnkosTheme.Border;
 
     public BackupForm()
     {
         Dock = DockStyle.Fill; BackColor = Bg; ForeColor = TextMain; Font = new Font("Segoe UI", 9.5F);
 
-        var header = new Panel { Dock = DockStyle.Top, Height = 88, BackColor = Purple };
-        var back = new Button { Text = "‹  VOLVER AL INICIO", Location = new Point(22, 5), Size = new Size(170, 25) };
-        StyleButton(back, true); back.Click += (_, _) => BackRequested?.Invoke(); header.Controls.Add(back);
-        header.Controls.Add(new Label { Text = "BACKUP  /  MIGRACIÓN", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 30) });
+        // ── HEADER REDISEÑADO (degradado + subtítulo) ──
+        var header = new Panel { Dock = DockStyle.Top, Height = 96, BackColor = Purple };
+        header.Paint += (_, e) =>
+        {
+            using var brush = new LinearGradientBrush(header.ClientRectangle,
+                OnkosTheme.Purple, OnkosTheme.PurpleLight, 0f);
+            e.Graphics.FillRectangle(brush, header.ClientRectangle);
+        };
+        
+        var back = new Button { Text = "‹  VOLVER", Location = new Point(22, 8), Size = new Size(120, 28) };
+        OnkosTheme.StyleButton(back, ButtonKind.Secondary);
+        back.BackColor = Color.FromArgb(40, 255, 255, 255);
+        back.FlatAppearance.MouseOverBackColor = Color.FromArgb(70, 255, 255, 255);
+        back.Click += (_, _) => BackRequested?.Invoke();
+        header.Controls.Add(back);
+
+        header.Controls.Add(new Label
+        {
+            Text = "Backup y migración",
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 20F, FontStyle.Bold),
+            AutoSize = true,
+            Location = new Point(22, 40)
+        });
+        header.Controls.Add(new Label
+        {
+            Text = "Copia perfiles, documentos y configuración de red del equipo",
+            ForeColor = Color.FromArgb(220, 210, 240),
+            Font = new Font("Segoe UI", 9.5F),
+            AutoSize = true,
+            Location = new Point(24, 74)
+        });
 
         var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), AutoScroll = true, BackColor = Bg };
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
         sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 250;
         _folderIcons.ColorDepth = ColorDepth.Depth32Bit; _folderIcons.ImageSize = new Size(24, 24);
         _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(250, 38); _sources.CheckBoxes = false;
-        // Distribuye los elementos en cuatro columnas para que Chrome y las carpetas agregadas
-        // aparezcan hacia la derecha y no queden ocultos debajo de la lista.
+        
         void UpdateSourceTileWidth()
         {
             int available = Math.Max(840, _sources.ClientSize.Width - 16);
@@ -83,6 +111,7 @@ internal sealed class BackupForm : UserControl
         _sources.Columns.Add("Carpeta / ubicación", 220); _sources.Columns.Add("Ruta", 500);
         _sources.Resize += (_, _) => { if (_sources.Columns.Count > 1) { _sources.Columns[0].Width = Math.Min(230, Math.Max(170, _sources.ClientSize.Width / 3)); _sources.Columns[1].Width = Math.Max(120, _sources.ClientSize.Width - _sources.Columns[0].Width - 4); } };
         LoadKnownFolders();
+        
         var sourceButtons = new Panel { Dock = DockStyle.Bottom, Height = 46, BackColor = Surface };
         _addFolder.Text = "Agregar carpeta"; StyleButton(_addFolder, true);
         _addFolder.SetBounds(10, 4, 210, 36);
@@ -92,16 +121,18 @@ internal sealed class BackupForm : UserControl
         string addFolderIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "AgregarCarpeta.png");
         if (File.Exists(addFolderIcon)) { using var icon = Image.FromFile(addFolderIcon); _addFolder.Image = new Bitmap(icon, new Size(20, 20)); }
         _addFolder.Click += (_, _) => AddCustomFolder();
+        
         var addUser = new Button { Text = "Otro usuario", Location = new Point(286, 6), Size = new Size(190, 30), ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(8, 0, 6, 0) };
         StyleButton(addUser, true);
         string otherUserIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "OtroUsuario.png");
         if (File.Exists(otherUserIcon)) { using var icon = Image.FromFile(otherUserIcon); addUser.Image = new Bitmap(icon, new Size(20, 20)); }
         addUser.Click += (_, _) => AddOtherUserFolders();
         sourceButtons.Controls.Add(_addFolder);
-        // Fila inferior según el diseño solicitado.
+        
         addUser.Location = new Point(225, 4);
         addUser.Size = new Size(240, 36);
         sourceButtons.Controls.Add(addUser);
+        
         StyleCheck(_ipv4);
         _ipv4.SetBounds(475, 4, 330, 36);
         _ipv4.Text = "Guardar configuración de red";
@@ -112,6 +143,7 @@ internal sealed class BackupForm : UserControl
             try { using var networkImage = Image.FromFile(networkSaveIcon); _ipv4.Image = new Bitmap(networkImage, new Size(24, 24)); _ipv4.ImageAlign = ContentAlignment.MiddleLeft; _ipv4.TextImageRelation = TextImageRelation.ImageBeforeText; _ipv4.Padding = new Padding(6, 0, 0, 0); } catch { }
         }
         sourceButtons.Controls.Add(_ipv4);
+        
         var selectionBar = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Surface, Padding = new Padding(0, 2, 8, 2) };
         _selectAllFolders.Text = "Seleccionar todo";
         _selectAllFolders.Size = new Size(150, 28);
@@ -120,6 +152,7 @@ internal sealed class BackupForm : UserControl
         StyleButton(_selectAllFolders, true);
         _selectAllFolders.Click += (_, _) => SetAllFoldersSelected(_sources.Items.Cast<ListViewItem>().Any(item => !IsItemChecked(item)));
         selectionBar.Controls.Add(_selectAllFolders);
+        
         _sources.Visible = false;
         sourcesGroup.Controls.Add(_sourceGrid); sourcesGroup.Controls.Add(sourceButtons); sourcesGroup.Controls.Add(selectionBar);
         UpdateSourceGridLayout();
@@ -132,10 +165,12 @@ internal sealed class BackupForm : UserControl
         _drivePicker.SetBounds(10, 8, 300, 34);
         _drivePicker.SelectedIndexChanged += (_, _) => { if (!_refreshingDrives && _drivePicker.SelectedItem is DriveChoice d) { _selectedDriveRoot = d.Root; _destination.Text = d.Root; } };
         _drivePicker.DropDown += (_, _) => RefreshDrives();
+        
         var choose = new Button { Text = "Examinar carpeta", Width = 180, Height = 34, Location = new Point(322, 8), ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(8, 0, 6, 0) };
         string browseIconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "ExaminarCarpeta.png");
         if (File.Exists(browseIconPath)) { try { using var img = Image.FromFile(browseIconPath); choose.Image = new Bitmap(img, new Size(20, 20)); } catch { } }
         StyleButton(choose, true); choose.Click += (_, _) => ChooseDestination();
+        
         _destination.AutoEllipsis = false;
         _destination.TextAlign = ContentAlignment.MiddleLeft;
         _destination.BackColor = Surface;
@@ -144,6 +179,7 @@ internal sealed class BackupForm : UserControl
         _destination.SetBounds(514, 8, 480, 34);
         _destination.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         var destinationTip = new ToolTip();
+        
         void FitDestinationPath()
         {
             int available = Math.Max(80, _destination.ClientSize.Width - 4);
@@ -156,6 +192,7 @@ internal sealed class BackupForm : UserControl
         _destination.Resize += (_, _) => FitDestinationPath();
         _destination.TextChanged += (_, _) => FitDestinationPath();
         destinationRow.Controls.Add(_drivePicker); destinationRow.Controls.Add(choose); destinationRow.Controls.Add(_destination);
+        
         void LayoutDestinationRow()
         {
             int width = destinationRow.ClientSize.Width;
@@ -193,7 +230,7 @@ internal sealed class BackupForm : UserControl
         if (File.Exists(technicalIconPath)) { try { using var img = Image.FromFile(technicalIconPath); logToggle.Image = new Bitmap(img, new Size(22, 22)); } catch { } }
         _log.SetBounds(8, 42, 850, 75); _log.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         _log.Multiline = true; _log.ReadOnly = true; _log.ScrollBars = ScrollBars.Vertical;
-        _log.Font = new Font("Consolas", 9F); _log.BackColor = Color.FromArgb(13, 12, 18); _log.ForeColor = Color.FromArgb(203, 195, 218); _log.BorderStyle = BorderStyle.None;
+        _log.Font = new Font("Consolas", 9F); _log.BackColor = OnkosTheme.LogBg; _log.ForeColor = OnkosTheme.LogFg; _log.BorderStyle = BorderStyle.None;
         _log.Visible = false;
         logToggle.Click += (_, _) =>
         {
@@ -203,20 +240,34 @@ internal sealed class BackupForm : UserControl
         };
         logGroup.Controls.Add(_log); logGroup.Controls.Add(logToggle);
 
-        _run.Text = "INICIAR COPIA DE SEGURIDAD"; StyleButton(_run, false);
-        _run.Font = new Font("Segoe UI", 10.5F, FontStyle.Bold);
-        _restore.Text = "RESTAURAR BACKUP"; StyleButton(_restore, true);
-        _restore.Font = new Font("Segoe UI", 10.5F, FontStyle.Bold);
-        StyleButton(_cancel, true);
-        _cancel.Font = new Font("Segoe UI", 10.5F, FontStyle.Bold);
+        // ── BOTONES DE ACCIÓN REDISEÑADOS ──
+        _run.Text = "▶   INICIAR COPIA DE SEGURIDAD";
+        _restore.Text = "↺   RESTAURAR BACKUP";
+        _cancel.Text = "■   CANCELAR";
+        OnkosTheme.StyleButton(_run, ButtonKind.Success);
+        OnkosTheme.StyleButton(_restore, ButtonKind.Primary);
+        OnkosTheme.StyleButton(_cancel, ButtonKind.Danger);
+        
         _actionBar.Resize += (_, _) => LayoutActions();
         LayoutActions();
         _run.Click += async (_, _) => await StartBackupAsync();
         _restore.Click += async (_, _) => await RestoreBackupAsync();
         _cancel.Click += (_, _) => { try { _cts?.Cancel(); } catch { } };
         _actionBar.Controls.Add(_run); _actionBar.Controls.Add(_cancel); _actionBar.Controls.Add(_restore);
+        
+        // ── BARRA DE ESTADO INFERIOR (NUEVA) ──
+        var statusBar = new Panel { Dock = DockStyle.Bottom, Height = 28, BackColor = Surface2, Padding = new Padding(12, 0, 12, 0) };
+        statusBar.Controls.Add(new Label
+        {
+            Text = $"ONKOS IT Toolkit   ·   USB: {Path.GetPathRoot(AppContext.BaseDirectory)?.TrimEnd('\\')}   ·   {Environment.MachineName}",
+            ForeColor = TextMuted,
+            Font = new Font("Segoe UI", 8F),
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft
+        });
+
         content.Controls.Add(logGroup); content.Controls.Add(progressGroup); content.Controls.Add(destinationGroup); content.Controls.Add(sourcesGroup);
-        Controls.Add(content); Controls.Add(_actionBar); Controls.Add(header);
+        Controls.Add(content); Controls.Add(_actionBar); Controls.Add(statusBar); Controls.Add(header);
 
         ApplyLastSession();
         _ = ScanFoldersAndSelectWithDataAsync();
@@ -249,7 +300,6 @@ internal sealed class BackupForm : UserControl
             var scan = result.Scan;
             if (scan.AccessError)
             {
-                // No marcar como vacía una carpeta cuyo contenido no se pudo revisar.
                 SetItemChecked(result.Item, false);
                 result.Item.Text = result.Entry.Label + " (No analizado)";
                 result.Item.SubItems[1].Text = ShortenFolderPath(result.Entry.Path);
@@ -273,25 +323,30 @@ internal sealed class BackupForm : UserControl
     private void LayoutActions()
     {
         int w = _actionBar.ClientSize.Width;
+        int pad = 12;
+        int gap = 10;
+        int h = _actionBar.ClientSize.Height - 10;
+        int y = 5;
+
         if (_cancel.Visible)
         {
-            int each = Math.Max(1, (w - 6) / 3);
-            _run.SetBounds(0, 0, each, _actionBar.ClientSize.Height);
-            _cancel.SetBounds(each + 3, 0, each, _actionBar.ClientSize.Height);
-            _restore.SetBounds((each + 3) * 2, 0, Math.Max(1, w - (each + 3) * 2), _actionBar.ClientSize.Height);
+            int each = (w - pad * 2 - gap * 2) / 3;
+            _run.SetBounds(pad, y, each, h);
+            _cancel.SetBounds(pad + each + gap, y, each, h);
+            _restore.SetBounds(pad + (each + gap) * 2, y, Math.Max(1, w - pad * 2 - (each + gap) * 2), h);
         }
         else
         {
-            int half = Math.Max(1, (w - 6) / 2);
-            _run.SetBounds(0, 0, half, _actionBar.ClientSize.Height);
-            _restore.SetBounds(half + 3, 0, Math.Max(1, w - half - 3), _actionBar.ClientSize.Height);
+            int half = (w - pad * 2 - gap) / 2;
+            _run.SetBounds(pad, y, half, h);
+            _restore.SetBounds(pad + half + gap, y, Math.Max(1, w - pad * 2 - half - gap), h);
         }
     }
 
     private GroupBox MakeGroup(string title) => new() { Text = title, ForeColor = Color.FromArgb(210, 197, 235), BackColor = Surface, Padding = new Padding(10), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), Margin = new Padding(0, 0, 0, 10), FlatStyle = FlatStyle.Flat };
-    private static void StyleButton(Button b, bool secondary) { b.FlatStyle = FlatStyle.Flat; b.FlatAppearance.BorderColor = Border; b.FlatAppearance.BorderSize = secondary ? 1 : 0; b.BackColor = secondary ? Surface2 : Purple; b.ForeColor = TextMain; b.Cursor = Cursors.Hand; b.FlatAppearance.MouseOverBackColor = secondary ? Color.FromArgb(52, 45, 67) : PurpleHover; }
-    private static void StyleCombo(ComboBox c) { c.BackColor = Surface2; c.ForeColor = TextMain; c.FlatStyle = FlatStyle.Flat; }
-    private static void StyleTextBox(TextBox t) { t.BackColor = Surface2; t.ForeColor = TextMain; t.BorderStyle = BorderStyle.FixedSingle; t.Font = new Font("Segoe UI", 10F); }
+    private static void StyleButton(Button b, bool secondary) { OnkosTheme.StyleButton(b, secondary ? ButtonKind.Secondary : ButtonKind.Primary); }
+    private static void StyleCombo(ComboBox c) { OnkosTheme.StyleCombo(c); }
+    private static void StyleTextBox(TextBox t) { OnkosTheme.StyleTextBox(t); }
     private static void StyleCheck(CheckBox c) { c.ForeColor = TextMain; c.BackColor = Surface; c.Padding = new Padding(4); c.Cursor = Cursors.Hand; }
 
     private void LoadKnownFolders()
@@ -314,18 +369,13 @@ internal sealed class BackupForm : UserControl
 
     private void AddChromeProfiles()
     {
-        // Cada carpeta User Data contiene los perfiles locales de Chrome:
-        // Default, Profile 1, Profile 2, etc.
         string usersRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "..", "Users");
         try
         {
             usersRoot = Path.GetFullPath(usersRoot);
             if (!Directory.Exists(usersRoot)) return;
 
-            var excluded = new HashSet<string>(new[]
-            {
-                "Public", "Default", "Default User", "All Users", "defaultuser0"
-            }, StringComparer.OrdinalIgnoreCase);
+            var excluded = new HashSet<string>(new[] { "Public", "Default", "Default User", "All Users", "defaultuser0" }, StringComparer.OrdinalIgnoreCase);
 
             foreach (string profilePath in Directory.GetDirectories(usersRoot))
             {
@@ -335,9 +385,7 @@ internal sealed class BackupForm : UserControl
                 string chromeUserData = Path.Combine(profilePath, "AppData", "Local", "Google", "Chrome", "User Data");
                 if (!Directory.Exists(chromeUserData)) continue;
 
-                if (_sources.Items.Cast<ListViewItem>().Any(item =>
-                    item.Tag is FolderEntry existing &&
-                    string.Equals(existing.Path, chromeUserData, StringComparison.OrdinalIgnoreCase)))
+                if (_sources.Items.Cast<ListViewItem>().Any(item => item.Tag is FolderEntry existing && string.Equals(existing.Path, chromeUserData, StringComparison.OrdinalIgnoreCase)))
                     continue;
 
                 AddListItem($"Google Chrome – {userName}", chromeUserData, false, "GoogleChrome");
@@ -399,9 +447,7 @@ internal sealed class BackupForm : UserControl
         }
         _sources.Invalidate();
         UpdateSelectAllButtonText();
-        WriteLog(selected
-            ? $"Se seleccionaron todas las carpetas disponibles ({_sources.Items.Count})."
-            : "Se desmarcaron todas las carpetas.");
+        WriteLog(selected ? $"Se seleccionaron todas las carpetas disponibles ({_sources.Items.Count})." : "Se desmarcaron todas las carpetas.");
     }
 
     private void UpdateSelectAllButtonText()
@@ -456,8 +502,6 @@ internal sealed class BackupForm : UserControl
             string trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             string[] parts = trimmed.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length <= 3) return trimmed;
-
-            // Conserva los últimos niveles para identificar la carpeta sin ocupar toda la línea.
             return "…\\" + string.Join("\\", parts[^3..]);
         }
         catch { return Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)); }
@@ -470,13 +514,11 @@ internal sealed class BackupForm : UserControl
         try
         {
             if (!Directory.Exists(path)) return (0, true);
-
             var pending = new Stack<string>();
             pending.Push(path);
             while (pending.Count > 0)
             {
                 string current = pending.Pop();
-
                 try
                 {
                     foreach (string file in Directory.EnumerateFiles(current))
@@ -486,7 +528,6 @@ internal sealed class BackupForm : UserControl
                     }
                 }
                 catch { accessError = true; }
-
                 try
                 {
                     foreach (string directory in Directory.EnumerateDirectories(current))
@@ -494,8 +535,7 @@ internal sealed class BackupForm : UserControl
                         try
                         {
                             var attributes = File.GetAttributes(directory);
-                            if ((attributes & FileAttributes.ReparsePoint) == 0)
-                                pending.Push(directory);
+                            if ((attributes & FileAttributes.ReparsePoint) == 0) pending.Push(directory);
                         }
                         catch { accessError = true; }
                     }
@@ -504,15 +544,10 @@ internal sealed class BackupForm : UserControl
             }
         }
         catch { accessError = true; }
-
         return (total, accessError);
     }
 
-    private static long GetFolderSizeSafe(string path)
-    {
-        // Utilizado para mostrar el tamaño cuando se marca manualmente una carpeta.
-        return ScanFolderContents(path).TotalBytes;
-    }
+    private static long GetFolderSizeSafe(string path) => ScanFolderContents(path).TotalBytes;
 
     private static string FormatSize(long bytes)
     {
@@ -527,6 +562,7 @@ internal sealed class BackupForm : UserControl
         string path = customPath ?? Environment.GetFolderPath(special!.Value);
         if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path)) AddListItem(label, path, selected, iconKey);
     }
+    
     private void AddListItem(string label, string path, bool selected, string iconKey)
     {
         int icon = GetIconIndex(iconKey, path);
@@ -537,41 +573,24 @@ internal sealed class BackupForm : UserControl
         if (selected) _ = UpdateFolderSizeAsync(item, (FolderEntry)item.Tag!);
         UpdateSelectAllButtonText();
     }
+    
     private void AddSourceCard(FolderEntry entry)
     {
         int cardWidth = GetSourceCardWidth();
-        var card = new Panel
-        {
-            Width = cardWidth, Height = 42, Margin = new Padding(2, 2, 2, 2),
-            BackColor = Surface, Cursor = Cursors.Hand
-        };
+        var card = new Panel { Width = cardWidth, Height = 42, Margin = new Padding(2, 2, 2, 2), BackColor = Surface, Cursor = Cursors.Hand };
         card.Tag = entry;
 
         var icon = new PictureBox
         {
             Location = new Point(26, 8), Size = new Size(22, 22),
             SizeMode = PictureBoxSizeMode.StretchImage, BackColor = Color.Transparent,
-            Image = entry.FolderIconIndex >= 0 && entry.FolderIconIndex < _folderIcons.Images.Count
-                ? _folderIcons.Images[entry.FolderIconIndex] : SystemIcons.WinLogo.ToBitmap(),
+            Image = entry.FolderIconIndex >= 0 && entry.FolderIconIndex < _folderIcons.Images.Count ? _folderIcons.Images[entry.FolderIconIndex] : SystemIcons.WinLogo.ToBitmap(),
             Cursor = Cursors.Hand
         };
-        var name = new Label
-        {
-            Location = new Point(52, 1), Size = new Size(cardWidth - 56, 19),
-            Text = $"{entry.Label} ({FormatSize(0)})", ForeColor = TextMain,
-            BackColor = Color.Transparent, Font = new Font("Segoe UI", 9.2F),
-            AutoEllipsis = true, Cursor = Cursors.Hand
-        };
-        var path = new Label
-        {
-            Location = new Point(52, 19), Size = new Size(cardWidth - 56, 17),
-            Text = ShortenFolderPath(entry.Path), ForeColor = TextMuted,
-            BackColor = Color.Transparent, Font = new Font("Segoe UI", 7.5F),
-            AutoEllipsis = true, Cursor = Cursors.Hand
-        };
-        card.Controls.Add(icon);
-        card.Controls.Add(name);
-        card.Controls.Add(path);
+        var name = new Label { Location = new Point(52, 1), Size = new Size(cardWidth - 56, 19), Text = $"{entry.Label} ({FormatSize(0)})", ForeColor = TextMain, BackColor = Color.Transparent, Font = new Font("Segoe UI", 9.2F), AutoEllipsis = true, Cursor = Cursors.Hand };
+        var path = new Label { Location = new Point(52, 19), Size = new Size(cardWidth - 56, 17), Text = ShortenFolderPath(entry.Path), ForeColor = TextMuted, BackColor = Color.Transparent, Font = new Font("Segoe UI", 7.5F), AutoEllipsis = true, Cursor = Cursors.Hand };
+        card.Controls.Add(icon); card.Controls.Add(name); card.Controls.Add(path);
+        
         card.Paint += (_, e) =>
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -590,15 +609,11 @@ internal sealed class BackupForm : UserControl
 
         void ToggleCard(object? sender, EventArgs e)
         {
-            var item = _sources.Items.Cast<ListViewItem>()
-                .FirstOrDefault(x => x.Tag is FolderEntry fe && ReferenceEquals(fe, entry));
+            var item = _sources.Items.Cast<ListViewItem>().FirstOrDefault(x => x.Tag is FolderEntry fe && ReferenceEquals(fe, entry));
             if (item != null) ToggleItem(item);
             card.Invalidate();
         }
-        card.Click += ToggleCard;
-        icon.Click += ToggleCard;
-        name.Click += ToggleCard;
-        path.Click += ToggleCard;
+        card.Click += ToggleCard; icon.Click += ToggleCard; name.Click += ToggleCard; path.Click += ToggleCard;
         _sourceGrid.Controls.Add(card);
         _sourceCards[entry.Path] = card;
         UpdateSourceGridLayout();
@@ -626,8 +641,6 @@ internal sealed class BackupForm : UserControl
 
     private void UpdateSourceGridLayout()
     {
-        // El panel ya no usa Dock=Fill ni AutoScroll: su altura se ajusta al
-        // número de filas reales para que no quede un área vacía con scrollbar.
         int count = _sourceGrid.Controls.Count;
         int columns = 4;
         int rows = count == 0 ? 1 : (int)Math.Ceiling(count / (double)columns);
@@ -640,11 +653,9 @@ internal sealed class BackupForm : UserControl
         _sourceGrid.Height = gridHeight;
 
         if (_sourceGrid.Parent is GroupBox group)
-        {
-            // Alto total = selector + barra superior + botones inferiores + título/bordes.
             group.Height = gridHeight + 40 + 46 + 38;
-        }
     }
+    
     private int GetIconIndex(string key, string path)
     {
         string asset = Path.Combine(AppContext.BaseDirectory, "Assets", key + ".png");
@@ -652,12 +663,12 @@ internal sealed class BackupForm : UserControl
         try { var icon = ShellIcon.Get(path); _folderIcons.Images.Add(icon); icon.Dispose(); return _folderIcons.Images.Count - 1; }
         catch { _folderIcons.Images.Add(SystemIcons.WinLogo); return _folderIcons.Images.Count - 1; }
     }
+    
     private void DrawSourceTile(object? sender, DrawListViewItemEventArgs e)
     {
         var item = e.Item; if (item is null) return;
         var bounds = e.Bounds; using var bg = new SolidBrush(item.Selected ? Color.FromArgb(58, 46, 78) : Surface); e.Graphics.FillRectangle(bg, bounds);
         int x = bounds.X + 8;
-        // Dibuja casilla e icono directamente: evita ImageList y sus imágenes inválidas.
         var entry = item.Tag as FolderEntry;
         var checkBox = new Rectangle(x, bounds.Y + (bounds.Height - 18) / 2, 18, 18);
         using (var checkFill = new SolidBrush(entry?.Selected == true ? Purple : Color.FromArgb(46, 40, 59)))
@@ -683,32 +694,19 @@ internal sealed class BackupForm : UserControl
     private void SourceMouseDown(object? sender, MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left) return;
-
-        // En vista Tile, HitTest puede no devolver el elemento al pulsar el espacio
-        // reservado para la casilla personalizada. GetItemAt y los límites del tile
-        // permiten detectar de forma consistente ese clic.
         var item = _sources.GetItemAt(e.X, e.Y) ?? _sources.HitTest(e.Location).Item;
         if (item == null) return;
-
         var bounds = item.Bounds;
         int relativeX = e.X - bounds.X;
         int relativeY = e.Y - bounds.Y;
-
-        // La casilla dibujada ocupa los primeros 18 px, con margen izquierdo de 8 px.
-        // Se acepta toda la zona de control (hasta el icono) para facilitar el clic.
-        if (relativeX >= 0 && relativeX <= 42 &&
-            relativeY >= 0 && relativeY < bounds.Height)
-        {
-            ToggleItem(item);
-        }
+        if (relativeX >= 0 && relativeX <= 42 && relativeY >= 0 && relativeY < bounds.Height) ToggleItem(item);
     }
+    
     private void DrawDriveItem(object? sender, DrawItemEventArgs e)
     {
         if(e.Index<0)return;
         e.DrawBackground();
-        string label = _drivePicker.Items[e.Index] is DriveChoice drive
-            ? drive.Label
-            : Convert.ToString(_drivePicker.Items[e.Index]) ?? "Unidad no disponible";
+        string label = _drivePicker.Items[e.Index] is DriveChoice drive ? drive.Label : Convert.ToString(_drivePicker.Items[e.Index]) ?? "Unidad no disponible";
 
         var iconPath=Path.Combine(AppContext.BaseDirectory,"Assets","Unidad_USB.png");
         if(File.Exists(iconPath))
@@ -720,12 +718,14 @@ internal sealed class BackupForm : UserControl
         TextRenderer.DrawText(e.Graphics,label,_drivePicker.Font,new Rectangle(e.Bounds.X+28,e.Bounds.Y,e.Bounds.Width-30,e.Bounds.Height),fore,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
         e.DrawFocusRectangle();
     }
+    
     private static GraphicsPath RoundedRect(Rectangle r,int radius)
     {
         var p=new GraphicsPath(); int d=radius*2;
         p.AddArc(r.X,r.Y,d,d,180,90); p.AddArc(r.Right-d,r.Y,d,d,270,90);
         p.AddArc(r.Right-d,r.Bottom-d,d,d,0,90); p.AddArc(r.X,r.Bottom-d,d,d,90,90); p.CloseFigure(); return p;
     }
+    
     private void AddCustomFolder()
     {
         using var dialog = new FolderBrowserDialog { Description = "Selecciona una carpeta específica, incluso en D:, E: u otra unidad." };
@@ -735,6 +735,7 @@ internal sealed class BackupForm : UserControl
         { OnkosMessageBox.Show(this, "Esta carpeta ya está en la lista.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         AddListItem(Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)), path, true, "Unidad");
     }
+    
     private void AddOtherUserFolders()
     {
         string usersRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "..", "Users");
@@ -746,12 +747,7 @@ internal sealed class BackupForm : UserControl
         }
 
         var profiles = Directory.GetDirectories(usersRoot)
-            .Where(path =>
-            {
-                string name = Path.GetFileName(path);
-                return !new[] { "Public", "Default", "Default User", "All Users", "defaultuser0" }
-                    .Contains(name, StringComparer.OrdinalIgnoreCase);
-            })
+            .Where(path => !new[] { "Public", "Default", "Default User", "All Users", "defaultuser0" }.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase))
             .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -827,7 +823,6 @@ internal sealed class BackupForm : UserControl
                 try
                 {
                     if (!d.IsReady) continue;
-                    // Mostrar todas las unidades locales listas: C:, discos secundarios y USB.
                     if (d.DriveType != DriveType.Fixed && d.DriveType != DriveType.Removable) continue;
                     string root = d.RootDirectory.FullName;
                     string volumeName = string.Empty;
@@ -887,61 +882,6 @@ internal sealed class BackupForm : UserControl
         finally { _refreshingDrives = false; }
     }
 
-    private static HashSet<string> GetUsbPhysicalDriveLetters()
-    {
-        var letters = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        try
-        {
-            // Usar las asociaciones WMI directamente evita depender del formato
-            // textual de las rutas Antecedent/Dependent, que varía entre equipos.
-            using var disks = new ManagementObjectSearcher(
-                "SELECT DeviceID, InterfaceType, PNPDeviceID, Service, MediaType FROM Win32_DiskDrive");
-            using var diskResults = disks.Get();
-
-            foreach (ManagementObject disk in diskResults)
-            {
-                try
-                {
-                    string interfaceType = Convert.ToString(disk["InterfaceType"]) ?? string.Empty;
-                    string pnp = Convert.ToString(disk["PNPDeviceID"]) ?? string.Empty;
-                    string service = Convert.ToString(disk["Service"]) ?? string.Empty;
-                    string mediaType = Convert.ToString(disk["MediaType"]) ?? string.Empty;
-
-                    // Muchos discos duros USB modernos usan puente SATA-USB/UASP.
-                    // Windows puede reportarlos como Fixed y con InterfaceType=SCSI,
-                    // aunque físicamente estén conectados por USB.
-                    bool isUsb = interfaceType.Equals("USB", StringComparison.OrdinalIgnoreCase)
-                        || pnp.Contains("USB", StringComparison.OrdinalIgnoreCase)
-                        || pnp.Contains("USBSTOR", StringComparison.OrdinalIgnoreCase)
-                        || service.Contains("USBSTOR", StringComparison.OrdinalIgnoreCase)
-                        || service.Contains("UASP", StringComparison.OrdinalIgnoreCase);
-
-                    if (!isUsb) continue;
-
-                    using ManagementObjectCollection partitions = disk.GetRelated("Win32_DiskPartition");
-                    foreach (ManagementObject partition in partitions)
-                    {
-                        using ManagementObjectCollection logicalDisks = partition.GetRelated("Win32_LogicalDisk");
-                        foreach (ManagementObject logicalDisk in logicalDisks)
-                        {
-                            string deviceId = Convert.ToString(logicalDisk["DeviceID"]) ?? string.Empty;
-                            if (deviceId.Length == 2 && deviceId[1] == ':')
-                                letters.Add(deviceId[..1].ToUpperInvariant());
-                        }
-                    }
-                }
-                catch
-                {
-                    // Continuar con otros discos si uno de ellos no permite consultar asociaciones.
-                }
-            }
-        }
-        catch
-        {
-            // Si WMI falla, RefreshDrives aún podrá listar unidades marcadas como Removable.
-        }
-        return letters;
-    }
     private void ChooseDestination()
     {
         using var dialog = new FolderBrowserDialog { Description = "Selecciona el destino del backup (USB, disco externo o red)." };
@@ -968,32 +908,13 @@ internal sealed class BackupForm : UserControl
             Font = new Font("Segoe UI", 9.5F)
         };
 
-        var label = new Label
-        {
-            Text = "Escribe un nombre para identificar esta copia (opcional):",
-            AutoSize = false,
-            Location = new Point(18, 18),
-            Size = new Size(394, 28),
-            ForeColor = TextMain
-        };
-        var input = new TextBox
-        {
-            Location = new Point(18, 52),
-            Size = new Size(394, 30),
-            Text = _backupLabel.Text,
-            BackColor = Surface2,
-            ForeColor = TextMain,
-            BorderStyle = BorderStyle.FixedSingle,
-            Font = new Font("Segoe UI", 10F)
-        };
+        var label = new Label { Text = "Escribe un nombre para identificar esta copia (opcional):", AutoSize = false, Location = new Point(18, 18), Size = new Size(394, 28), ForeColor = TextMain };
+        var input = new TextBox { Location = new Point(18, 52), Size = new Size(394, 30), Text = _backupLabel.Text, BackColor = Surface2, ForeColor = TextMain, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 10F) };
         var accept = new Button { Text = "CONTINUAR", DialogResult = DialogResult.OK, Size = new Size(120, 34), Location = new Point(164, 108) };
         StyleButton(accept, false);
         var cancel = new Button { Text = "CANCELAR", DialogResult = DialogResult.Cancel, Size = new Size(120, 34), Location = new Point(292, 108) };
         StyleButton(cancel, true);
-        dialog.Controls.Add(label);
-        dialog.Controls.Add(input);
-        dialog.Controls.Add(accept);
-        dialog.Controls.Add(cancel);
+        dialog.Controls.Add(label); dialog.Controls.Add(input); dialog.Controls.Add(accept); dialog.Controls.Add(cancel);
         dialog.AcceptButton = accept;
         dialog.CancelButton = cancel;
         input.SelectAll();
@@ -1008,19 +929,12 @@ internal sealed class BackupForm : UserControl
         if (_busy) return;
         var selected = _sources.Items.Cast<ListViewItem>().Where(x => IsItemChecked(x)).Select(x => (FolderEntry)x.Tag!).ToList();
 
-        selected = selected
-            .Where(entry => !selected.Any(other =>
-                !string.Equals(entry.Path, other.Path, StringComparison.OrdinalIgnoreCase) &&
-                IsPathInside(entry.Path, other.Path)))
-            .ToList();
+        selected = selected.Where(entry => !selected.Any(other => !string.Equals(entry.Path, other.Path, StringComparison.OrdinalIgnoreCase) && IsPathInside(entry.Path, other.Path))).ToList();
 
-        bool chromeSelected = selected.Any(entry =>
-            entry.Label.StartsWith("Google Chrome", StringComparison.OrdinalIgnoreCase));
+        bool chromeSelected = selected.Any(entry => entry.Label.StartsWith("Google Chrome", StringComparison.OrdinalIgnoreCase));
         if (chromeSelected && Process.GetProcessesByName("chrome").Length > 0)
         {
-            OnkosMessageBox.Show(this,
-                "Google Chrome está abierto. Cierra todas las ventanas de Chrome antes de respaldar sus perfiles para evitar archivos bloqueados o datos incompletos.",
-                "Cierra Google Chrome", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            OnkosMessageBox.Show(this, "Google Chrome está abierto. Cierra todas las ventanas de Chrome antes de respaldar sus perfiles para evitar archivos bloqueados o datos incompletos.", "Cierra Google Chrome", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -1044,12 +958,10 @@ internal sealed class BackupForm : UserControl
         string backupPattern = $"{folderPrefix}{Environment.MachineName}_*";
         string? previousBackup = null;
 
-        // Busca respaldos anteriores del mismo equipo para permitir reanudar una copia interrumpida.
         try
         {
             previousBackup = Directory.GetDirectories(dest, backupPattern, SearchOption.TopDirectoryOnly)
-                .Where(path => File.Exists(Path.Combine(path, ".onkos-state.json"))
-                    && Directory.Exists(Path.Combine(path, "Archivos")))
+                .Where(path => File.Exists(Path.Combine(path, ".onkos-state.json")) && Directory.Exists(Path.Combine(path, "Archivos")))
                 .OrderByDescending(Directory.GetLastWriteTimeUtc)
                 .FirstOrDefault();
         }
@@ -1061,14 +973,9 @@ internal sealed class BackupForm : UserControl
         string root;
         if (!string.IsNullOrWhiteSpace(previousBackup))
         {
-            var choice = OnkosMessageBox.AskYesNoCancel(this,
-                "ONKOS — Reanudar respaldo",
-                $"Se encontró un respaldo anterior de este equipo:\n\n{previousBackup}\n\n¿Deseas continuar ese respaldo?\n\nSí = reanudar el respaldo anterior\nNo = crear un respaldo nuevo\nCancelar = no iniciar",
-                "Sí, reanudar", "No, crear nuevo", "Cancelar");
+            var choice = OnkosMessageBox.AskYesNoCancel(this, "ONKOS — Reanudar respaldo", $"Se encontró un respaldo anterior de este equipo:\n\n{previousBackup}\n\n¿Deseas continuar ese respaldo?\n\nSí = reanudar el respaldo anterior\nNo = crear un respaldo nuevo\nCancelar = no iniciar", "Sí, reanudar", "No, crear nuevo", "Cancelar");
             if (choice == DialogResult.Cancel) return;
-            root = choice == DialogResult.Yes
-                ? previousBackup!
-                : Path.Combine(dest, $"{folderPrefix}{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}");
+            root = choice == DialogResult.Yes ? previousBackup! : Path.Combine(dest, $"{folderPrefix}{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}");
         }
         else
         {
@@ -1107,9 +1014,7 @@ internal sealed class BackupForm : UserControl
                 var drive = new DriveInfo(Path.GetPathRoot(root)!);
                 if (drive.IsReady && totalBytes > 0 && drive.AvailableFreeSpace < totalBytes * 1.1)
                 {
-                    var answer = OnkosMessageBox.Show(this,
-                        $"Espacio insuficiente en destino.\n\nRequerido aprox.: {totalBytes / 1024.0 / 1024 / 1024:F1} GB\nDisponible: {drive.AvailableFreeSpace / 1024.0 / 1024 / 1024:F1} GB\n\n¿Continuar de todas formas?",
-                        "Espacio en disco", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                    var answer = OnkosMessageBox.Show(this, $"Espacio insuficiente en destino.\n\nRequerido aprox.: {totalBytes / 1024.0 / 1024 / 1024:F1} GB\nDisponible: {drive.AvailableFreeSpace / 1024.0 / 1024 / 1024:F1} GB\n\n¿Continuar de todas formas?", "Espacio en disco", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                     if (answer != DialogResult.Yes)
                     {
                         WriteLog("Backup cancelado por falta de espacio.");
@@ -1123,13 +1028,10 @@ internal sealed class BackupForm : UserControl
 
             string filesRoot = Path.Combine(root, "Archivos");
             Directory.CreateDirectory(filesRoot);
-
-            // Adjuntar el último inventario al backup (si existe).
             AttachLatestInventory(filesRoot, errorDetails);
 
             var state = BackupState.Load(root);
             int alreadyDone = 0;
-
             int errors = errorDetails.Count;
 
             foreach (var dir in directoryList)
@@ -1146,6 +1048,7 @@ internal sealed class BackupForm : UserControl
             var manifestRows = new List<string> { CsvRow("Estado", "Verificación", "Origen", "Destino", "Bytes", "Fecha", "Detalle") };
             IProgress<(int done, int total, string message, string current)> progress = new Progress<(int done, int total, string message, string current)>(p => { SetProgress(p.done, p.total, $"Copiando… {p.done} de {p.total}", p.current); if (!string.IsNullOrWhiteSpace(p.message)) WriteLog(p.message); });
             var token = _cts.Token;
+            
             await Task.Run(() =>
             {
                 foreach (var item in fileList)
@@ -1160,17 +1063,11 @@ internal sealed class BackupForm : UserControl
                     {
                         var sInfo = new FileInfo(item.Source);
                         sourceBytes = sInfo.Length;
-                        if (state.Files.TryGetValue(item.Source, out var prev)
-                            && prev.Size == sourceBytes
-                            && !string.IsNullOrWhiteSpace(prev.Hash)
-                            && File.Exists(targetFile))
+                        if (state.Files.TryGetValue(item.Source, out var prev) && prev.Size == sourceBytes && !string.IsNullOrWhiteSpace(prev.Hash) && File.Exists(targetFile))
                         {
                             string sourceHash = BackupState.ComputeHash(item.Source);
                             string targetHash = BackupState.ComputeHash(targetFile);
-                            if (!string.IsNullOrWhiteSpace(sourceHash)
-                                && !string.IsNullOrWhiteSpace(targetHash)
-                                && string.Equals(sourceHash, prev.Hash, StringComparison.OrdinalIgnoreCase)
-                                && string.Equals(targetHash, prev.Hash, StringComparison.OrdinalIgnoreCase))
+                            if (!string.IsNullOrWhiteSpace(sourceHash) && !string.IsNullOrWhiteSpace(targetHash) && string.Equals(sourceHash, prev.Hash, StringComparison.OrdinalIgnoreCase) && string.Equals(targetHash, prev.Hash, StringComparison.OrdinalIgnoreCase))
                             {
                                 copyStatus = "YA COPIADO";
                                 verifyStatus = "Reanudado (SHA-256 correcto)";
@@ -1189,20 +1086,16 @@ internal sealed class BackupForm : UserControl
                         var sourceInfo = new FileInfo(item.Source);
                         sourceBytes = sourceInfo.Length;
                         string sourceHashAfterCopyCheck = BackupState.ComputeHash(item.Source);
-                        if (string.IsNullOrWhiteSpace(sourceHashAfterCopyCheck))
-                            throw new IOException("No se pudo calcular SHA-256 del archivo de origen.");
+                        if (string.IsNullOrWhiteSpace(sourceHashAfterCopyCheck)) throw new IOException("No se pudo calcular SHA-256 del archivo de origen.");
                         Directory.CreateDirectory(targetDir);
                         File.Copy(item.Source, targetFile, true);
                         copied++;
                         var targetInfo = new FileInfo(targetFile);
                         if (!targetInfo.Exists) throw new IOException("La copia no aparece en el destino.");
-                        if (targetInfo.Length != sourceInfo.Length)
-                            throw new IOException($"Tamaño diferente: origen {sourceInfo.Length} bytes, copia {targetInfo.Length} bytes.");
+                        if (targetInfo.Length != sourceInfo.Length) throw new IOException($"Tamaño diferente: origen {sourceInfo.Length} bytes, copia {targetInfo.Length} bytes.");
                         string hash = BackupState.ComputeHash(targetFile);
-                        if (string.IsNullOrWhiteSpace(hash))
-                            throw new IOException("No se pudo calcular SHA-256 del archivo copiado.");
-                        if (!string.Equals(sourceHashAfterCopyCheck, hash, StringComparison.OrdinalIgnoreCase))
-                            throw new IOException("La verificación SHA-256 falló: el origen y la copia no coinciden.");
+                        if (string.IsNullOrWhiteSpace(hash)) throw new IOException("No se pudo calcular SHA-256 del archivo copiado.");
+                        if (!string.Equals(sourceHashAfterCopyCheck, hash, StringComparison.OrdinalIgnoreCase)) throw new IOException("La verificación SHA-256 falló: el origen y la copia no coinciden.");
                         state.Files[item.Source] = new FileState { Size = targetInfo.Length, Hash = hash, CopiedAt = DateTime.Now };
                         copyStatus = "COPIADO";
                         verifyStatus = "Verificado (tamaño + SHA-256)";
@@ -1216,10 +1109,7 @@ internal sealed class BackupForm : UserControl
                     manifestRows.Add(CsvRow(copyStatus, verifyStatus, item.Source, targetFile, sourceBytes.ToString(), DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), detail));
                     done++; progress.Report((done, total, "", Path.GetFileName(item.Source)));
 
-                    if (done % 50 == 0)
-                    {
-                        try { state.Save(); } catch { }
-                    }
+                    if (done % 50 == 0) { try { state.Save(); } catch { } }
                 }
                 try { state.Save(); } catch { }
             });
@@ -1282,19 +1172,14 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
                         }
                         string captureError = await captureErr;
                         _ = await captureOut;
-                        if (captureProcess.ExitCode != 0 || !File.Exists(structuredFile))
-                            throw new IOException("No se pudo generar IPv4_config.json. " + captureError);
+                        if (captureProcess.ExitCode != 0 || !File.Exists(structuredFile)) throw new IOException("No se pudo generar IPv4_config.json. " + captureError);
                         string jsonCheck = File.ReadAllText(structuredFile, Encoding.UTF8).TrimStart('\uFEFF', ' ', '\r', '\n');
                         using var jsonDocument = System.Text.Json.JsonDocument.Parse(jsonCheck);
-                        int adapterCount = jsonDocument.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array
-                            ? jsonDocument.RootElement.GetArrayLength() : 0;
+                        int adapterCount = jsonDocument.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array ? jsonDocument.RootElement.GetArrayLength() : 0;
                         if (adapterCount == 0) throw new IOException("No se detectaron adaptadores con configuración IPv4 para respaldar.");
                         networkAdaptersBackedUp = adapterCount;
                         networkBackupSucceeded = true;
-                        File.WriteAllText(Path.Combine(root, "Red", "LEEME.txt"),
-                            "Respaldo de red: IPv4_netsh_dump.txt (referencia) e IPv4_config.json (IP, prefijo/máscara, puerta de enlace, DHCP y DNS por adaptador). " +
-                            "La restauración estructurada solo aplicará configuraciones a adaptadores cuyo nombre coincida exactamente; revise el mapeo antes de confirmar." +
-                            Environment.NewLine + $"Adaptadores capturados: {adapterCount}", Encoding.UTF8);
+                        File.WriteAllText(Path.Combine(root, "Red", "LEEME.txt"), "Respaldo de red: IPv4_netsh_dump.txt (referencia) e IPv4_config.json (IP, prefijo/máscara, puerta de enlace, DHCP y DNS por adaptador). La restauración estructurada solo aplicará configuraciones a adaptadores cuyo nombre coincida exactamente; revise el mapeo antes de confirmar." + Environment.NewLine + $"Adaptadores capturados: {adapterCount}", Encoding.UTF8);
                         WriteLog($"Configuración IPv4 estructurada exportada. Adaptadores detectados: {adapterCount}.");
                     }
                     finally
@@ -1307,7 +1192,6 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
             }
 
             File.WriteAllText(Path.Combine(root, "MANIFIESTO_BACKUP.csv"), string.Join(Environment.NewLine, manifestRows), Encoding.UTF8);
-
             string errorReportPath = Path.Combine(root, "INFORME_ERRORES_BACKUP.txt");
             File.WriteAllText(errorReportPath,
                 "INFORME DE ERRORES - ONKOS IT TOOLKIT BACKUP" + Environment.NewLine +
@@ -1315,11 +1199,7 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
                 $"Equipo: {Environment.MachineName}{Environment.NewLine}" +
                 $"Usuario: {Environment.UserName}{Environment.NewLine}" +
                 $"Errores detectados: {errorDetails.Count}{Environment.NewLine}{Environment.NewLine}" +
-                (errorDetails.Count == 0 ? "Backup sin errores detectados." :
-                    "Revisar o copiar manualmente los siguientes elementos:" + Environment.NewLine +
-                    "ORIGEN | DESTINO | MOTIVO" + Environment.NewLine +
-                    new string('-', 90) + Environment.NewLine +
-                    string.Join(Environment.NewLine + Environment.NewLine, errorDetails)));
+                (errorDetails.Count == 0 ? "Backup sin errores detectados." : "Revisar o copiar manualmente los siguientes elementos:" + Environment.NewLine + "ORIGEN | DESTINO | MOTIVO" + Environment.NewLine + new string('-', 90) + Environment.NewLine + string.Join(Environment.NewLine + Environment.NewLine, errorDetails)));
 
             File.WriteAllText(Path.Combine(root, "BACKUP_INFO.txt"),
                 $"ONKOS IT Toolkit backup{Environment.NewLine}" +
@@ -1339,9 +1219,7 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
             {
                 SetProgress(done, total, "Backup cancelado por el usuario.", "Cancelado");
                 WriteLog($"Backup cancelado. Copiados: {copied}. Reanudados: {alreadyDone}. Errores: {errors}.{Environment.NewLine}Ruta: {root}");
-                OnkosMessageBox.Show(this,
-                    $"Backup cancelado por el usuario.{Environment.NewLine}{Environment.NewLine}Copiados ahora: {copied}{Environment.NewLine}Reanudados (ya existían): {alreadyDone}{Environment.NewLine}Verificados: {verified}{Environment.NewLine}Pendientes: {errors}{Environment.NewLine}{Environment.NewLine}{root}{Environment.NewLine}{Environment.NewLine}Puedes reanudar más tarde abriendo esta misma carpeta como destino.",
-                    "ONKOS Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                OnkosMessageBox.Show(this, $"Backup cancelado por el usuario.{Environment.NewLine}{Environment.NewLine}Copiados ahora: {copied}{Environment.NewLine}Reanudados (ya existían): {alreadyDone}{Environment.NewLine}Verificados: {verified}{Environment.NewLine}Pendientes: {errors}{Environment.NewLine}{Environment.NewLine}{root}{Environment.NewLine}{Environment.NewLine}Puedes reanudar más tarde abriendo esta misma carpeta como destino.", "ONKOS Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 ActivityLog.Write("BACKUP", "Cancelado por usuario", "OK", $"Copiados: {copied} | Reanudados: {alreadyDone} | Errores: {errors}");
             }
             else
@@ -1350,22 +1228,9 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
                 WriteLog($"Finalizado. Copiados: {copied}. Reanudados: {alreadyDone}. Errores: {errors}.{Environment.NewLine}Ruta: {root}");
                 ActivityLog.Write("BACKUP", "Backup finalizado", errors == 0 ? "OK" : "CON ERRORES", $"Copiados: {copied} | Reanudados: {alreadyDone} | Errores: {errors} | Ruta: {root}");
 
-                if (errors > 0)
-                    ShowErrorsModal(errorDetails, root);
+                if (errors > 0) ShowErrorsModal(errorDetails, root);
                 else
-                    OnkosMessageBox.Show(this,
-                        $"Respaldo completado correctamente.{Environment.NewLine}{Environment.NewLine}" +
-                    $"Archivos copiados: {copied}{Environment.NewLine}" +
-                    $"Archivos reanudados (ya existían): {alreadyDone}{Environment.NewLine}" +
-                    $"Archivos verificados: {verified}{Environment.NewLine}" +
-                    (networkBackupSucceeded
-                        ? $"Configuración de red respaldada: Sí ({networkAdaptersBackedUp} adaptador(es) IPv4){Environment.NewLine}"
-                        : (_ipv4.Checked ? $"Configuración de red respaldada: No{Environment.NewLine}" : "")) +
-                    (fileList.Count == 0 && networkBackupSucceeded
-                        ? $"Tipo de respaldo: Solo configuración de red (no se seleccionaron carpetas).{Environment.NewLine}"
-                        : "") +
-                    $"{Environment.NewLine}{root}",
-                        "ONKOS Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    OnkosMessageBox.Show(this, $"Respaldo completado correctamente.{Environment.NewLine}{Environment.NewLine}" + $"Archivos copiados: {copied}{Environment.NewLine}" + $"Archivos reanudados (ya existían): {alreadyDone}{Environment.NewLine}" + $"Archivos verificados: {verified}{Environment.NewLine}" + (networkBackupSucceeded ? $"Configuración de red respaldada: Sí ({networkAdaptersBackedUp} adaptador(es) IPv4){Environment.NewLine}" : (_ipv4.Checked ? $"Configuración de red respaldada: No{Environment.NewLine}" : "")) + (fileList.Count == 0 && networkBackupSucceeded ? $"Tipo de respaldo: Solo configuración de red (no se seleccionaron carpetas).{Environment.NewLine}" : "") + $"{Environment.NewLine}{root}", "ONKOS Backup", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
         catch (Exception ex) { _status.Text = "El backup falló."; WriteLog("ERROR GENERAL: " + ex.Message); ActivityLog.Write("BACKUP", "Error general", "ERROR", ex.Message); OnkosMessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
@@ -1377,17 +1242,13 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
         }
     }
 
-    // Copia el último inventario que haya en Data/Reports/Inventario_*.csv
-    // dentro de la carpeta Archivos/Inventario_ONKOS/ del backup.
     private void AttachLatestInventory(string filesRoot, List<string> errorDetails)
     {
         try
         {
             string reportsDir = AppPaths.ReportsDir;
             if (!Directory.Exists(reportsDir)) return;
-            var latest = Directory.GetFiles(reportsDir, "Inventario_*.csv")
-                .OrderByDescending(File.GetLastWriteTimeUtc)
-                .FirstOrDefault();
+            var latest = Directory.GetFiles(reportsDir, "Inventario_*.csv").OrderByDescending(File.GetLastWriteTimeUtc).FirstOrDefault();
             if (latest == null) return;
 
             string targetDir = Path.Combine(filesRoot, "Inventario_ONKOS");
@@ -1416,8 +1277,7 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
         };
         var title = new Label
         {
-            Text = $"Se copiaron los archivos, pero {errorDetails.Count} elemento(s) NO se pudieron copiar.{Environment.NewLine}" +
-                   "Revisa la lista antes de dar por bueno el respaldo. Los elementos listados no están en el destino.",
+            Text = $"Se copiaron los archivos, pero {errorDetails.Count} elemento(s) NO se pudieron copiar.{Environment.NewLine}Revisa la lista antes de dar por bueno el respaldo. Los elementos listados no están en el destino.",
             Dock = DockStyle.Top, Height = 60, Padding = new Padding(12, 8, 12, 8),
             ForeColor = Color.FromArgb(255, 200, 100), Font = new Font("Segoe UI", 10F, FontStyle.Bold)
         };
@@ -1426,23 +1286,15 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
             Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both, WordWrap = false,
             Dock = DockStyle.Fill,
             Font = new Font("Consolas", 9F),
-            BackColor = Color.FromArgb(13, 12, 18),
-            ForeColor = Color.FromArgb(240, 200, 200),
+            BackColor = OnkosTheme.LogBg, ForeColor = Color.FromArgb(240, 200, 200),
             BorderStyle = BorderStyle.None,
             Text = string.Join(Environment.NewLine + Environment.NewLine, errorDetails)
         };
         var bottom = new Panel { Dock = DockStyle.Bottom, Height = 56, BackColor = Surface };
-        var understood = new CheckBox
-        {
-            Text = "Entiendo que estos elementos NO están en el backup.",
-            Location = new Point(12, 16), AutoSize = true, ForeColor = TextMain, Cursor = Cursors.Hand
-        };
-        var ok = new Button
-        {
-            Text = "CERRAR", DialogResult = DialogResult.OK, Location = new Point(640, 12), Size = new Size(100, 32),
-            BackColor = Purple, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Enabled = false
-        };
-        ok.FlatAppearance.BorderSize = 0;
+        var understood = new CheckBox { Text = "Entiendo que estos elementos NO están en el backup.", Location = new Point(12, 16), AutoSize = true, ForeColor = TextMain, Cursor = Cursors.Hand };
+        var ok = new Button { Text = "CERRAR", DialogResult = DialogResult.OK, Location = new Point(640, 12), Size = new Size(100, 32) };
+        OnkosTheme.StyleButton(ok, ButtonKind.Primary);
+        ok.Enabled = false;
         understood.CheckedChanged += (_, _) => ok.Enabled = understood.Checked;
         bottom.Controls.Add(understood); bottom.Controls.Add(ok);
         dialog.Controls.Add(list); dialog.Controls.Add(bottom); dialog.Controls.Add(title);
@@ -1476,9 +1328,7 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
                 string manifestDestination = r[3];
                 string marker = Path.DirectorySeparatorChar + "Archivos" + Path.DirectorySeparatorChar;
                 int idx = manifestDestination.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-                string backupFile = idx >= 0
-                    ? Path.Combine(backupRoot, "Archivos", manifestDestination.Substring(idx + marker.Length))
-                    : manifestDestination;
+                string backupFile = idx >= 0 ? Path.Combine(backupRoot, "Archivos", manifestDestination.Substring(idx + marker.Length)) : manifestDestination;
                 long expectedBytes = 0;
                 long.TryParse(r.Length > 4 ? r[4] : null, out expectedBytes);
                 return (BackupFile: backupFile, OriginalFile: r[2], ExpectedBytes: expectedBytes);
@@ -1497,12 +1347,7 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
         }
 
         var backupState = BackupState.Load(backupRoot);
-
-        var oldProfiles = files.Select(x => GetWindowsProfileRoot(x.OriginalFile))
-            .OfType<string>()
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-
+        var oldProfiles = files.Select(x => GetWindowsProfileRoot(x.OriginalFile)).OfType<string>().Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         var profileMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         string currentProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
@@ -1526,7 +1371,8 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
             {
                 var label = new Label { Text = "Perfil original: " + oldProfile, Location = new Point(4, y), Size = new Size(650, 22), ForeColor = TextMuted };
                 var target = new TextBox { Text = currentProfile, Location = new Point(4, y + 25), Size = new Size(545, 28), BackColor = Surface2, ForeColor = TextMain, BorderStyle = BorderStyle.FixedSingle };
-                var browse = new Button { Text = "Examinar…", Location = new Point(555, y + 23), Size = new Size(105, 30), BackColor = Surface2, ForeColor = TextMain, FlatStyle = FlatStyle.Flat };
+                var browse = new Button { Text = "Examinar…", Location = new Point(555, y + 23), Size = new Size(105, 30) };
+                StyleButton(browse, true);
                 browse.Click += (_, _) =>
                 {
                     using var folder = new FolderBrowserDialog { Description = "Selecciona la carpeta del perfil de usuario destino.", SelectedPath = Directory.Exists(target.Text) ? target.Text : currentProfile };
@@ -1539,8 +1385,10 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
             }
             var note = new Label { Text = "Se conservará la estructura interna. Las rutas fuera de C:\\Users\\… no se modificarán.", Location = new Point(14, rowsPanel.Bottom + 4), Size = new Size(670, 34), ForeColor = TextMuted };
             mapping.Controls.Add(note);
-            var ok = new Button { Text = "CONTINUAR", DialogResult = DialogResult.OK, Location = new Point(460, mapping.ClientSize.Height - 42), Size = new Size(105, 32), BackColor = Purple, ForeColor = Color.White, FlatStyle = FlatStyle.Flat };
-            var cancel = new Button { Text = "CANCELAR", DialogResult = DialogResult.Cancel, Location = new Point(575, mapping.ClientSize.Height - 42), Size = new Size(105, 32), BackColor = Surface2, ForeColor = TextMain, FlatStyle = FlatStyle.Flat };
+            var ok = new Button { Text = "CONTINUAR", DialogResult = DialogResult.OK, Location = new Point(460, mapping.ClientSize.Height - 42), Size = new Size(105, 32) };
+            OnkosTheme.StyleButton(ok, ButtonKind.Primary);
+            var cancel = new Button { Text = "CANCELAR", DialogResult = DialogResult.Cancel, Location = new Point(575, mapping.ClientSize.Height - 42), Size = new Size(105, 32) };
+            StyleButton(cancel, true);
             mapping.Controls.Add(ok); mapping.Controls.Add(cancel); mapping.AcceptButton = ok; mapping.CancelButton = cancel;
             if (mapping.ShowDialog(this) != DialogResult.OK) return;
             if (profileMap.Any(kv => string.IsNullOrWhiteSpace(kv.Value) || !Directory.Exists(kv.Value)))
@@ -1553,9 +1401,7 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
         bool overwrite = false;
         if (files.Count > 0)
         {
-            var overwriteChoice = OnkosMessageBox.Show(this,
-                $"Se encontraron {files.Count:N0} archivos respaldados.\n\n¿Deseas reemplazar archivos que ya existan en el destino seleccionado?\n\nSí = reemplazar\nNo = conservar los existentes y omitirlos",
-                "Confirmar restauración", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
+            var overwriteChoice = OnkosMessageBox.Show(this, $"Se encontraron {files.Count:N0} archivos respaldados.\n\n¿Deseas reemplazar archivos que ya existan en el destino seleccionado?\n\nSí = reemplazar\nNo = conservar los existentes y omitirlos", "Confirmar restauración", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning);
             if (overwriteChoice == DialogResult.Cancel) return;
             overwrite = overwriteChoice == DialogResult.Yes;
         }
@@ -1564,8 +1410,7 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
             WriteLog("Respaldo de red detectado sin archivos de usuario. Se continuará directamente con la revisión IPv4.");
         }
 
-        _busy = true; _run.Enabled = false; _log.Clear();
-        SetProgress(0, files.Count, "Preparando restauración…", "Leyendo manifiesto");
+        _busy = true; _run.Enabled = false; _log.Clear(); SetProgress(0, files.Count, "Preparando restauración…", "Leyendo manifiesto");
         ActivityLog.Write("RESTORE", "Inicio restauración", "OK", $"Backup: {backupRoot} | Archivos: {files.Count}");
         int restored = 0, skipped = 0, errors = 0;
         var report = new List<string> { "INFORME DE RESTAURACIÓN ONKOS", $"Fecha: {DateTime.Now:yyyy-MM-dd HH:mm:ss}", $"Backup: {backupRoot}", "MAPEO DE PERFILES:" };
@@ -1585,15 +1430,11 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
                     {
                         if (!File.Exists(source)) throw new FileNotFoundException("No se encuentra el archivo dentro del respaldo.", source);
                         var backupInfo = new FileInfo(source);
-                        if (item.ExpectedBytes > 0 && backupInfo.Length != item.ExpectedBytes)
-                            throw new IOException($"El archivo del respaldo tiene tamaño incorrecto. Esperado: {item.ExpectedBytes}; encontrado: {backupInfo.Length}.");
-                        if (backupState.Files.TryGetValue(item.OriginalFile, out var savedState)
-                            && !string.IsNullOrWhiteSpace(savedState.Hash))
+                        if (item.ExpectedBytes > 0 && backupInfo.Length != item.ExpectedBytes) throw new IOException($"El archivo del respaldo tiene tamaño incorrecto. Esperado: {item.ExpectedBytes}; encontrado: {backupInfo.Length}.");
+                        if (backupState.Files.TryGetValue(item.OriginalFile, out var savedState) && !string.IsNullOrWhiteSpace(savedState.Hash))
                         {
                             string actualHash = BackupState.ComputeHash(source);
-                            if (string.IsNullOrWhiteSpace(actualHash)
-                                || !string.Equals(actualHash, savedState.Hash, StringComparison.OrdinalIgnoreCase))
-                                throw new IOException("El archivo del respaldo no superó la verificación SHA-256. No se restauró para evitar copiar información dañada.");
+                            if (string.IsNullOrWhiteSpace(actualHash) || !string.Equals(actualHash, savedState.Hash, StringComparison.OrdinalIgnoreCase)) throw new IOException("El archivo del respaldo no superó la verificación SHA-256. No se restauró para evitar copiar información dañada.");
                         }
                         if (File.Exists(target) && !overwrite)
                         {
@@ -1626,11 +1467,7 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
             string legacyNetworkDump = Path.Combine(backupRoot, "Red", "IPv4_netsh_dump.txt");
             if (File.Exists(structuredNetworkFile))
             {
-                var networkChoice = OnkosMessageBox.Show(this,
-                    "El respaldo contiene configuración IPv4 estructurada por adaptador, incluyendo IP, máscara/prefijo, puerta de enlace, DHCP y DNS cuando estaban configurados.\n\n" +
-                    "ONKOS identificará los adaptadores por nombre exacto. Si un nombre no coincide, ese adaptador se omitirá; no se asignará la configuración a otro adaptador automáticamente.\n\n" +
-                    "¿Deseas revisar la configuración antes de restaurarla?",
-                    "Revisión de configuración IPv4", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                var networkChoice = OnkosMessageBox.Show(this, "El respaldo contiene configuración IPv4 estructurada por adaptador, incluyendo IP, máscara/prefijo, puerta de enlace, DHCP y DNS cuando estaban configurados.\n\nONKOS identificará los adaptadores por nombre exacto. Si un nombre no coincide, ese adaptador se omitirá; no se asignará la configuración a otro adaptador automáticamente.\n\n¿Deseas revisar la configuración antes de restaurarla?", "Revisión de configuración IPv4", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
                 if (networkChoice == DialogResult.Yes)
                 {
                     try
@@ -1648,17 +1485,14 @@ ConvertTo-Json -InputObject @($result) -Depth 6 | Set-Content -LiteralPath $env:
                             string alias = adapter.TryGetProperty("InterfaceAlias", out var a) ? a.GetString() ?? "(sin nombre)" : "(sin nombre)";
                             preview.AppendLine("• " + alias);
                             if (adapter.TryGetProperty("Addresses", out var addresses) && addresses.ValueKind == System.Text.Json.JsonValueKind.Array)
-                                foreach (var address in addresses.EnumerateArray())
-                                    preview.AppendLine("   IP: " + address.GetProperty("Address").GetString() + "/" + address.GetProperty("PrefixLength").GetInt32());
+                                foreach (var address in addresses.EnumerateArray()) preview.AppendLine("   IP: " + address.GetProperty("Address").GetString() + "/" + address.GetProperty("PrefixLength").GetInt32());
                             if (adapter.TryGetProperty("Gateways", out var gateways) && gateways.ValueKind == System.Text.Json.JsonValueKind.Array)
                                 preview.AppendLine("   Puerta de enlace: " + string.Join(", ", gateways.EnumerateArray().Select(x => x.GetString())));
                             if (adapter.TryGetProperty("DnsServers", out var dns) && dns.ValueKind == System.Text.Json.JsonValueKind.Array)
                                 preview.AppendLine("   DNS: " + string.Join(", ", dns.EnumerateArray().Select(x => x.GetString())));
                             preview.AppendLine();
                         }
-                        var finalNetworkChoice = OnkosMessageBox.Show(this,
-                            preview + "\r\nSe aplicará únicamente a interfaces con el mismo nombre. La operación puede interrumpir la conexión. ¿CONFIRMAS?",
-                            "Confirmación final — restaurar IPv4", MessageBoxButtons.YesNo, MessageBoxIcon.Stop);
+                        var finalNetworkChoice = OnkosMessageBox.Show(this, preview + "\r\nSe aplicará únicamente a interfaces con el mismo nombre. La operación puede interrumpir la conexión. ¿CONFIRMAS?", "Confirmación final — restaurar IPv4", MessageBoxButtons.YesNo, MessageBoxIcon.Stop);
                         if (finalNetworkChoice == DialogResult.Yes)
                         {
                             string restoreScript = @"
@@ -1719,7 +1553,7 @@ $log | Set-Content -LiteralPath $env:ONKOS_IPV4_REPORT -Encoding UTF8
                                 report.Add("=== RESULTADO DE RESTAURACIÓN IPv4 ===");
                                 report.Add(restoreLog);
                                 if (process.ExitCode != 0) throw new IOException("PowerShell terminó con código " + process.ExitCode + ". " + stdErr);
-                                WriteLog("Restauración IPv4 estructurada ejecutada. Revisa RESULTADO_RESTAURACION_IPV4.txt.");
+                                WriteLog("Restauración IPv4 estructurada ejecutada. Revisa RESULTADO_RESTORACION_IPV4.txt.");
                                 ActivityLog.Write("RESTORE", "Restauración IPv4 estructurada", "REVISAR", restoreLog);
                             }
                             finally { try { if (File.Exists(restoreScriptPath)) File.Delete(restoreScriptPath); } catch { } }
@@ -1747,8 +1581,7 @@ $log | Set-Content -LiteralPath $env:ONKOS_IPV4_REPORT -Encoding UTF8
             SetProgress(files.Count, files.Count, errors == 0 ? "¡Restauración finalizada!" : "Restauración finalizada con errores.", "Terminado");
             WriteLog($"Restauración finalizada. Restaurados: {restored}; omitidos: {skipped}; errores: {errors}.");
             ActivityLog.Write("RESTORE", "Restauración finalizada", errors == 0 ? "OK" : "CON ERRORES", $"Restaurados: {restored} | Omitidos: {skipped} | Errores: {errors}");
-            OnkosMessageBox.Show(this, $"Restauración finalizada.\n\nRestaurados: {restored:N0}\nOmitidos (existentes): {skipped:N0}\nErrores: {errors:N0}\n\nInforme: {reportPath}",
-                "ONKOS Restauración", MessageBoxButtons.OK, errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            OnkosMessageBox.Show(this, $"Restauración finalizada.\n\nRestaurados: {restored:N0}\nOmitidos (existentes): {skipped:N0}\nErrores: {errors:N0}\n\nInforme: {reportPath}", "ONKOS Restauración", MessageBoxButtons.OK, errors == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
         }
         catch (Exception ex)
         {
@@ -1930,9 +1763,7 @@ $log | Set-Content -LiteralPath $env:ONKOS_IPV4_REPORT -Encoding UTF8
     }
 
     private static string CsvRow(params string[] fields) => string.Join(",", fields.Select(value => "\"" + (value ?? string.Empty).Replace("\"", "\"\"") + "\""));
-
-    private void SetProgress(int done, int total, string status, string current)
-    { int pct = total <= 0 ? 0 : Math.Clamp((int)(100.0 * done / total), 0, 100); _bar.Value = pct; _status.Text = status; _currentFile.Text = "Ahora: " + current; }
+    private void SetProgress(int done, int total, string status, string current) { int pct = total <= 0 ? 0 : Math.Clamp((int)(100.0 * done / total), 0, 100); _bar.Value = pct; _status.Text = status; _currentFile.Text = "Ahora: " + current; }
     private void ReportError(List<string> errorDetails, string source, string destination, string error)
     {
         string detail = $"ORIGEN: {source} | DESTINO: {destination} | MOTIVO: {error}";
@@ -1944,15 +1775,13 @@ $log | Set-Content -LiteralPath $env:ONKOS_IPV4_REPORT -Encoding UTF8
     [DllImport("uxtheme.dll", CharSet=CharSet.Unicode)] private static extern int SetWindowTheme(IntPtr hwnd,string? appName,string? idList);
 
     private static bool IsSameOrChild(string parent, string child) => IsPathInside(parent, child);
-
     private static bool IsPathInside(string candidate, string parent)
     {
         try
         {
             string normalizedParent = Path.GetFullPath(parent).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             string normalizedCandidate = Path.GetFullPath(candidate).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-            return normalizedCandidate.Equals(normalizedParent, StringComparison.OrdinalIgnoreCase)
-                || normalizedCandidate.StartsWith(normalizedParent + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+            return normalizedCandidate.Equals(normalizedParent, StringComparison.OrdinalIgnoreCase) || normalizedCandidate.StartsWith(normalizedParent + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
         }
         catch { return false; }
     }
@@ -1964,17 +1793,10 @@ $log | Set-Content -LiteralPath $env:ONKOS_IPV4_REPORT -Encoding UTF8
         using var p = Process.Start(psi) ?? throw new InvalidOperationException("No se pudo iniciar netsh.");
         var stdoutTask = p.StandardOutput.ReadToEndAsync();
         var stderrTask = p.StandardError.ReadToEndAsync();
-        if (!p.WaitForExit(timeoutMs))
-        {
-            try { p.Kill(true); } catch { }
-            throw new TimeoutException($"netsh tardó más de {timeoutMs / 1000} s. Operación cancelada.");
-        }
-
+        if (!p.WaitForExit(timeoutMs)) { try { p.Kill(true); } catch { } throw new TimeoutException($"netsh tardó más de {timeoutMs / 1000} s. Operación cancelada."); }
         string stdout = await stdoutTask;
         string stderr = await stderrTask;
-        if (p.ExitCode != 0)
-            throw new InvalidOperationException($"netsh terminó con código {p.ExitCode}.\n{stderr}\n{stdout}".Trim());
-
+        if (p.ExitCode != 0) throw new InvalidOperationException($"netsh terminó con código {p.ExitCode}.\n{stderr}\n{stdout}".Trim());
         return stdout;
     }
 
@@ -2046,7 +1868,7 @@ internal sealed class PurpleCheckBox : CheckBox
             using var tick = new Pen(Color.White, 2.1F) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
             g.DrawLines(tick, new[] { new Point(x + 3, y + 8), new Point(x + 6, y + 11), new Point(x + 13, y + 4) });
         }
-                int textX = 29;
+        int textX = 29;
         if (Image != null)
         {
             int imageSize = Math.Min(24, Height - 6);
@@ -2076,8 +1898,6 @@ internal sealed class ManualDriveComboBox : ComboBox
 
     protected override void WndProc(ref Message m)
     {
-        // Evita que la rueda del mouse cambie accidentalmente el disco seleccionado.
-        // El usuario debe abrir la lista y elegir el destino manualmente.
         if (m.Msg == WmMouseWheel || m.Msg == WmMouseHWheel) return;
         base.WndProc(ref m);
     }
