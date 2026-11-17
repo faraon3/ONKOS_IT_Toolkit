@@ -56,45 +56,18 @@ internal sealed class BackupForm : UserControl
     {
         Dock = DockStyle.Fill; BackColor = Bg; ForeColor = TextMain; Font = new Font("Segoe UI", 9.5F);
 
-        // ── HEADER REDISEÑADO (degradado + subtítulo) ──
-        var header = new Panel { Dock = DockStyle.Top, Height = 96, BackColor = Purple };
-        header.Paint += (_, e) =>
-        {
-            using var brush = new LinearGradientBrush(header.ClientRectangle,
-                OnkosTheme.Purple, OnkosTheme.PurpleLight, 0f);
-            e.Graphics.FillRectangle(brush, header.ClientRectangle);
-        };
-        
-        var back = new Button { Text = "‹  VOLVER", Location = new Point(22, 8), Size = new Size(120, 28) };
-        OnkosTheme.StyleButton(back, ButtonKind.Secondary);
-        back.BackColor = Color.FromArgb(40, 255, 255, 255);
-        back.FlatAppearance.MouseOverBackColor = Color.FromArgb(70, 255, 255, 255);
-        back.Click += (_, _) => BackRequested?.Invoke();
-        header.Controls.Add(back);
-
-        header.Controls.Add(new Label
-        {
-            Text = "Backup y migración",
-            ForeColor = Color.White,
-            Font = new Font("Segoe UI", 20F, FontStyle.Bold),
-            AutoSize = true,
-            Location = new Point(22, 40)
-        });
-        header.Controls.Add(new Label
-        {
-            Text = "Copia perfiles, documentos y configuración de red del equipo",
-            ForeColor = Color.FromArgb(220, 210, 240),
-            Font = new Font("Segoe UI", 9.5F),
-            AutoSize = true,
-            Location = new Point(24, 74)
-        });
+        // ── HEADER con helper del tema ──
+        var header = OnkosTheme.CreateHeader(
+            "Backup y migración",
+            "Copia perfiles, documentos y configuración de red del equipo",
+            () => BackRequested?.Invoke());
 
         var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), AutoScroll = true, BackColor = Bg };
         var sourcesGroup = MakeGroup("01  ·  Selecciona la información");
         sourcesGroup.Dock = DockStyle.Top; sourcesGroup.Height = 250;
         _folderIcons.ColorDepth = ColorDepth.Depth32Bit; _folderIcons.ImageSize = new Size(24, 24);
         _sources.Dock = DockStyle.Fill; _sources.View = View.Tile; _sources.TileSize = new Size(250, 38); _sources.CheckBoxes = false;
-        
+
         void UpdateSourceTileWidth()
         {
             int available = Math.Max(840, _sources.ClientSize.Width - 16);
@@ -111,7 +84,7 @@ internal sealed class BackupForm : UserControl
         _sources.Columns.Add("Carpeta / ubicación", 220); _sources.Columns.Add("Ruta", 500);
         _sources.Resize += (_, _) => { if (_sources.Columns.Count > 1) { _sources.Columns[0].Width = Math.Min(230, Math.Max(170, _sources.ClientSize.Width / 3)); _sources.Columns[1].Width = Math.Max(120, _sources.ClientSize.Width - _sources.Columns[0].Width - 4); } };
         LoadKnownFolders();
-        
+
         var sourceButtons = new Panel { Dock = DockStyle.Bottom, Height = 46, BackColor = Surface };
         _addFolder.Text = "Agregar carpeta"; StyleButton(_addFolder, true);
         _addFolder.SetBounds(10, 4, 210, 36);
@@ -121,18 +94,18 @@ internal sealed class BackupForm : UserControl
         string addFolderIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "AgregarCarpeta.png");
         if (File.Exists(addFolderIcon)) { using var icon = Image.FromFile(addFolderIcon); _addFolder.Image = new Bitmap(icon, new Size(20, 20)); }
         _addFolder.Click += (_, _) => AddCustomFolder();
-        
+
         var addUser = new Button { Text = "Otro usuario", Location = new Point(286, 6), Size = new Size(190, 30), ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(8, 0, 6, 0) };
         StyleButton(addUser, true);
         string otherUserIcon = Path.Combine(AppContext.BaseDirectory, "Assets", "OtroUsuario.png");
         if (File.Exists(otherUserIcon)) { using var icon = Image.FromFile(otherUserIcon); addUser.Image = new Bitmap(icon, new Size(20, 20)); }
         addUser.Click += (_, _) => AddOtherUserFolders();
         sourceButtons.Controls.Add(_addFolder);
-        
+
         addUser.Location = new Point(225, 4);
         addUser.Size = new Size(240, 36);
         sourceButtons.Controls.Add(addUser);
-        
+
         StyleCheck(_ipv4);
         _ipv4.SetBounds(475, 4, 330, 36);
         _ipv4.Text = "Guardar configuración de red";
@@ -143,7 +116,7 @@ internal sealed class BackupForm : UserControl
             try { using var networkImage = Image.FromFile(networkSaveIcon); _ipv4.Image = new Bitmap(networkImage, new Size(24, 24)); _ipv4.ImageAlign = ContentAlignment.MiddleLeft; _ipv4.TextImageRelation = TextImageRelation.ImageBeforeText; _ipv4.Padding = new Padding(6, 0, 0, 0); } catch { }
         }
         sourceButtons.Controls.Add(_ipv4);
-        
+
         var selectionBar = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = Surface, Padding = new Padding(0, 2, 8, 2) };
         _selectAllFolders.Text = "Seleccionar todo";
         _selectAllFolders.Size = new Size(150, 28);
@@ -152,7 +125,7 @@ internal sealed class BackupForm : UserControl
         StyleButton(_selectAllFolders, true);
         _selectAllFolders.Click += (_, _) => SetAllFoldersSelected(_sources.Items.Cast<ListViewItem>().Any(item => !IsItemChecked(item)));
         selectionBar.Controls.Add(_selectAllFolders);
-        
+
         _sources.Visible = false;
         sourcesGroup.Controls.Add(_sourceGrid); sourcesGroup.Controls.Add(sourceButtons); sourcesGroup.Controls.Add(selectionBar);
         UpdateSourceGridLayout();
@@ -165,12 +138,12 @@ internal sealed class BackupForm : UserControl
         _drivePicker.SetBounds(10, 8, 300, 34);
         _drivePicker.SelectedIndexChanged += (_, _) => { if (!_refreshingDrives && _drivePicker.SelectedItem is DriveChoice d) { _selectedDriveRoot = d.Root; _destination.Text = d.Root; } };
         _drivePicker.DropDown += (_, _) => RefreshDrives();
-        
+
         var choose = new Button { Text = "Examinar carpeta", Width = 180, Height = 34, Location = new Point(322, 8), ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText, Padding = new Padding(8, 0, 6, 0) };
         string browseIconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "ExaminarCarpeta.png");
         if (File.Exists(browseIconPath)) { try { using var img = Image.FromFile(browseIconPath); choose.Image = new Bitmap(img, new Size(20, 20)); } catch { } }
         StyleButton(choose, true); choose.Click += (_, _) => ChooseDestination();
-        
+
         _destination.AutoEllipsis = false;
         _destination.TextAlign = ContentAlignment.MiddleLeft;
         _destination.BackColor = Surface;
@@ -179,7 +152,7 @@ internal sealed class BackupForm : UserControl
         _destination.SetBounds(514, 8, 480, 34);
         _destination.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         var destinationTip = new ToolTip();
-        
+
         void FitDestinationPath()
         {
             int available = Math.Max(80, _destination.ClientSize.Width - 4);
@@ -192,7 +165,7 @@ internal sealed class BackupForm : UserControl
         _destination.Resize += (_, _) => FitDestinationPath();
         _destination.TextChanged += (_, _) => FitDestinationPath();
         destinationRow.Controls.Add(_drivePicker); destinationRow.Controls.Add(choose); destinationRow.Controls.Add(_destination);
-        
+
         void LayoutDestinationRow()
         {
             int width = destinationRow.ClientSize.Width;
@@ -240,31 +213,23 @@ internal sealed class BackupForm : UserControl
         };
         logGroup.Controls.Add(_log); logGroup.Controls.Add(logToggle);
 
-        // ── BOTONES DE ACCIÓN REDISEÑADOS ──
+        // ── BOTONES DE ACCIÓN ──
         _run.Text = "▶   INICIAR COPIA DE SEGURIDAD";
         _restore.Text = "↺   RESTAURAR BACKUP";
         _cancel.Text = "■   CANCELAR";
         OnkosTheme.StyleButton(_run, ButtonKind.Success);
         OnkosTheme.StyleButton(_restore, ButtonKind.Primary);
         OnkosTheme.StyleButton(_cancel, ButtonKind.Danger);
-        
+
         _actionBar.Resize += (_, _) => LayoutActions();
         LayoutActions();
         _run.Click += async (_, _) => await StartBackupAsync();
         _restore.Click += async (_, _) => await RestoreBackupAsync();
         _cancel.Click += (_, _) => { try { _cts?.Cancel(); } catch { } };
         _actionBar.Controls.Add(_run); _actionBar.Controls.Add(_cancel); _actionBar.Controls.Add(_restore);
-        
-        // ── BARRA DE ESTADO INFERIOR (NUEVA) ──
-        var statusBar = new Panel { Dock = DockStyle.Bottom, Height = 28, BackColor = Surface2, Padding = new Padding(12, 0, 12, 0) };
-        statusBar.Controls.Add(new Label
-        {
-            Text = $"ONKOS IT Toolkit   ·   USB: {Path.GetPathRoot(AppContext.BaseDirectory)?.TrimEnd('\\')}   ·   {Environment.MachineName}",
-            ForeColor = TextMuted,
-            Font = new Font("Segoe UI", 8F),
-            Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft
-        });
+
+        // ── BARRA DE ESTADO INFERIOR ──
+        var statusBar = OnkosTheme.CreateStatusBar("Backup");
 
         content.Controls.Add(logGroup); content.Controls.Add(progressGroup); content.Controls.Add(destinationGroup); content.Controls.Add(sourcesGroup);
         Controls.Add(content); Controls.Add(_actionBar); Controls.Add(statusBar); Controls.Add(header);
@@ -343,7 +308,7 @@ internal sealed class BackupForm : UserControl
         }
     }
 
-    private GroupBox MakeGroup(string title) => new() { Text = title, ForeColor = Color.FromArgb(210, 197, 235), BackColor = Surface, Padding = new Padding(10), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold), Margin = new Padding(0, 0, 0, 10), FlatStyle = FlatStyle.Flat };
+    private GroupBox MakeGroup(string title) => OnkosTheme.MakeGroup(title);
     private static void StyleButton(Button b, bool secondary) { OnkosTheme.StyleButton(b, secondary ? ButtonKind.Secondary : ButtonKind.Primary); }
     private static void StyleCombo(ComboBox c) { OnkosTheme.StyleCombo(c); }
     private static void StyleTextBox(TextBox t) { OnkosTheme.StyleTextBox(t); }
@@ -562,7 +527,7 @@ internal sealed class BackupForm : UserControl
         string path = customPath ?? Environment.GetFolderPath(special!.Value);
         if (!string.IsNullOrWhiteSpace(path) && Directory.Exists(path)) AddListItem(label, path, selected, iconKey);
     }
-    
+
     private void AddListItem(string label, string path, bool selected, string iconKey)
     {
         int icon = GetIconIndex(iconKey, path);
@@ -573,7 +538,7 @@ internal sealed class BackupForm : UserControl
         if (selected) _ = UpdateFolderSizeAsync(item, (FolderEntry)item.Tag!);
         UpdateSelectAllButtonText();
     }
-    
+
     private void AddSourceCard(FolderEntry entry)
     {
         int cardWidth = GetSourceCardWidth();
@@ -590,7 +555,7 @@ internal sealed class BackupForm : UserControl
         var name = new Label { Location = new Point(52, 1), Size = new Size(cardWidth - 56, 19), Text = $"{entry.Label} ({FormatSize(0)})", ForeColor = TextMain, BackColor = Color.Transparent, Font = new Font("Segoe UI", 9.2F), AutoEllipsis = true, Cursor = Cursors.Hand };
         var path = new Label { Location = new Point(52, 19), Size = new Size(cardWidth - 56, 17), Text = ShortenFolderPath(entry.Path), ForeColor = TextMuted, BackColor = Color.Transparent, Font = new Font("Segoe UI", 7.5F), AutoEllipsis = true, Cursor = Cursors.Hand };
         card.Controls.Add(icon); card.Controls.Add(name); card.Controls.Add(path);
-        
+
         card.Paint += (_, e) =>
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -655,15 +620,28 @@ internal sealed class BackupForm : UserControl
         if (_sourceGrid.Parent is GroupBox group)
             group.Height = gridHeight + 40 + 46 + 38;
     }
-    
+
     private int GetIconIndex(string key, string path)
     {
-        string asset = Path.Combine(AppContext.BaseDirectory, "Assets", key + ".png");
-        if (File.Exists(asset)) { try { using var img = Image.FromFile(asset); _folderIcons.Images.Add(key, new Bitmap(img)); return _folderIcons.Images.Count - 1; } catch { } }
+        var candidates = new[]
+        {
+            key + ".png",
+            key + ".ico",
+            key.ToLowerInvariant() + ".png",
+            key.ToLowerInvariant() + ".ico",
+            key.Replace("í", "i").Replace("Í", "I") + ".png",
+            key.Replace("í", "i").Replace("Í", "I").ToLowerInvariant() + ".png",
+        };
+        foreach (var file in candidates)
+        {
+            string asset = Path.Combine(AppContext.BaseDirectory, "Assets", file);
+            if (!File.Exists(asset)) continue;
+            try { using var img = Image.FromFile(asset); _folderIcons.Images.Add(key, new Bitmap(img)); return _folderIcons.Images.Count - 1; } catch { }
+        }
         try { var icon = ShellIcon.Get(path); _folderIcons.Images.Add(icon); icon.Dispose(); return _folderIcons.Images.Count - 1; }
         catch { _folderIcons.Images.Add(SystemIcons.WinLogo); return _folderIcons.Images.Count - 1; }
     }
-    
+
     private void DrawSourceTile(object? sender, DrawListViewItemEventArgs e)
     {
         var item = e.Item; if (item is null) return;
@@ -701,31 +679,31 @@ internal sealed class BackupForm : UserControl
         int relativeY = e.Y - bounds.Y;
         if (relativeX >= 0 && relativeX <= 42 && relativeY >= 0 && relativeY < bounds.Height) ToggleItem(item);
     }
-    
+
     private void DrawDriveItem(object? sender, DrawItemEventArgs e)
     {
-        if(e.Index<0)return;
+        if (e.Index < 0) return;
         e.DrawBackground();
         string label = _drivePicker.Items[e.Index] is DriveChoice drive ? drive.Label : Convert.ToString(_drivePicker.Items[e.Index]) ?? "Unidad no disponible";
 
-        var iconPath=Path.Combine(AppContext.BaseDirectory,"Assets","Unidad_USB.png");
-        if(File.Exists(iconPath))
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "Unidad_USB.png");
+        if (File.Exists(iconPath))
         {
-            try { using var img=Image.FromFile(iconPath); e.Graphics.DrawImage(img,e.Bounds.X+4,e.Bounds.Y+2,20,20); }
+            try { using var img = Image.FromFile(iconPath); e.Graphics.DrawImage(img, e.Bounds.X + 4, e.Bounds.Y + 2, 20, 20); }
             catch { }
         }
-        Color fore=(e.State&DrawItemState.Selected)!=0?Color.White:TextMain;
-        TextRenderer.DrawText(e.Graphics,label,_drivePicker.Font,new Rectangle(e.Bounds.X+28,e.Bounds.Y,e.Bounds.Width-30,e.Bounds.Height),fore,TextFormatFlags.Left|TextFormatFlags.VerticalCenter|TextFormatFlags.EndEllipsis);
+        Color fore = (e.State & DrawItemState.Selected) != 0 ? Color.White : TextMain;
+        TextRenderer.DrawText(e.Graphics, label, _drivePicker.Font, new Rectangle(e.Bounds.X + 28, e.Bounds.Y, e.Bounds.Width - 30, e.Bounds.Height), fore, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         e.DrawFocusRectangle();
     }
-    
-    private static GraphicsPath RoundedRect(Rectangle r,int radius)
+
+    private static GraphicsPath RoundedRect(Rectangle r, int radius)
     {
-        var p=new GraphicsPath(); int d=radius*2;
-        p.AddArc(r.X,r.Y,d,d,180,90); p.AddArc(r.Right-d,r.Y,d,d,270,90);
-        p.AddArc(r.Right-d,r.Bottom-d,d,d,0,90); p.AddArc(r.X,r.Bottom-d,d,d,90,90); p.CloseFigure(); return p;
+        var p = new GraphicsPath(); int d = radius * 2;
+        p.AddArc(r.X, r.Y, d, d, 180, 90); p.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+        p.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90); p.AddArc(r.X, r.Bottom - d, d, d, 90, 90); p.CloseFigure(); return p;
     }
-    
+
     private void AddCustomFolder()
     {
         using var dialog = new FolderBrowserDialog { Description = "Selecciona una carpeta específica, incluso en D:, E: u otra unidad." };
@@ -735,7 +713,7 @@ internal sealed class BackupForm : UserControl
         { OnkosMessageBox.Show(this, "Esta carpeta ya está en la lista.", "ONKOS", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         AddListItem(Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)), path, true, "Unidad");
     }
-    
+
     private void AddOtherUserFolders()
     {
         string usersRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "..", "Users");
@@ -1048,7 +1026,7 @@ internal sealed class BackupForm : UserControl
             var manifestRows = new List<string> { CsvRow("Estado", "Verificación", "Origen", "Destino", "Bytes", "Fecha", "Detalle") };
             IProgress<(int done, int total, string message, string current)> progress = new Progress<(int done, int total, string message, string current)>(p => { SetProgress(p.done, p.total, $"Copiando… {p.done} de {p.total}", p.current); if (!string.IsNullOrWhiteSpace(p.message)) WriteLog(p.message); });
             var token = _cts.Token;
-            
+
             await Task.Run(() =>
             {
                 foreach (var item in fileList)
@@ -1553,7 +1531,7 @@ $log | Set-Content -LiteralPath $env:ONKOS_IPV4_REPORT -Encoding UTF8
                                 report.Add("=== RESULTADO DE RESTAURACIÓN IPv4 ===");
                                 report.Add(restoreLog);
                                 if (process.ExitCode != 0) throw new IOException("PowerShell terminó con código " + process.ExitCode + ". " + stdErr);
-                                WriteLog("Restauración IPv4 estructurada ejecutada. Revisa RESULTADO_RESTORACION_IPV4.txt.");
+                                WriteLog("Restauración IPv4 estructurada ejecutada. Revisa RESULTADO_RESTAURACION_IPV4.txt.");
                                 ActivityLog.Write("RESTORE", "Restauración IPv4 estructurada", "REVISAR", restoreLog);
                             }
                             finally { try { if (File.Exists(restoreScriptPath)) File.Delete(restoreScriptPath); } catch { } }
