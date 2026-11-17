@@ -23,11 +23,10 @@ internal sealed class ProgramManagerForm : UserControl
     private readonly Label _status = new() { Dock = DockStyle.Bottom, Height = 25, TextAlign = ContentAlignment.MiddleLeft };
     private readonly ModernProgressBar _progressBar = new() { Dock = DockStyle.Top, Height = 28, Value = 0 };
     private readonly Label _progressCaption = new() { Dock = DockStyle.Top, Height = 22, Text = "Listo para comenzar", TextAlign = ContentAlignment.MiddleLeft };
-    private readonly Button _install = new() { Text = "EJECUTAR INSTALADORES" };
-    private readonly Button _add = new() { Text = "+  AGREGAR PORTABLE" };
-    private readonly Button _addProgram = new() { Text = "+  AGREGAR PROGRAMA" };
-    private readonly Button _remove = new() { Text = "ELIMINAR PROGRAMA" };
-    private readonly Button _back = new() { Text = "‹  VOLVER AL INICIO" };
+    private readonly Button _install = new() { Text = "▶   EJECUTAR INSTALADORES" };
+    private readonly Button _add = new() { Text = "+   AGREGAR PORTABLE" };
+    private readonly Button _addProgram = new() { Text = "+   AGREGAR PROGRAMA" };
+    private readonly Button _remove = new() { Text = "✕   ELIMINAR PROGRAMA" };
     private readonly Button _selectAll = new() { Text = "Seleccionar todo" };
     private readonly TextBox _search = new() { Width = 300, PlaceholderText = "Buscar programa..." };
     private readonly Button _clearSearch = new() { Text = "×", Width = 34, Height = 32, Font = new Font("Segoe UI", 16F, FontStyle.Bold) };
@@ -47,28 +46,28 @@ internal sealed class ProgramManagerForm : UserControl
 
     public ProgramManagerForm()
     {
-        Dock = DockStyle.Fill; BackColor = UiColors.Bg; ForeColor = UiColors.TextMain; Font = new Font("Segoe UI", 9.5F);
+        Dock = DockStyle.Fill; BackColor = OnkosTheme.Bg; ForeColor = OnkosTheme.TextMain; Font = new Font("Segoe UI", 9.5F);
         Directory.CreateDirectory(_library); Directory.CreateDirectory(_logos); LoadMetadata();
 
-        var header = new Panel { Dock = DockStyle.Top, Height = 88, BackColor = UiColors.Purple };
-        _back.SetBounds(22, 5, 170, 25); UiHelpers.StyleButton(_back, true);
-        _back.Click += (_, _) => BackRequested?.Invoke(); header.Controls.Add(_back);
-        header.Controls.Add(new Label { Text = "PROGRAMAS  /  INSTALADORES", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 30) });
-        header.Controls.Add(new Label { Text = "Biblioteca local · " + _library, ForeColor = Color.FromArgb(235, 225, 250), AutoSize = true, Location = new Point(25, 66), MaximumSize = new Size(1500, 22) });
+        // ── HEADER con helper del tema ──
+        var header = OnkosTheme.CreateHeader(
+            "Programas e instaladores",
+            "Biblioteca local · " + _library,
+            () => BackRequested?.Invoke());
 
-        var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), BackColor = UiColors.Bg };
-        var group = UiHelpers.MakeGroup("01  ·  Biblioteca de programas  |  " + _architectureLabel); group.Dock = DockStyle.Fill;
+        var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), BackColor = OnkosTheme.Bg };
+        var group = OnkosTheme.MakeGroup("01  ·  Biblioteca de programas  |  " + _architectureLabel); group.Dock = DockStyle.Fill;
 
-        var toolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = UiColors.Surface };
+        var toolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = OnkosTheme.Surface };
         _selectAll.SetBounds(10, 6, 150, 36);
-        UiHelpers.StyleButton(_selectAll, true);
+        OnkosTheme.StyleButton(_selectAll, ButtonKind.Secondary);
         _selectAll.Click += (_, _) => SetAllVisibleProgramsChecked(!_list.Items.Cast<ListViewItem>().All(item => item.Tag is string p && _checkedPaths.Contains(p)));
-        var searchBox = new Panel { Bounds = new Rectangle(170, 6, 390, 36), BackColor = UiColors.Surface2 };
+        var searchBox = new Panel { Bounds = new Rectangle(170, 6, 390, 36), BackColor = OnkosTheme.Surface2 };
         searchBox.Paint += (_, e) =>
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using var pen = new Pen(_search.Focused ? UiColors.PurpleHover : UiColors.Border, _search.Focused ? 1.8F : 1.2F);
-            using var outline = UiHelpers.RoundedRect(new Rectangle(1, 1, searchBox.Width - 3, searchBox.Height - 3), 8);
+            using var pen = new Pen(_search.Focused ? OnkosTheme.PurpleHover : OnkosTheme.Border, _search.Focused ? 1.8F : 1.2F);
+            using var outline = OnkosTheme.RoundedRect(new Rectangle(1, 1, searchBox.Width - 3, searchBox.Height - 3), 8);
             e.Graphics.DrawPath(pen, outline);
         };
         searchBox.Resize += (_, _) => searchBox.Invalidate();
@@ -76,13 +75,13 @@ internal sealed class ProgramManagerForm : UserControl
         searchIcon.Paint += (_, e) =>
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using var pen = new Pen(UiColors.PurpleHover, 2.2F);
+            using var pen = new Pen(OnkosTheme.PurpleHover, 2.2F);
             e.Graphics.DrawEllipse(pen, 9, 8, 12, 12);
             e.Graphics.DrawLine(pen, 20, 20, 26, 26);
         };
-        _search.BorderStyle = BorderStyle.None; _search.BackColor = UiColors.Surface2; _search.ForeColor = UiColors.TextMain; _search.Font = new Font("Segoe UI", 10F);
+        _search.BorderStyle = BorderStyle.None; _search.BackColor = OnkosTheme.Surface2; _search.ForeColor = OnkosTheme.TextMain; _search.Font = new Font("Segoe UI", 10F);
         _search.SetBounds(43, 8, 300, 20);
-        _clearSearch.FlatStyle = FlatStyle.Flat; _clearSearch.FlatAppearance.BorderSize = 0; _clearSearch.BackColor = UiColors.Surface2; _clearSearch.ForeColor = UiColors.TextMuted; _clearSearch.Cursor = Cursors.Hand;
+        _clearSearch.FlatStyle = FlatStyle.Flat; _clearSearch.FlatAppearance.BorderSize = 0; _clearSearch.BackColor = OnkosTheme.Surface2; _clearSearch.ForeColor = OnkosTheme.TextMuted; _clearSearch.Cursor = Cursors.Hand;
         _clearSearch.FlatAppearance.MouseOverBackColor = Color.FromArgb(58, 48, 72);
         _clearSearch.SetBounds(347, 2, 36, 30);
         _clearSearch.Click += (_, _) => { _search.Clear(); _search.Focus(); };
@@ -92,27 +91,30 @@ internal sealed class ProgramManagerForm : UserControl
         toolbar.Controls.Add(_selectAll);
         toolbar.Controls.Add(searchBox);
 
-        _list.BackColor = UiColors.Surface; _list.ForeColor = UiColors.TextMain; _list.Font = new Font("Segoe UI", 10F); _list.SmallImageList = _images;
+        _list.BackColor = OnkosTheme.Surface; _list.ForeColor = OnkosTheme.TextMain; _list.Font = new Font("Segoe UI", 10F); _list.SmallImageList = _images;
         _list.TileSize = new Size(Math.Max(280, (_list.ClientSize.Width - 36) / 3), 60);
         _list.Resize += (_, _) => _list.TileSize = new Size(Math.Max(280, (_list.ClientSize.Width - 36) / 3), 60);
-        var listHeader = new Panel { Dock = DockStyle.Top, Height = 32, BackColor = UiColors.Purple };
+        var listHeader = new Panel { Dock = DockStyle.Top, Height = 32, BackColor = OnkosTheme.Purple };
         listHeader.Controls.Add(new Label { Text = "Selecciona / Programa", Dock = DockStyle.Fill, ForeColor = Color.White, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8, 0, 0, 0), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold) });
         _list.DrawItem += DrawProgramRow;
         _list.MouseDown += ListMouseDown;
         _list.MouseDoubleClick += ListMouseDoubleClick;
         group.Controls.Add(_list); group.Controls.Add(listHeader); group.Controls.Add(toolbar);
 
-        var progressPanel = new Panel { Dock = DockStyle.Bottom, Height = 58, BackColor = UiColors.Surface, Padding = new Padding(10, 4, 10, 4) };
-        _progressCaption.Dock = DockStyle.Top; _progressCaption.Height = 20; _progressCaption.ForeColor = UiColors.TextMuted;
+        var progressPanel = new Panel { Dock = DockStyle.Bottom, Height = 58, BackColor = OnkosTheme.Surface, Padding = new Padding(10, 4, 10, 4) };
+        _progressCaption.Dock = DockStyle.Top; _progressCaption.Height = 20; _progressCaption.ForeColor = OnkosTheme.TextMuted;
         _progressBar.Dock = DockStyle.Bottom; _progressBar.Height = 25; _progressBar.Value = 0;
         progressPanel.Controls.Add(_progressBar); progressPanel.Controls.Add(_progressCaption);
 
-        var statusPanel = new Panel { Dock = DockStyle.Bottom, Height = 30, BackColor = UiColors.Surface };
-        _status.ForeColor = UiColors.TextMuted; _status.Padding = new Padding(8, 0, 0, 0); statusPanel.Controls.Add(_status);
+        var statusPanel = new Panel { Dock = DockStyle.Bottom, Height = 30, BackColor = OnkosTheme.Surface };
+        _status.ForeColor = OnkosTheme.TextMuted; _status.Padding = new Padding(8, 0, 0, 0); statusPanel.Controls.Add(_status);
 
-        var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiColors.Bg, Padding = new Padding(3, 2, 3, 2) };
+        var actionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = OnkosTheme.Bg, Padding = new Padding(3, 2, 3, 2) };
         foreach (var button in new[] { _add, _addProgram, _remove, _install }) { button.Height = 46; button.Font = new Font("Segoe UI", 9.2F, FontStyle.Bold); }
-        UiHelpers.StyleButton(_add, false); UiHelpers.StyleButton(_remove, true); UiHelpers.StyleButton(_install, false);
+        OnkosTheme.StyleButton(_addProgram, ButtonKind.Primary);
+        OnkosTheme.StyleButton(_add, ButtonKind.Secondary);
+        OnkosTheme.StyleButton(_install, ButtonKind.Success);
+        OnkosTheme.StyleButton(_remove, ButtonKind.Danger);
         void LayoutActions()
         {
             int w = actionBar.ClientSize.Width; int gap = 4; int each = (w - gap * 3) / 4;
@@ -125,7 +127,11 @@ internal sealed class ProgramManagerForm : UserControl
         actionBar.Controls.AddRange(new Control[] { _add, _addProgram, _remove, _install });
 
         content.Controls.Add(group);
-        Controls.Add(content); Controls.Add(progressPanel); Controls.Add(statusPanel); Controls.Add(actionBar); Controls.Add(header);
+
+        // ── BARRA DE ESTADO INFERIOR ──
+        var statusBar = OnkosTheme.CreateStatusBar("Programas");
+
+        Controls.Add(content); Controls.Add(progressPanel); Controls.Add(statusPanel); Controls.Add(actionBar); Controls.Add(statusBar); Controls.Add(header);
 
         _add.Click += async (_, _) => await AddPortableFolderAsync();
         _addProgram.Click += async (_, _) => await AddInstallersAsync();
@@ -142,13 +148,13 @@ internal sealed class ProgramManagerForm : UserControl
         bool selected = e.Item.Selected;
         bool checkedItem = _checkedPaths.Contains(path);
         var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var bg = new SolidBrush(selected ? Color.FromArgb(54, 45, 72) : UiColors.Surface);
+        using var bg = new SolidBrush(selected ? Color.FromArgb(54, 45, 72) : OnkosTheme.Surface);
         g.FillRectangle(bg, e.Bounds);
-        using var separator = new Pen(UiColors.Border); g.DrawLine(separator, e.Bounds.Left + 10, e.Bounds.Bottom - 1, e.Bounds.Right - 10, e.Bounds.Bottom - 1);
+        using var separator = new Pen(OnkosTheme.Border); g.DrawLine(separator, e.Bounds.Left + 10, e.Bounds.Bottom - 1, e.Bounds.Right - 10, e.Bounds.Bottom - 1);
         var cb = new Rectangle(e.Bounds.Left + 12, e.Bounds.Top + (e.Bounds.Height - 18) / 2, 18, 18);
-        using var cbFill = new SolidBrush(checkedItem ? UiColors.Purple : Color.FromArgb(46, 40, 59));
-        using var cbPen = new Pen(checkedItem ? UiColors.PurpleHover : UiColors.Border, 1.2F);
-        using var pathCb = UiHelpers.RoundedRect(cb, 4); g.FillPath(cbFill, pathCb); g.DrawPath(cbPen, pathCb);
+        using var cbFill = new SolidBrush(checkedItem ? OnkosTheme.Purple : Color.FromArgb(46, 40, 59));
+        using var cbPen = new Pen(checkedItem ? OnkosTheme.PurpleHover : OnkosTheme.Border, 1.2F);
+        using var pathCb = OnkosTheme.RoundedRect(cb, 4); g.FillPath(cbFill, pathCb); g.DrawPath(cbPen, pathCb);
         if (checkedItem) { using var tick = new Pen(Color.White, 2F); g.DrawLines(tick, new[] { new Point(cb.X + 3, cb.Y + 9), new Point(cb.X + 7, cb.Y + 13), new Point(cb.X + 14, cb.Y + 4) }); }
         int imageIndex = e.Item.ImageIndex;
         if (imageIndex >= 0 && imageIndex < _images.Images.Count)
@@ -157,7 +163,7 @@ internal sealed class ProgramManagerForm : UserControl
             int logoY = e.Bounds.Top + (e.Bounds.Height - logoSize) / 2;
             g.DrawImage(_images.Images[imageIndex], e.Bounds.Left + 44, logoY, logoSize, logoSize);
         }
-        TextRenderer.DrawText(g, e.Item.Text, new Font("Segoe UI", 10F, FontStyle.Bold), new Rectangle(e.Bounds.Left + 92, e.Bounds.Top + 2, e.Bounds.Width - 104, e.Bounds.Height - 4), UiColors.TextMain, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(g, e.Item.Text, new Font("Segoe UI", 10F, FontStyle.Bold), new Rectangle(e.Bounds.Left + 92, e.Bounds.Top + 2, e.Bounds.Width - 104, e.Bounds.Height - 4), OnkosTheme.TextMain, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 
     private void ListMouseDoubleClick(object? sender, MouseEventArgs e)
@@ -251,10 +257,6 @@ internal sealed class ProgramManagerForm : UserControl
         finally { SetBusy(false); }
     }
 
-    /// <summary>
-    /// Cada instalador seleccionado se agrega como una entrada independiente.
-    /// Ya no se agrupa por carpeta, así que seleccionar 5 .exe agrega 5 programas.
-    /// </summary>
     private async Task AddInstallersAsync()
     {
         using var ofd = new OpenFileDialog
@@ -323,9 +325,10 @@ internal sealed class ProgramManagerForm : UserControl
     {
         string file = (string)selectedItem.Tag!;
         string current = DisplayName(file);
-        using var dialog = new Form { Text = "Cambiar nombre del programa", Size = new Size(420, 150), StartPosition = FormStartPosition.CenterParent, BackColor = UiColors.Surface, ForeColor = UiColors.TextMain, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
-        var text = new TextBox { Text = current, Bounds = new Rectangle(15, 15, 370, 30), BackColor = UiColors.Surface2, ForeColor = UiColors.TextMain };
-        var ok = new Button { Text = "Guardar", DialogResult = DialogResult.OK, Bounds = new Rectangle(270, 55, 115, 32) }; UiHelpers.StyleButton(ok, false);
+        using var dialog = new Form { Text = "Cambiar nombre del programa", Size = new Size(420, 150), StartPosition = FormStartPosition.CenterParent, BackColor = OnkosTheme.Surface, ForeColor = OnkosTheme.TextMain, FormBorderStyle = FormBorderStyle.FixedDialog, MaximizeBox = false, MinimizeBox = false };
+        var text = new TextBox { Text = current, Bounds = new Rectangle(15, 15, 370, 30), BackColor = OnkosTheme.Surface2, ForeColor = OnkosTheme.TextMain };
+        var ok = new Button { Text = "Guardar", DialogResult = DialogResult.OK, Bounds = new Rectangle(270, 55, 115, 32) };
+        OnkosTheme.StyleButton(ok, ButtonKind.Primary);
         dialog.Controls.Add(text); dialog.Controls.Add(ok); dialog.AcceptButton = ok;
         if (dialog.ShowDialog(this) == DialogResult.OK && !string.IsNullOrWhiteSpace(text.Text)) { Meta(file).DisplayName = text.Text.Trim(); SaveMetadata(); RefreshList(); }
     }
