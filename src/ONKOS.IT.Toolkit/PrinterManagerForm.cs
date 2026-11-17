@@ -25,20 +25,19 @@ internal sealed class PrinterManagerForm : UserControl
     private readonly ImageList _images = new() { ImageSize = new Size(44, 44), ColorDepth = ColorDepth.Depth32Bit };
 
     private readonly ListView _installedList = new() { Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, MultiSelect = false, BorderStyle = BorderStyle.None, HideSelection = false };
-    private readonly Button _refreshInstalled = new() { Text = "↻  ACTUALIZAR" };
+    private readonly Button _refreshInstalled = new() { Text = "↻   ACTUALIZAR" };
     private readonly Button _openQueue = new() { Text = "ABRIR COLA" };
     private readonly Button _setDefault = new() { Text = "PREDETERMINADA" };
     private readonly Button _removeInstalled = new() { Text = "ELIMINAR" };
 
     private readonly TextBox _search = new() { PlaceholderText = "Buscar impresora o modelo...", BorderStyle = BorderStyle.None };
     private readonly Button _clear = new() { Text = "×", Width = 34, Height = 30, Font = new Font("Segoe UI", 16F, FontStyle.Bold) };
-    private readonly Button _add = new() { Text = "+  AGREGAR DRIVER" };
-    private readonly Button _install = new() { Text = "INSTALAR IMPRESORA" };
-    private readonly Button _remove = new() { Text = "ELIMINAR IMPRESORA" };
-    private readonly Button _back = new() { Text = "‹  VOLVER AL INICIO" };
+    private readonly Button _add = new() { Text = "+   AGREGAR DRIVER" };
+    private readonly Button _install = new() { Text = "▶   INSTALAR IMPRESORA" };
+    private readonly Button _remove = new() { Text = "✕   ELIMINAR IMPRESORA" };
     private readonly ModernProgressBar _progress = new();
-    private readonly Label _progressText = new() { Text = "Listo para comenzar", ForeColor = UiColors.TextMuted, Dock = DockStyle.Top, Height = 22 };
-    private readonly Label _status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = UiColors.TextMuted };
+    private readonly Label _progressText = new() { Text = "Listo para comenzar", ForeColor = OnkosTheme.TextMuted, Dock = DockStyle.Top, Height = 22 };
+    private readonly Label _status = new() { Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, ForeColor = OnkosTheme.TextMuted };
 
     private TabControl? _tabs;
     private Panel? _libraryActionBar;
@@ -57,48 +56,51 @@ internal sealed class PrinterManagerForm : UserControl
 
     public PrinterManagerForm()
     {
-        Dock = DockStyle.Fill; BackColor = UiColors.Bg; ForeColor = UiColors.TextMain; Font = new Font("Segoe UI", 9.5F);
+        Dock = DockStyle.Fill; BackColor = OnkosTheme.Bg; ForeColor = OnkosTheme.TextMain; Font = new Font("Segoe UI", 9.5F);
         Directory.CreateDirectory(_library); Directory.CreateDirectory(_logos); LoadMetadata();
 
-        var header = new Panel { Dock = DockStyle.Top, Height = 88, BackColor = UiColors.Purple };
-        _back.SetBounds(22, 5, 170, 25); UiHelpers.StyleButton(_back, true);
-        _back.Click += (_, _) => BackRequested?.Invoke(); header.Controls.Add(_back);
-        header.Controls.Add(new Label { Text = "IMPRESORAS  /  CONTROLADORES", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 30) });
+        // ── HEADER con helper del tema ──
+        var header = OnkosTheme.CreateHeader(
+            "Impresoras y controladores",
+            "Biblioteca local de drivers e impresoras instaladas en el equipo",
+            () => BackRequested?.Invoke());
 
         _tabs = new TabControl { Dock = DockStyle.Fill, Font = new Font("Segoe UI", 10F, FontStyle.Bold), Padding = new Point(16, 8) };
         StyleTabs(_tabs);
 
-        // Pestaña Biblioteca
-        var libraryTab = new TabPage("Biblioteca de drivers") { BackColor = UiColors.Bg, Padding = new Padding(0) };
-        var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), BackColor = UiColors.Bg };
-        var group = UiHelpers.MakeGroup("01  ·  Biblioteca de impresoras"); group.Dock = DockStyle.Fill;
-        var toolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = UiColors.Surface };
-        var searchBox = new Panel { Bounds = new Rectangle(10, 6, 390, 36), BackColor = UiColors.Surface2 };
+        // ── Pestaña Biblioteca ──
+        var libraryTab = new TabPage("Biblioteca de drivers") { BackColor = OnkosTheme.Bg, Padding = new Padding(0) };
+        var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), BackColor = OnkosTheme.Bg };
+        var group = OnkosTheme.MakeGroup("01  ·  Biblioteca de impresoras"); group.Dock = DockStyle.Fill;
+        var toolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = OnkosTheme.Surface };
+        var searchBox = new Panel { Bounds = new Rectangle(10, 6, 390, 36), BackColor = OnkosTheme.Surface2 };
         searchBox.Paint += (_, e) =>
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using var pen = new Pen(_search.Focused ? UiColors.PurpleHover : UiColors.Border, _search.Focused ? 1.8F : 1.2F);
-            using var path = UiHelpers.RoundedRect(new Rectangle(1, 1, searchBox.Width - 3, searchBox.Height - 3), 8);
+            using var pen = new Pen(_search.Focused ? OnkosTheme.PurpleHover : OnkosTheme.Border, _search.Focused ? 1.8F : 1.2F);
+            using var path = OnkosTheme.RoundedRect(new Rectangle(1, 1, searchBox.Width - 3, searchBox.Height - 3), 8);
             e.Graphics.DrawPath(pen, path);
         };
-        var searchIcon = new Label { Text = "⌕", Font = new Font("Segoe UI", 21F, FontStyle.Bold), ForeColor = UiColors.PurpleHover, TextAlign = ContentAlignment.MiddleCenter, Bounds = new Rectangle(8, 0, 34, 34) };
-        _search.SetBounds(43, 8, 300, 20); _search.BackColor = UiColors.Surface2; _search.ForeColor = UiColors.TextMain; _search.Font = new Font("Segoe UI", 10F);
-        _clear.SetBounds(347, 2, 36, 30); _clear.FlatStyle = FlatStyle.Flat; _clear.FlatAppearance.BorderSize = 0; _clear.BackColor = UiColors.Surface2; _clear.ForeColor = UiColors.TextMuted;
+        var searchIcon = new Label { Text = "⌕", Font = new Font("Segoe UI", 21F, FontStyle.Bold), ForeColor = OnkosTheme.PurpleHover, TextAlign = ContentAlignment.MiddleCenter, Bounds = new Rectangle(8, 0, 34, 34) };
+        _search.SetBounds(43, 8, 300, 20); _search.BackColor = OnkosTheme.Surface2; _search.ForeColor = OnkosTheme.TextMain; _search.Font = new Font("Segoe UI", 10F);
+        _clear.SetBounds(347, 2, 36, 30); _clear.FlatStyle = FlatStyle.Flat; _clear.FlatAppearance.BorderSize = 0; _clear.BackColor = OnkosTheme.Surface2; _clear.ForeColor = OnkosTheme.TextMuted;
         _clear.Click += (_, _) => { _search.Clear(); _search.Focus(); };
         searchBox.Controls.Add(searchIcon); searchBox.Controls.Add(_search); searchBox.Controls.Add(_clear); toolbar.Controls.Add(searchBox);
 
-        _list.BackColor = UiColors.Surface; _list.ForeColor = UiColors.TextMain; _list.Font = new Font("Segoe UI", 10F); _list.SmallImageList = _images;
+        _list.BackColor = OnkosTheme.Surface; _list.ForeColor = OnkosTheme.TextMain; _list.Font = new Font("Segoe UI", 10F); _list.SmallImageList = _images;
         _list.TileSize = new Size(350, 64);
         _list.Resize += (_, _) => _list.TileSize = new Size(Math.Max(280, (_list.ClientSize.Width - 30) / 3), 64);
-        var listHeader = new Panel { Dock = DockStyle.Top, Height = 32, BackColor = UiColors.Purple };
+        var listHeader = new Panel { Dock = DockStyle.Top, Height = 32, BackColor = OnkosTheme.Purple };
         listHeader.Controls.Add(new Label { Text = "Impresora / Modelo", Dock = DockStyle.Fill, ForeColor = Color.White, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8, 0, 0, 0), Font = new Font("Segoe UI", 9.5F, FontStyle.Bold) });
         _list.DrawItem += DrawPrinterRow;
         _list.MouseDoubleClick += ListMouseDoubleClick;
         group.Controls.Add(_list); group.Controls.Add(listHeader); group.Controls.Add(toolbar);
 
-        _libraryActionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiColors.Bg, Padding = new Padding(3, 2, 3, 2) };
+        _libraryActionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = OnkosTheme.Bg, Padding = new Padding(3, 2, 3, 2) };
         foreach (var b in new[] { _add, _install, _remove }) { b.Font = new Font("Segoe UI", 9F, FontStyle.Bold); b.Height = 46; }
-        UiHelpers.StyleButton(_add, false); UiHelpers.StyleButton(_install, false); UiHelpers.StyleButton(_remove, true);
+        OnkosTheme.StyleButton(_add, ButtonKind.Primary);
+        OnkosTheme.StyleButton(_install, ButtonKind.Success);
+        OnkosTheme.StyleButton(_remove, ButtonKind.Danger);
         void LayoutLibrary()
         {
             int gap = 6, w = _libraryActionBar.ClientSize.Width, each = (w - gap * 2) / 3;
@@ -111,24 +113,24 @@ internal sealed class PrinterManagerForm : UserControl
         libraryTab.Controls.Add(_libraryActionBar);
         _tabs.TabPages.Add(libraryTab);
 
-        // Pestaña Instaladas
-        var installedTab = new TabPage("Impresoras instaladas") { BackColor = UiColors.Bg, Padding = new Padding(0) };
-        var installedContent = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), BackColor = UiColors.Bg };
-        var installedGroup = UiHelpers.MakeGroup("Impresoras en este computador"); installedGroup.Dock = DockStyle.Fill;
+        // ── Pestaña Instaladas ──
+        var installedTab = new TabPage("Impresoras instaladas") { BackColor = OnkosTheme.Bg, Padding = new Padding(0) };
+        var installedContent = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), BackColor = OnkosTheme.Bg };
+        var installedGroup = OnkosTheme.MakeGroup("Impresoras en este computador"); installedGroup.Dock = DockStyle.Fill;
 
-        var installedToolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = UiColors.Surface };
-        UiHelpers.StyleButton(_refreshInstalled, true);
+        var installedToolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = OnkosTheme.Surface };
+        OnkosTheme.StyleButton(_refreshInstalled, ButtonKind.Primary);
         _refreshInstalled.SetBounds(10, 6, 150, 38);
         _refreshInstalled.Click += (_, _) => RefreshInstalled();
         installedToolbar.Controls.Add(_refreshInstalled);
         installedToolbar.Controls.Add(new Label
         {
             Text = "Estas son las impresoras instaladas en Windows. Haz doble clic para abrir la cola de impresión.",
-            ForeColor = UiColors.TextMuted, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft,
+            ForeColor = OnkosTheme.TextMuted, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft,
             Bounds = new Rectangle(170, 6, 700, 38)
         });
 
-        _installedList.BackColor = UiColors.Surface; _installedList.ForeColor = UiColors.TextMain; _installedList.Font = new Font("Segoe UI", 9.5F);
+        _installedList.BackColor = OnkosTheme.Surface; _installedList.ForeColor = OnkosTheme.TextMain; _installedList.Font = new Font("Segoe UI", 9.5F);
         _installedList.Columns.Add("Nombre", 260);
         _installedList.Columns.Add("Driver", 260);
         _installedList.Columns.Add("Puerto", 180);
@@ -151,9 +153,11 @@ internal sealed class PrinterManagerForm : UserControl
         };
         installedGroup.Controls.Add(_installedList); installedGroup.Controls.Add(installedToolbar);
 
-        _installedActionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = UiColors.Bg, Padding = new Padding(3, 2, 3, 2) };
+        _installedActionBar = new Panel { Dock = DockStyle.Bottom, Height = 54, BackColor = OnkosTheme.Bg, Padding = new Padding(3, 2, 3, 2) };
         foreach (var b in new[] { _openQueue, _setDefault, _removeInstalled }) { b.Font = new Font("Segoe UI", 9F, FontStyle.Bold); b.Height = 46; }
-        UiHelpers.StyleButton(_openQueue, false); UiHelpers.StyleButton(_setDefault, false); UiHelpers.StyleButton(_removeInstalled, true);
+        OnkosTheme.StyleButton(_openQueue, ButtonKind.Primary);
+        OnkosTheme.StyleButton(_setDefault, ButtonKind.Secondary);
+        OnkosTheme.StyleButton(_removeInstalled, ButtonKind.Danger);
         void LayoutInstalled()
         {
             int gap = 6, w = _installedActionBar.ClientSize.Width, each = (w - gap * 2) / 3;
@@ -166,13 +170,16 @@ internal sealed class PrinterManagerForm : UserControl
         installedTab.Controls.Add(_installedActionBar);
         _tabs.TabPages.Add(installedTab);
 
-        var progressPanel = new Panel { Dock = DockStyle.Bottom, Height = 58, BackColor = UiColors.Surface, Padding = new Padding(10, 4, 10, 4) };
+        var progressPanel = new Panel { Dock = DockStyle.Bottom, Height = 58, BackColor = OnkosTheme.Surface, Padding = new Padding(10, 4, 10, 4) };
         _progressText.Dock = DockStyle.Top; _progress.Dock = DockStyle.Bottom; _progress.Height = 25;
         progressPanel.Controls.Add(_progress); progressPanel.Controls.Add(_progressText);
-        var statusPanel = new Panel { Dock = DockStyle.Bottom, Height = 28, BackColor = UiColors.Surface, Padding = new Padding(8, 0, 0, 0) };
+        var statusPanel = new Panel { Dock = DockStyle.Bottom, Height = 28, BackColor = OnkosTheme.Surface, Padding = new Padding(8, 0, 0, 0) };
         statusPanel.Controls.Add(_status);
 
-        Controls.Add(_tabs); Controls.Add(progressPanel); Controls.Add(statusPanel); Controls.Add(header);
+        // ── BARRA DE ESTADO INFERIOR ──
+        var statusBar = OnkosTheme.CreateStatusBar("Impresoras");
+
+        Controls.Add(_tabs); Controls.Add(progressPanel); Controls.Add(statusPanel); Controls.Add(statusBar); Controls.Add(header);
 
         _add.Click += async (_, _) => await AddDriverAsync();
         _install.Click += async (_, _) => await InstallSelectedAsync();
@@ -187,13 +194,6 @@ internal sealed class PrinterManagerForm : UserControl
         RefreshInstalled();
     }
 
-    /// <summary>
-    /// FIX: agrupa por instalador, no por carpeta.
-    /// - Cada .exe/.msi/.inf seleccionado es 1 driver independiente.
-    /// - Los archivos auxiliares (.dll, .sys, .cat, .bin) se asignan al .inf o .exe
-    ///   de la misma carpeta. Si hay varios instaladores en la misma carpeta, los
-    ///   auxiliares se copian a todos (más seguro que perderlos).
-    /// </summary>
     private async Task AddDriverAsync()
     {
         using var picker = new OpenFileDialog
@@ -217,7 +217,6 @@ internal sealed class PrinterManagerForm : UserControl
             return;
         }
 
-        // Un grupo por candidato. Los auxiliares se asignan por carpeta.
         var groups = new List<(string Installer, List<string> Files)>();
         foreach (var candidate in candidates)
         {
@@ -392,9 +391,9 @@ internal sealed class PrinterManagerForm : UserControl
             var tab = tabs.TabPages[e.Index];
             var rect = tabs.GetTabRect(e.Index);
             bool selected = tabs.SelectedIndex == e.Index;
-            using var bg = new SolidBrush(selected ? UiColors.Purple : UiColors.Surface);
+            using var bg = new SolidBrush(selected ? OnkosTheme.Purple : OnkosTheme.Surface);
             e.Graphics.FillRectangle(bg, rect);
-            using var text = new SolidBrush(selected ? Color.White : UiColors.TextMuted);
+            using var text = new SolidBrush(selected ? Color.White : OnkosTheme.TextMuted);
             var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
             e.Graphics.DrawString(tab.Text, tabs.Font, text, rect, format);
         };
@@ -512,11 +511,11 @@ internal sealed class PrinterManagerForm : UserControl
     {
         if (e.Item == null) return;
         var g = e.Graphics; g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var bg = new SolidBrush(e.Item.Selected ? Color.FromArgb(54, 45, 72) : UiColors.Surface); g.FillRectangle(bg, e.Bounds);
-        using var line = new Pen(UiColors.Border); g.DrawLine(line, e.Bounds.Left + 10, e.Bounds.Bottom - 1, e.Bounds.Right - 10, e.Bounds.Bottom - 1);
+        using var bg = new SolidBrush(e.Item.Selected ? Color.FromArgb(54, 45, 72) : OnkosTheme.Surface); g.FillRectangle(bg, e.Bounds);
+        using var line = new Pen(OnkosTheme.Border); g.DrawLine(line, e.Bounds.Left + 10, e.Bounds.Bottom - 1, e.Bounds.Right - 10, e.Bounds.Bottom - 1);
         int imageIndex = e.Item.ImageIndex;
         if (imageIndex >= 0 && imageIndex < _images.Images.Count) g.DrawImage(_images.Images[imageIndex], e.Bounds.Left + 16, e.Bounds.Top + 9, 42, 42);
-        TextRenderer.DrawText(g, e.Item.Text, new Font("Segoe UI", 10F, FontStyle.Bold), new Rectangle(e.Bounds.Left + 72, e.Bounds.Top + 2, e.Bounds.Width - 84, e.Bounds.Height - 4), UiColors.TextMain, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(g, e.Item.Text, new Font("Segoe UI", 10F, FontStyle.Bold), new Rectangle(e.Bounds.Left + 72, e.Bounds.Top + 2, e.Bounds.Width - 84, e.Bounds.Height - 4), OnkosTheme.TextMain, TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
     }
 
     private void SetBusy(bool busy, string? caption = null)
@@ -540,12 +539,14 @@ internal sealed class PrinterManagerForm : UserControl
     private static string SafeName(string name) => string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
     private static string? Prompt(string title, string value)
     {
-        using var form = new Form { Text = "ONKOS", StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false, ClientSize = new Size(430, 130), BackColor = UiColors.Surface, ForeColor = UiColors.TextMain, Font = new Font("Segoe UI", 9F) };
-        var label = new Label { Text = title, Location = new Point(16, 16), AutoSize = true, ForeColor = UiColors.TextMain };
-        var box = new TextBox { Text = value, Location = new Point(16, 44), Width = 398, BackColor = UiColors.Surface2, ForeColor = UiColors.TextMain, BorderStyle = BorderStyle.FixedSingle };
+        using var form = new Form { Text = "ONKOS", StartPosition = FormStartPosition.CenterParent, FormBorderStyle = FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false, ClientSize = new Size(430, 130), BackColor = OnkosTheme.Surface, ForeColor = OnkosTheme.TextMain, Font = new Font("Segoe UI", 9F) };
+        var label = new Label { Text = title, Location = new Point(16, 16), AutoSize = true, ForeColor = OnkosTheme.TextMain };
+        var box = new TextBox { Text = value, Location = new Point(16, 44), Width = 398, BackColor = OnkosTheme.Surface2, ForeColor = OnkosTheme.TextMain, BorderStyle = BorderStyle.FixedSingle };
         var ok = new Button { Text = "Guardar", DialogResult = DialogResult.OK, Location = new Point(230, 82), Size = new Size(88, 30) };
         var cancel = new Button { Text = "Cancelar", DialogResult = DialogResult.Cancel, Location = new Point(326, 82), Size = new Size(88, 30) };
-        UiHelpers.StyleButton(ok, false); UiHelpers.StyleButton(cancel, true); form.Controls.AddRange(new Control[] { label, box, ok, cancel }); form.AcceptButton = ok; form.CancelButton = cancel;
+        OnkosTheme.StyleButton(ok, ButtonKind.Primary);
+        OnkosTheme.StyleButton(cancel, ButtonKind.Secondary);
+        form.Controls.AddRange(new Control[] { label, box, ok, cancel }); form.AcceptButton = ok; form.CancelButton = cancel;
         return form.ShowDialog() == DialogResult.OK ? box.Text : null;
     }
 }
