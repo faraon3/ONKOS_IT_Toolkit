@@ -16,10 +16,9 @@ internal sealed class InventoryForm : UserControl
 
     private readonly string _reports = AppPaths.ReportsDir;
     private readonly TextBox _output = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both, WordWrap = false, Font = new Font("Consolas", 9F) };
-    private readonly Button _back = new() { Text = "‹  VOLVER AL INICIO" };
-    private readonly Button _refresh = new() { Text = "ACTUALIZAR" };
-    private readonly Button _export = new() { Text = "EXPORTAR CSV" };
-    private readonly Button _copy = new() { Text = "COPIAR RESUMEN" };
+    private readonly Button _refresh = new() { Text = "↻   ACTUALIZAR" };
+    private readonly Button _export = new() { Text = "💾   EXPORTAR CSV" };
+    private readonly Button _copy = new() { Text = "📋   COPIAR RESUMEN" };
     private readonly Label _status = new() { Dock = DockStyle.Bottom, Height = 24, TextAlign = ContentAlignment.MiddleLeft };
     private readonly List<Dictionary<string, string>> _rows = new();
     private readonly List<string> _columns = new();
@@ -27,20 +26,23 @@ internal sealed class InventoryForm : UserControl
 
     public InventoryForm()
     {
-        Dock = DockStyle.Fill; BackColor = UiColors.Bg; ForeColor = UiColors.TextMain; Font = new Font("Segoe UI", 9.5F);
+        Dock = DockStyle.Fill; BackColor = OnkosTheme.Bg; ForeColor = OnkosTheme.TextMain; Font = new Font("Segoe UI", 9.5F);
         Directory.CreateDirectory(_reports);
 
-        var header = new Panel { Dock = DockStyle.Top, Height = 88, BackColor = UiColors.Purple };
-        _back.SetBounds(22, 5, 170, 25); UiHelpers.StyleButton(_back, true);
-        _back.Click += (_, _) => BackRequested?.Invoke(); header.Controls.Add(_back);
-        header.Controls.Add(new Label { Text = "INVENTARIO  /  DIAGNÓSTICO", ForeColor = Color.White, Font = new Font("Segoe UI", 19F, FontStyle.Bold), AutoSize = true, Location = new Point(22, 30) });
+        // ── HEADER con helper del tema ──
+        var header = OnkosTheme.CreateHeader(
+            "Inventario y diagnóstico",
+            "Recolecta información del equipo para diagnóstico rápido",
+            () => BackRequested?.Invoke());
 
-        var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), BackColor = UiColors.Bg };
-        var group = UiHelpers.MakeGroup("Información del equipo");
+        var content = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 8, 12, 12), BackColor = OnkosTheme.Bg };
+        var group = OnkosTheme.MakeGroup("Información del equipo");
         group.Dock = DockStyle.Fill;
 
-        var toolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = UiColors.Surface };
-        UiHelpers.StyleButton(_refresh, false); UiHelpers.StyleButton(_copy, true); UiHelpers.StyleButton(_export, true);
+        var toolbar = new Panel { Dock = DockStyle.Top, Height = 50, BackColor = OnkosTheme.Surface };
+        OnkosTheme.StyleButton(_refresh, ButtonKind.Primary);
+        OnkosTheme.StyleButton(_copy, ButtonKind.Secondary);
+        OnkosTheme.StyleButton(_export, ButtonKind.Secondary);
         _refresh.SetBounds(10, 6, 150, 38);
         _copy.SetBounds(168, 6, 170, 38);
         _export.SetBounds(346, 6, 170, 38);
@@ -51,12 +53,18 @@ internal sealed class InventoryForm : UserControl
         group.Controls.Add(toolbar);
 
         _output.Dock = DockStyle.Fill;
-        _output.BackColor = Color.FromArgb(13, 12, 18);
-        _output.ForeColor = Color.FromArgb(220, 213, 235);
+        _output.BackColor = OnkosTheme.LogBg;
+        _output.ForeColor = OnkosTheme.LogFg;
         _output.BorderStyle = BorderStyle.None;
         group.Controls.Add(_output);
 
-        Controls.Add(content); Controls.Add(_status); Controls.Add(header);
+        _status.ForeColor = OnkosTheme.TextMuted;
+        _status.Padding = new Padding(12, 0, 0, 0);
+
+        // ── BARRA DE ESTADO INFERIOR ──
+        var statusBar = OnkosTheme.CreateStatusBar("Inventario");
+
+        Controls.Add(content); Controls.Add(_status); Controls.Add(statusBar); Controls.Add(header);
         content.Controls.Add(group);
 
         Load += (_, _) => Collect();
